@@ -1,0 +1,23 @@
+Additional permission under GNU GPL version 3 section 7
+
+Copyright (c) 2026 ProperNotes contributors
+
+The copyright holders of the original ProperNotes Windows host contributions,
+to the extent they hold the relevant rights, permit you to link or combine
+those contributions with Microsoft WebView2 SDK components and to use them
+with Microsoft WebView2 Runtime, and to convey the resulting combination.
+
+This permission applies only to those ProperNotes Windows host contributions.
+It does not change the license terms of Microsoft components, grant rights
+in other copyright holders' material, or authorize additional restrictions
+on covered ProperNotes code.
+
+When conveying such a combination, preserve the applicable project and
+third-party notices and provide the Corresponding Source for covered
+ProperNotes contributions as required by GNU GPL version 3. This additional
+permission does not require you to provide source for Microsoft WebView2
+components that their copyright holders have not made available to you for
+redistribution.
+
+This permission may be removed from a modified version as permitted by
+GNU GPL version 3 section 7.
