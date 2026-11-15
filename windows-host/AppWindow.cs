@@ -186,14 +186,14 @@ internal sealed class AppWindow : Form
             using var document = JsonDocument.Parse(json);
             var value = document.RootElement;
             if (value.ValueKind != JsonValueKind.Object || !value.TryGetProperty("protocol", out var protocol) || !protocol.TryGetInt32(out var version) || version != 1) return;
-            var type = Text(value, "type");
+            var type = ReadJsonString(value, "type");
             if (type == "propernotes-app-hello") { SendInit(); return; }
-            if (Text(value, "nonce") != _nonce) return;
-            if (type == "propernotes-app-ready" && Text(value, "instance") == _options.Instance && Text(value, "revision") == _options.Revision)
+            if (ReadJsonString(value, "nonce") != _nonce) return;
+            if (type == "propernotes-app-ready" && ReadJsonString(value, "instance") == _options.Instance && ReadJsonString(value, "revision") == _options.Revision)
             {
                 _appReady = true; _appEverReady = true; _closeConfirmationUnavailable = false; _view.Enabled = true; _startupTimer.Stop(); ShowStatus("", false); _view.Focus(); return;
             }
-            if (type != "propernotes-close-result" || _closeRequest is null || Text(value, "requestId") != _closeRequest || !value.TryGetProperty("allow", out var allow) || allow.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return;
+            if (type != "propernotes-close-result" || _closeRequest is null || ReadJsonString(value, "requestId") != _closeRequest || !value.TryGetProperty("allow", out var allow) || allow.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return;
             _closeTimer.Stop(); _closeRequest = null;
             if (allow.GetBoolean())
             {
@@ -204,7 +204,7 @@ internal sealed class AppWindow : Form
                 }
                 _allowClose = true; Close();
             }
-            else ShowStatus(Text(value, "message") is { Length: > 0 } message ? message[..Math.Min(message.Length, 2000)] : "关闭已取消，当前文档仍保留。", true);
+            else ShowStatus(ReadJsonString(value, "message") is { Length: > 0 } message ? message[..Math.Min(message.Length, 2000)] : "关闭已取消，当前文档仍保留。", true);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or ArgumentException)
         {
@@ -212,7 +212,7 @@ internal sealed class AppWindow : Form
         }
     }
 
-    private static string? Text(JsonElement value, string key) => value.TryGetProperty(key, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
+    private static string? ReadJsonString(JsonElement value, string key) => value.TryGetProperty(key, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString() : null;
 
     private void ClosingWindow(object? sender, FormClosingEventArgs args)
     {
