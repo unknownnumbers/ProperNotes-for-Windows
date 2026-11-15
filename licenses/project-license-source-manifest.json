@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "scope": "Project license legal texts only. This is not the release file-license index.",
+  "recordedDate": "2026-11-16",
+  "files": [
+    {
+      "transformation": "None. Copied legal text; local Git blob SHA-1 equals the pinned source blob.",
+      "canonicalUrl": "https://www.gnu.org/licenses/gpl-3.0.txt",
+      "path": "LICENSE",
+      "sourceUrl": "https://github.com/unknownnumbers/rime-stellae/blob/864c733c74d6d4e77141ef8a95230f21f1862526/LICENSE",
+      "sha256": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+      "bytes": 35147,
+      "sourceGitBlobSha": "94a9ed024d3859793618152ea559a168bbcbb5e2"
+    },
+    {
+      "transformation": "None. Copied legal text; local Git blob SHA-1 equals the pinned source blob.",
+      "canonicalUrl": "https://creativecommons.org/licenses/by-sa/4.0/legalcode.en",
+      "path": "licenses/CC-BY-SA-4.0.txt",
+      "sourceUrl": "https://github.com/unknownnumbers/rime-stellae/blob/864c733c74d6d4e77141ef8a95230f21f1862526/licenses/CC-BY-SA-4.0.txt",
+      "sha256": "28a9529c7d0bb4dc51f4bf5c116a3d16ef247a052f7591466768ddf563fd1cf5",
+      "bytes": 20138,
+      "sourceGitBlobSha": "2d58298e6eda10e7204abb52722efbc840db2390"
+    }
+  ]
+}

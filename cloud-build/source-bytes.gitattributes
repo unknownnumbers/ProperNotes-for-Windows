@@ -1,0 +1,3 @@
+# Copy this file to .gitattributes at the build repository root.
+# Host source fingerprints cover original bytes, including line endings.
+/windows-host/** -text

@@ -1,0 +1,68 @@
+name: ProperNotes Windows host build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [propernotes-cloud-build]
+    paths:
+      - '.github/workflows/windows-portable.yml'
+      - '.gitattributes'
+      - 'windows-host/**'
+      - 'cloud-build/Build-HostArtifact.ps1'
+      - 'LICENSE'
+      - 'LICENSE-WEBVIEW2-EXCEPTION'
+      - 'LICENSE-DOCS'
+      - 'release-docs/COPYRIGHT.md'
+      - 'release-docs/THIRD_PARTY_NOTICES.md'
+      - 'release-docs/third-party-inventory.json'
+      - 'licenses/CC-BY-SA-4.0.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propernotes-host-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  host:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_SKIP_FIRST_TIME_EXPERIENCE: '1'
+      DOTNET_NOLOGO: '1'
+      DOTNET_CLI_WORKLOAD_UPDATE_NOTIFY_DISABLE: '1'
+      NUGET_XMLDOC_MODE: skip
+    steps:
+      - name: Preserve uploaded source bytes
+        shell: pwsh
+        run: git config --global core.autocrlf false
+      - name: Read host sources and license notices
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4, verified 2026-11-16
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /.gitattributes
+            /windows-host/
+            /cloud-build/
+            /LICENSE
+            /LICENSE-WEBVIEW2-EXCEPTION
+            /LICENSE-DOCS
+            /release-docs/COPYRIGHT.md
+            /release-docs/THIRD_PARTY_NOTICES.md
+            /release-docs/third-party-inventory.json
+            /licenses/CC-BY-SA-4.0.txt
+      - name: Compile and package the host without launching or testing
+        shell: pwsh
+        run: ./cloud-build/Build-HostArtifact.ps1
+      - name: Upload the complete host artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4, verified 2026-11-16
+        with:
+          name: ProperNotes-Windows-host-win-x64-${{ github.sha }}
+          path: ${{ runner.temp }}/propernotes-host-artifact/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6

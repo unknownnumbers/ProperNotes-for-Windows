@@ -2,11 +2,11 @@
 
 ## Overview - en / zh-TC / zh-SC
 
-English (en): This inventory records third-party distribution inputs and retained notices. Original ProperNotes code is offered under GPL-3.0-only and original explanatory documentation under CC BY-SA 4.0, within the scope of COPYRIGHT.md. Third-party terms remain separate. The recorded vendor inputs and selected official Node runtime have been compared with published distributions. Native host package mapping and final portable-package reconciliation remain pending.
+English (en): This inventory records third-party distribution inputs and retained notices. Original ProperNotes code is offered under GPL-3.0-only and original explanatory documentation under CC BY-SA 4.0, within the scope of COPYRIGHT.md. Third-party terms remain separate. Vendor, selected official Node and all native host files have recorded origins. Final portable-package and corresponding-source reconciliation remains pending.
 
-Traditional Chinese (zh-TC): 本清單記錄第三方發布輸入與保留的聲明. ProperNotes 原創程式採 GPL-3.0-only, 原創說明文字採 CC BY-SA 4.0, 範圍見 COPYRIGHT.md. 第三方條款維持獨立. 已記錄的 vendor 輸入與選定的官方 Node 執行階段已完成發布檔比對. 原生宿主的套件對應及最終便攜包核對仍待完成.
+Traditional Chinese (zh-TC): 本清單記錄第三方發布輸入與保留的聲明. ProperNotes 原創程式採 GPL-3.0-only, 原創說明文字採 CC BY-SA 4.0, 範圍見 COPYRIGHT.md. 第三方條款維持獨立. vendor 輸入, 選定的官方 Node 及全部原生宿主檔案均已記錄來源. 最終便攜包及對應原始碼核對仍待完成.
 
-Simplified Chinese (zh-SC): 本清单记录第三方发布输入与保留的声明. ProperNotes 原创代码采用 GPL-3.0-only, 原创说明文字采用 CC BY-SA 4.0, 范围见 COPYRIGHT.md. 第三方条款保持独立. 已记录的 vendor 输入与选定的官方 Node 运行时已完成发布文件比对. 原生宿主的包对应及最终便携包核对仍待完成.
+Simplified Chinese (zh-SC): 本清单记录第三方发布输入与保留的声明. ProperNotes 原创代码采用 GPL-3.0-only, 原创说明文字采用 CC BY-SA 4.0, 范围见 COPYRIGHT.md. 第三方条款保持独立. vendor 输入, 选定的官方 Node 及全部原生宿主文件均已记录来源. 最终便携包及对应源码核对仍待完成.
 
 Recorded: 2026-11-16. Paths identify intended release paths. [third-party-inventory.json](third-party-inventory.json) records archive URLs, registry integrity values, SHA256 fingerprints, release-input mappings, source comparisons and file-specific license rules. For entries with a different workspace input, `sourcePath` records that input. No dependency or application was installed or executed for this verification.
 
@@ -18,8 +18,13 @@ Recorded: 2026-11-16. Paths identify intended release paths. [third-party-invent
 | pdf-lib | 1.17.1 | Bundle and main MIT notice match the official npm archive. All 53 mapped dependency source entries match the official dependency archives identified by its published lockfile and source-map paths. |
 | Lucide | 1.8.0 | Bundle and complete original notice match the official npm archive. Retain ISC and MIT terms for the listed Feather-derived icons. |
 | Node.js | 24.22.1, Windows x64 | The selected official archive matches Node's published HTTPS SHA256 list. Its extracted executable has a Valid Windows Authenticode signature from OpenJS Foundation. Retain its complete official LICENSE, including all bundled third-party terms. |
+| .NETCore App Runtime | 10.0.14, Windows x64 | All 185 redistributed files match the verified official NuGet archive. Retain MIT and the complete package third-party notices. |
+| WindowsDesktop App Runtime | 10.0.14, Windows x64 | All 81 redistributed files match the verified official NuGet archive and original MIT license. |
+| WebView2 SDK | 1.0.4314.35 | All 6 redistributed SDK files match the verified official NuGet archive. Retain original Microsoft and SDK third-party BSD notices. |
 
 The three main npm archives and five embedded dependency archives were downloaded from `registry.npmjs.org`; each archive's SHA512 matches its exact version's HTTPS registry integrity metadata. Node's archive is from `nodejs.org`. These checks establish matches to the recorded published inputs. They do not reproduce the original builds or give a blanket legal or supply-chain assurance. The Node checksum list's PGP signature was not verified.
+
+The pinned WebView2 SDK, .NETCore runtime, WindowsDesktop runtime and AppHost NuGet archives were also checked against SHA512 metadata from the official NuGet HTTPS catalog. Their unchanged original legal files are retained. NuGet repository package signatures were not independently verified. Actual cloud-published third-party files match the recorded official inputs.
 
 Official version records: [PDF.js](https://registry.npmjs.org/pdfjs-dist/5.6.205), [pdf-lib](https://registry.npmjs.org/pdf-lib/1.17.1), [Lucide](https://registry.npmjs.org/lucide/1.8.0), [Node SHA256 list](https://nodejs.org/dist/v24.22.1/SHASUMS256.txt).
 
@@ -61,6 +66,13 @@ Keep all files below and relevant license comments in vendor source files. The s
 | `licenses/pdf-lib-dependencies/Apache-2.0.txt` | Complete Apache-2.0 terms and conditions | `0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594` |
 | `licenses/pdf-lib-dependencies/tslib-LICENSE.txt` | Apache-2.0 | `a7d00bfd54525bc694b6e32f64c7ebcf5e6b7ae3657be5cc12767bce74654a47` |
 | `licenses/pdf-lib-dependencies/tslib-CopyrightNotice.txt` | Original Microsoft Apache-2.0 copyright notice | `19246466cb51e46c12b22e43b4d2703ac981cb4295d061d6e20609bd5845510b` |
+| `licenses/host-runtime/microsoft.web.webview2/1.0.4314.35/LICENSE.txt` | Microsoft BSD-3-Clause-style terms | `0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55` |
+| `licenses/host-runtime/microsoft.web.webview2/1.0.4314.35/NOTICE.txt` | Official third-party notices, including ANTLR3 and StringTemplate4 BSD-3-Clause | `106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90` |
+| `licenses/host-runtime/microsoft.netcore.app.runtime.win-x64/10.0.14/LICENSE.TXT` | MIT, .NET Foundation and Contributors | `d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b` |
+| `licenses/host-runtime/microsoft.netcore.app.runtime.win-x64/10.0.14/THIRD-PARTY-NOTICES.TXT` | Original .NET bundled third-party notices | `6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21` |
+| `licenses/host-runtime/microsoft.windowsdesktop.app.runtime.win-x64/10.0.14/LICENSE` | MIT, .NET Foundation and Contributors | `a89886665765362eb77e0f8e26602c924520041d1711b2eedc136434fe4d01ab` |
+| `licenses/host-runtime/microsoft.netcore.app.host.win-x64/10.0.14/LICENSE.TXT` | MIT, .NET Foundation and Contributors | `d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b` |
+| `licenses/host-runtime/microsoft.netcore.app.host.win-x64/10.0.14/THIRD-PARTY-NOTICES.TXT` | Original .NET bundled third-party notices | `6d15e10a101c6bfff2ab4429ed061bf76c456fc4b23ad6b03e0d0f8377148a21` |
 
 The Liberation notice names Arimo, Tinos, Cousine, and Liberation as reserved font names. Its OFL terms apply to the font software, not to the application's own code or documents created using the fonts.
 
@@ -81,14 +93,24 @@ The three original MIT notice files were initially copied unchanged from existin
 
 ## Native Windows host
 
-The project targets `net10.0-windows`, requests a self-contained `win-x64` publish, and references `Microsoft.Web.WebView2` version `1.0.4314.35`.
+The verified [cloud build](https://github.com/unknownnumbers/ProperNotes-for-Windows/actions/runs/43751071075) uses SDK 10.0.403 and self-contained Windows x64 runtime 10.0.14 at source commit `f1961fcc6334ec9d227da24a7c703a08e584167c`. All 8 source entries in its host manifest match the recorded current source files. The artifact archive SHA256 is `6e50efb232556b0c2b65363c6acb35355e166f0da2ce99e6ca01cf513b61c235`.
 
-- .NET: The [official runtime v10.0.0 core license](https://raw.githubusercontent.com/dotnet/runtime/v10.0.0/LICENSE.TXT) is MIT. Actual runtime package versions, redistributed files and package-specific third-party notices must be mapped from the cloud publish artifact before release. Do not label every native-host file MIT or GPL by folder location.
-- WebView2 SDK: The [official NuGet license page for 1.0.4314.35](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35/License) contains Microsoft BSD-3-Clause-style terms. Preserve copyright, conditions and disclaimer, including the non-endorsement condition. Exact packaged license files and redistributed SDK artifacts still require mapping from the actual cloud artifact.
+There are 276 files under `host/`: 272 match verified official third-party package files exactly, and 4 are the project assembly, generated apphost and generated project JSON files. All 270 third-party PE files have Valid Microsoft Authenticode signatures. The ProperNotes executable and assembly are unsigned. XML and JSON files are not PE files. These were static checks; no application or test was run.
+
+- .NET: The exact [Core runtime](https://www.nuget.org/packages/Microsoft.NETCore.App.Runtime.win-x64/10.0.14), [Desktop runtime](https://www.nuget.org/packages/Microsoft.WindowsDesktop.App.Runtime.win-x64/10.0.14) and [AppHost](https://www.nuget.org/packages/Microsoft.NETCore.App.Host.win-x64/10.0.14) package versions were verified. The actual redistributed files and notices are mapped in the JSON inventory. Retain complete Core/AppHost third-party notices alongside their MIT texts and the original Desktop MIT license. Do not infer one license for every host file from its folder name.
+- WebView2 SDK: The [official NuGet package for 1.0.4314.35](https://www.nuget.org/packages/Microsoft.Web.WebView2/1.0.4314.35) and its catalog SHA512 were checked. The original LICENSE.txt contains Microsoft BSD-3-Clause-style terms; original NOTICE.txt includes the ANTLR3 and StringTemplate4 BSD notices. Both are retained unchanged under `licenses/host-runtime/microsoft.web.webview2/1.0.4314.35/`. All 6 cloud SDK files match the official package.
 - WebView2 Runtime: This is a [separate platform component](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/platform-components). The selected package relies on an existing Evergreen Runtime and does not select a Fixed Version engine payload. No engine copyright or redistribution permission is inferred from the SDK license.
+
+Original ProperNotes Windows host contributions also carry the scoped GPLv3 section 7 permission in [LICENSE-WEBVIEW2-EXCEPTION](LICENSE-WEBVIEW2-EXCEPTION). This additional permission does not modify GPLv3's legal text, extend to unrelated ProperNotes contributions, or change Microsoft and other third-party terms. The JSON inventory distinguishes this original-host scope from SDK and runtime components.
+
+The generated `ProperNotes.Host.exe` includes the .NET AppHost template. Its `.text`, `.rdata`, `.pdata` and `.reloc` sections match the official template exactly. Static comparison identifies a 64-byte managed-entry placeholder changed to `ProperNotes.Host.dll`, project resources added and the PE subsystem changed to Windows GUI. Both the template's original notices and the original-host scope apply. This is source-origin evidence, not a rerun of the build.
 
 ## File-specific scope and remaining work
 
 The JSON inventory's `fileRules` use case-sensitive canonical `/` relative paths. Exact path rules take precedence; otherwise the longest matching prefix applies. Explicit first-party source provenance has its own scope. Unclassified vendor, runtime or host files are `NOASSERTION`, never implicitly GPL.
 
-Before a public binary release, map the actual .NET and WebView2 SDK artifacts and their original notices, then reconcile every recorded input and notice against the final portable package. Until that is complete, release readiness remains incomplete. The project's established scopes are documented separately in [COPYRIGHT.md](COPYRIGHT.md), [LICENSE](LICENSE), and [LICENSE-DOCS](LICENSE-DOCS); they do not relicense third-party material.
+License documents have their own scope. The retained GNU GPLv3 text permits verbatim redistribution and prohibits changes to that legal text. Creative Commons makes its legal code and accompanying notices available under CC0, as stated in the retained text and the [official CC licensing policy](https://creativecommons.org/policies/). Thus `licenses/CC-BY-SA-4.0.txt` is classified as CC0 legal text, while original ProperNotes explanatory documentation uses CC BY-SA 4.0. Creative Commons trademark rights remain separate.
+
+Files under `licenses/project/` are build-time notice snapshots carried by the cloud artifact. The root inventory and notices describe the later verified release inputs; the snapshot is not a substitute for this final inventory.
+
+Before publication, reconcile the final portable package, selected Node input, current notices and complete corresponding-source export against these recorded origins. Input verification is complete for the recorded host and vendor files; package reconciliation remains pending. The project's established scopes are documented separately in [COPYRIGHT.md](COPYRIGHT.md), [LICENSE](LICENSE), [LICENSE-DOCS](LICENSE-DOCS) and the scoped additional permission; they do not relicense third-party material.
