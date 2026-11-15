@@ -1,18 +1,20 @@
 # ProperNotes for Windows host
 
-English (en): A .NET 10 WinForms window embeds the local ProperNotes interface with WebView2. This host has not yet been compiled or validated on a running system.
+English (en): A .NET 10 WinForms window embeds the local ProperNotes interface with WebView2. The Windows x64 host compiled successfully in GitHub Actions. The application has not been launched, tested or accepted on devices.
 
-Traditional Chinese (zh-TC): .NET 10 WinForms 視窗透過 WebView2 顯示本機 ProperNotes 介面. 宿主尚未編譯, 也尚未完成實機驗收.
+Traditional Chinese (zh-TC): .NET 10 WinForms 視窗透過 WebView2 顯示本機 ProperNotes 介面. Windows x64 宿主已在 GitHub Actions 編譯成功. 應用尚未啟動, 測試或完成裝置驗收.
 
-Simplified Chinese (zh-SC): .NET 10 WinForms 窗口通过 WebView2 显示本机 ProperNotes 界面. 宿主尚未编译, 也尚未完成实机验收.
+Simplified Chinese (zh-SC): .NET 10 WinForms 窗口通过 WebView2 显示本机 ProperNotes 界面. Windows x64 宿主已在 GitHub Actions 编译成功. 应用尚未启动, 测试或完成设备验收.
 
 ## Architecture and package layout
 
 `ProperNotes.Host.csproj` targets `net10.0-windows` and pins `Microsoft.Web.WebView2` to `1.0.4314.35`. The publish target is a self-contained `win-x64` directory with single-file publishing and trimming disabled. Keep the entire output in `<package-root>\host`; the EXE alone is insufficient. Self-contained .NET publishing does not include the WebView2 Runtime.
 
+`global.json` pins .NET SDK `10.0.403`, with roll-forward disabled and prereleases excluded. Builds require that exact SDK to be present; build scripts do not install it.
+
 The package launcher starts the loopback service. Before navigating, the host verifies its package identity and source revision through `__inkpdf_health` and `build-info.json`. Instances are separated by Windows user and package root; repeated launches focus the existing window through a current-user-only named pipe. Document tabs and service lifetime are managed outside the host.
 
-The runtime selection is:
+The preview uses an existing Evergreen Runtime, bundles no Fixed Runtime, and does not automatically install dependencies. The host's runtime selection supports:
 
 1. Use the complete Fixed Version Runtime at `<package-root>\runtime\WebView2` when that directory exists. An incomplete directory causes an error.
 2. Otherwise use an existing Evergreen WebView2 Runtime.
@@ -63,6 +65,10 @@ After a main browser/renderer failure or close timeout, a repeated close offers 
 
 ## Build and validation status
 
-See the [cloud build guide](../cloud-build/CLOUD-BUILD.md). No successful compilation or runtime acceptance is recorded; source review does not establish runtime behavior.
+The [recorded cloud build](https://github.com/unknownnumbers/ProperNotes-for-Windows/actions/runs/43749561762) compiled host-source commit `bf8992f80b9874f76e849d9e9da9af20f1282a64` with .NET SDK `10.0.403` and .NET/WindowsDesktop runtimes `10.0.14`. This is the host build identity, not the complete application's source revision. See the [cloud build guide](../cloud-build/CLOUD-BUILD.md) and the portable package's provenance and validation records.
+
+Compilation and packaging succeeded; the application and server have not been launched and no functional or device tests have been run. Runtime behavior and performance remain unverified.
 
 Pending validation includes runtime presence and architecture, single-instance activation, startup cancellation, service identity errors, DPI and pen/touch input, text shortcuts, fullscreen restoration, multi-document close and save flows, process failures, and moved or read-only package directories. Runtime licensing and redistribution must also match the actual files distributed.
+
+The host's original contributions use [GPL-3.0-only](../LICENSE) with the narrow [WebView2 additional permission](../LICENSE-WEBVIEW2-EXCEPTION). Original explanatory documentation uses [CC BY-SA 4.0](../LICENSE-DOCS). Microsoft and other third-party components keep their own terms.

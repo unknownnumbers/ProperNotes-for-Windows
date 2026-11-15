@@ -1,18 +1,18 @@
 # Build the ProperNotes Windows host with GitHub Actions
 
-English (en): This recipe compiles the Windows host on a GitHub-hosted Windows runner in a public or private repository. No successful build or runtime acceptance has been recorded.
+English (en): This recipe compiles the Windows host on a GitHub-hosted Windows runner in a public or private repository. The Windows x64 host build succeeded. The application has not been launched, tested or accepted on devices.
 
-Traditional Chinese (zh-TC): 此流程在公開或私有倉庫的 GitHub 託管 Windows runner 編譯視窗宿主. 尚未取得成功編譯或實機驗收結果.
+Traditional Chinese (zh-TC): 此流程在公開或私有倉庫的 GitHub 託管 Windows runner 編譯視窗宿主. Windows x64 宿主構建已成功. 應用尚未啟動, 測試或完成裝置驗收.
 
-Simplified Chinese (zh-SC): 此流程在公开或私有仓库的 GitHub 托管 Windows runner 编译窗口宿主. 尚未取得成功编译或实机验收结果.
+Simplified Chinese (zh-SC): 此流程在公开或私有仓库的 GitHub 托管 Windows runner 编译窗口宿主. Windows x64 宿主构建已成功. 应用尚未启动, 测试或完成设备验收.
 
 ## Scope and prerequisites
 
-The artifact contains the self-contained `win-x64` host and dependency notices. It is not the complete ProperNotes portable application. The local web application, Node runtime, PDF resources, and optional WebView2 engine are assembled separately.
+The artifact contains the self-contained `win-x64` host and dependency notices. The complete portable application adds the local web application, Node runtime and PDF resources. This preview uses an existing Evergreen WebView2 Runtime, bundles no Fixed Runtime, and does not automatically install dependencies.
 
-The repository needs suitable permissions, Actions policy, and runner allowance. Both public and private repositories are supported. Repository access and workflow execution are separate prerequisites; this guide does not establish that a run has occurred.
+The repository needs suitable permissions, Actions policy, and runner allowance. Both public and private repositories are supported. The recorded successful host run is [43749561762](https://github.com/unknownnumbers/ProperNotes-for-Windows/actions/runs/43749561762), using host-source commit `bf8992f80b9874f76e849d9e9da9af20f1282a64`, .NET SDK `10.0.403`, and .NET/WindowsDesktop runtime packages `10.0.14`. This host-source commit is separate from the complete application's source revision recorded during portable assembly.
 
-The recipe uses `windows-2025` and selects a preinstalled stable .NET 10 SDK. It stops if none is available; it does not install an SDK. Project packages are restored from the official NuGet source into a temporary runner directory. The WebView2 SDK is pinned to `1.0.4314.35`.
+The recipe uses `windows-2025` and requires the exact .NET SDK `10.0.403` pinned in `windows-host/global.json`, with roll-forward disabled and prereleases excluded. It stops if that version is not preinstalled; it does not install an SDK. Project packages are restored from the official NuGet source into a temporary runner directory. The WebView2 SDK is pinned to `1.0.4314.35`.
 
 ## Repository layout
 
@@ -23,6 +23,7 @@ Copy the templates and host sources into this layout:
 .gitattributes                          # from cloud-build/source-bytes.gitattributes
 cloud-build/Build-HostArtifact.ps1
 windows-host/ProperNotes.Host.csproj
+windows-host/global.json
 windows-host/app.manifest
 windows-host/*.cs
 LICENSE
@@ -47,7 +48,7 @@ The action revisions are pinned:
 - [actions/checkout](https://github.com/actions/checkout/commit/11d5960a326750d5838078e36cf38b85af677262)
 - [actions/upload-artifact](https://github.com/actions/upload-artifact/commit/ea165f8d65b6e75b540449e92b4886f43607fa02)
 
-`Build-HostArtifact.ps1` has no parameters and accepts only GitHub-hosted Windows runners. It pins the selected .NET 10 SDK, copies inputs to a temporary directory, restores packages, and publishes self-contained Release `win-x64` output without single-file publishing or trimming.
+`Build-HostArtifact.ps1` has no parameters and accepts only GitHub-hosted Windows runners. It reads the source-controlled SDK pin, requires that exact preinstalled version, and copies the same `global.json` to the temporary build root. It copies inputs, restores packages, and publishes self-contained Release `win-x64` output without single-file publishing or trimming.
 
 Packaging checks cover required files, x64 PE headers, a matching Loader, unchanged sources, and dependency notices. Required project notices are checked before compilation and copied byte for byte into the artifact. No application, server, or tests are launched. Artifacts are retained for 7 days and follow repository access permissions. The workflow does not create a Release or alter repository settings.
 
@@ -60,9 +61,11 @@ licenses/host-runtime/       # retained WebView2 SDK and .NET runtime notices
 licenses/project/            # GPL, documentation license, and copyright scope
 ```
 
-Keep the entire `host` directory. The artifact does not include the WebView2 engine. The complete application uses an existing Evergreen Runtime or a separately supplied, complete Fixed Version Runtime at `runtime\WebView2`.
+Keep the entire `host` directory. The artifact does not include the WebView2 engine. This preview expects an existing Evergreen Runtime and contains no Fixed Runtime.
 
 `licenses/project` retains `LICENSE`, `LICENSE-WEBVIEW2-EXCEPTION`, `LICENSE-DOCS`, `COPYRIGHT.md`, the third-party inventory documents, and `licenses/CC-BY-SA-4.0.txt`. The nested path preserves links from the project notices. The inventory describes the full project, not additional components shipped in this host artifact. Actual host dependency notices remain under `licenses/host-runtime`.
+
+Original code uses [GPL-3.0-only](../LICENSE), with the narrow [WebView2 additional permission](../LICENSE-WEBVIEW2-EXCEPTION) for Windows host contributions. Original explanatory documentation uses [CC BY-SA 4.0](../LICENSE-DOCS). The additional permission does not change Microsoft component terms.
 
 `host-artifact.json` records:
 
@@ -83,4 +86,4 @@ Before assembly, match the source hash, source inventory, complete artifact file
 
 ## Known limits
 
-No successful build is recorded. Compilation, packaging, repository access, and runner availability remain unconfirmed. Runtime behavior, pen input, save/close integration, and performance require separate acceptance. Self-contained .NET output still requires WebView2 Runtime and applicable redistribution/license review.
+The recorded run confirms host compilation and packaging only. No application, server or functional tests were run; device acceptance, runtime behavior, pen input, save/close integration and performance remain unverified. Consult the portable package's `provenance.json`, `validation-range.json` and file/license records for its actual assembly inputs and verification scope. Self-contained .NET output still requires an existing WebView2 Runtime and the applicable redistribution notices.

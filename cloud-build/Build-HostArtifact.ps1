@@ -160,12 +160,19 @@ foreach ($taskProjectNotice in $taskProjectNotices) {
     if ($taskNoticeInput.Length -eq 0) { throw ('Required project license/notice is empty: ' + $taskProjectNotice.source) }
 }
 
+$taskSdkPinPath = Join-Path $taskSourceRoot 'global.json'
+[void](Assert-TaskPlain $taskSdkPinPath)
+$taskSdkPin = [IO.File]::ReadAllText($taskSdkPinPath) | ConvertFrom-Json
+$taskSDKVersion = [string]$taskSdkPin.sdk.version
+if ($taskSDKVersion -notmatch '^10\.\d+\.\d+$' -or $taskSdkPin.sdk.rollForward -cne 'disable' -or $taskSdkPin.sdk.allowPrerelease -isnot [bool] -or $taskSdkPin.sdk.allowPrerelease) {
+    throw 'windows-host/global.json must pin an exact stable .NET 10 SDK with rollForward=disable and allowPrerelease=false.'
+}
 $taskDotnet = Get-Command dotnet -CommandType Application -ErrorAction Stop | Select-Object -First 1
 $taskSDKLines = & $taskDotnet.Source --list-sdks
 if ($LASTEXITCODE -ne 0) { throw 'Could not inventory the preinstalled SDKs.' }
-$taskSDK = @($taskSDKLines | ForEach-Object { if ($_ -match '^(10\.\d+\.\d+)\s+\[') { [version]$Matches[1] } } | Sort-Object -Descending | Select-Object -First 1)
-if ($taskSDK.Count -ne 1) { throw '.NET 10 SDK is not preinstalled on this cloud image. No SDK was installed.' }
-$taskSDKVersion = $taskSDK[0].ToString()
+$taskPinnedSdkPattern = '^' + [Regex]::Escape($taskSDKVersion) + '\s+\['
+$taskInstalledSdk = @($taskSDKLines | Where-Object { $_ -match $taskPinnedSdkPattern })
+if ($taskInstalledSdk.Count -lt 1) { throw ('Pinned .NET SDK ' + $taskSDKVersion + ' is not preinstalled on this cloud image. No SDK was installed.') }
 $taskPaths = @(Get-TaskSourcePaths)
 if (-not $taskPaths.Count) { throw 'The cloud repository has no host source.' }
 $taskSourceHash = Get-TaskSourceHash $taskPaths
@@ -177,8 +184,7 @@ foreach ($taskRelative in $taskPaths) {
     [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($taskDestination))
     Copy-Item -LiteralPath (Join-Path $taskRepo $taskRelative) -Destination $taskDestination
 }
-$taskGlobal = @{sdk=@{version=$taskSDKVersion; rollForward='disable'; allowPrerelease=$false}} | ConvertTo-Json -Depth 3
-[IO.File]::WriteAllText((Join-Path $taskBuildRoot 'global.json'),$taskGlobal,[Text.UTF8Encoding]::new($false))
+Copy-Item -LiteralPath $taskSdkPinPath -Destination (Join-Path $taskBuildRoot 'global.json')
 $taskNuGetConfig = Join-Path $taskBuildRoot 'NuGet.Config'
 [IO.File]::WriteAllText($taskNuGetConfig,@'
 <?xml version="1.0" encoding="utf-8"?>
