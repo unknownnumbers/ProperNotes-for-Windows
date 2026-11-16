@@ -34,6 +34,7 @@ public:
     void setPenColor(const QColor& color);
     void setPenWidth(qreal widthPt);
     void setEditingEnabled(bool enabled);
+    void setDarkTheme(bool dark) { m_darkTheme = dark; update(); }
     void setZoom(qreal zoom);
     qreal zoom() const { return m_zoom; }
     int pageIndex() const { return m_pageIndex; }
@@ -89,6 +90,7 @@ private:
     qreal m_rasterScale = 1.0;
     qreal m_pageUserUnit = 1.0;
     bool m_editingEnabled = false;
+    bool m_darkTheme = false;
     bool m_drawing = false;
     bool m_erasing = false;
     bool m_eraseChanged = false;

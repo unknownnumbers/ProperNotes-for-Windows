@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory = $true)][string]$QtRoot,
     [Parameter(Mandatory = $true)][string]$QtSourceDirectory,
     [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
-    [string]$PackageName = 'ProperNotes-for-Windows-0.2.0-native-preview.1-win-x64'
+    [string]$PackageName = 'ProperNotes-for-Windows-0.2.1-native-preview.1-win-x64'
 )
 
 Set-StrictMode -Version Latest
@@ -110,7 +110,7 @@ if (Test-Path -LiteralPath (Join-Path $ProjectDirectory 'licenses')) {
     Copy-Tree (Join-Path $ProjectDirectory 'licenses') (Join-Path $licenses 'project/legal-texts')
     Copy-File (Join-Path $ProjectDirectory 'licenses/CC-BY-SA-4.0.txt') (Join-Path $licenses 'CC-BY-SA-4.0.txt')
 }
-foreach ($name in @('README.md', 'PORTABLE.md', 'KNOWN-LIMITATIONS.md')) {
+foreach ($name in @('README.md', 'PORTABLE.md', 'KNOWN-LIMITATIONS.md', 'LARGE-DOCUMENTS.md')) {
     if (Test-Path -LiteralPath (Join-Path $ProjectDirectory $name)) {
         Copy-File (Join-Path $ProjectDirectory $name) (Join-Path $portable $name)
     }
@@ -226,7 +226,10 @@ $provenance = [ordered]@{
     architecture = 'windows-x64'
     configuration = 'Release'
     dependencyLock = $lock
-    msvcRuntimeVersion = $redistVersion
+    msvcRuntimeDirectoryVersion = $redistVersion
+    msvcRuntimeDllVersions = @(Get-ChildItem -LiteralPath $crt[0].FullName -File -Filter '*.dll' | ForEach-Object {
+        [ordered]@{ file = $_.Name; fileVersion = $_.VersionInfo.FileVersion }
+    })
     validatedDependencySourceCacheRestored = ($env:PROPERNOTES_SOURCE_CACHE_RESTORED -eq 'true')
     compiled = $true
     applicationStarted = $false

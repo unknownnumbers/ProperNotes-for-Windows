@@ -207,10 +207,10 @@ void InkCanvas::rebuildInkCache()
 void InkCanvas::paintEvent(QPaintEvent*)
 {
     QPainter painter(this);
-    painter.fillRect(rect(), QColor("#e7eaf0"));
+    painter.fillRect(rect(), QColor(m_darkTheme ? "#1d222b" : "#e7eaf0"));
     painter.setRenderHint(QPainter::Antialiasing);
     if (m_background.isNull()) {
-        painter.setPen(QColor("#657084"));
+        painter.setPen(QColor(m_darkTheme ? "#a8b3c6" : "#657084"));
         painter.drawText(rect().adjusted(32, 32, -32, -32), Qt::AlignCenter | Qt::TextWordWrap,
                          QStringLiteral("打开本地 PDF，开始原生手写批注\n\n笔 / 鼠标用于批注，触摸用于浏览"));
         return;

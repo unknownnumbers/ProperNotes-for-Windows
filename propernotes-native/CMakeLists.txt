@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.24)
-project(ProperNotesNative VERSION 0.2.0 LANGUAGES CXX)
+project(ProperNotesNative VERSION 0.2.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,9 @@ qt_add_executable(ProperNotesNative WIN32
     src/InkCanvas.h src/InkCanvas.cpp
     src/InkData.h
     src/PdfDocument.h src/PdfDocument.cpp
+    src/AppPreferences.h src/AppPreferences.cpp
+    src/SettingsDialog.h src/SettingsDialog.cpp
+    src/BackupStore.h src/BackupStore.cpp
 )
 target_link_libraries(ProperNotesNative PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::Xml Qt6::Network Pdf4QtLibCore)

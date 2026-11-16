@@ -7,6 +7,7 @@
 #include <QByteArray>
 #include <QSizeF>
 #include <memory>
+#include <functional>
 
 namespace propernotes {
 
@@ -25,6 +26,12 @@ public:
     // commit; protected or unrecognised editing data is never overwritten.
     bool save(const QString& path = {}, const QByteArray& expectedTargetSha256 = {});
     static QByteArray fileSha256(const QString& path, QString* error = nullptr);
+    // Creates a complete recovery PDF at a new path without changing the loaded
+    // base, currentPath, source fingerprint, dirty flag or lastError. No source
+    // file or existing destination is overwritten. Error belongs to this call.
+    bool writeRecoveryCopy(const QString& path, QString* error = nullptr,
+                           QByteArray* writtenSha256 = nullptr) const;
+    QByteArray recoveryFingerprint() const;
 
     bool hasDocument() const;
     bool isReadOnly() const;
@@ -41,6 +48,12 @@ public:
     bool setStrokes(int pageIndex, const QVector<InkStroke>& strokes);
 
 private:
+    friend class BackupStore;
+    // Storage claims the known digest/size in its journal before the payload
+    // commit. Returning false from claim cancels an identical snapshot.
+    bool writeRecoveryCopyClaimed(const QString& path,
+        const std::function<bool(const QByteArray&, qint64)>& claim,
+        QString* error, QByteArray* writtenSha256) const;
     struct Impl;
     std::unique_ptr<Impl> d;
 };

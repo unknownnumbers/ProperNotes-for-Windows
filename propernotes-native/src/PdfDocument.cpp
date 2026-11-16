@@ -654,6 +654,34 @@ pdf::PDFDocument compactSupersededOwnedObjects(const LoadedState& previous,
     return compacted.build();
 }
 
+struct PdfCandidate {
+    QByteArray bytes;
+    QByteArray hash;
+    std::unique_ptr<LoadedState> verified;
+};
+
+PdfCandidate buildVerifiedCandidate(const LoadedState& state)
+{
+    pdf::PDFDocument output = compactSupersededOwnedObjects(state, withInk(state));
+    PdfCandidate candidate;
+    QBuffer buffer(&candidate.bytes);
+    if (!buffer.open(QIODevice::WriteOnly))
+        fail(QStringLiteral("无法创建 PDF 写入缓冲区."));
+    pdf::PDFDocumentWriter writer(nullptr);
+    const auto result = writer.write(&buffer, &output);
+    if (!result)
+        fail(result.getErrorMessage());
+    buffer.close();
+    if (candidate.bytes.isEmpty() || candidate.bytes.size() > MaxFileBytes)
+        fail(QStringLiteral("输出 PDF 大小超出此原型范围, 未覆盖原文件."));
+    candidate.verified = std::make_unique<LoadedState>(loadState(candidate.bytes));
+    if (!candidate.verified->readOnlyReason.isEmpty()
+        || editData(candidate.verified->pages) != editData(state.pages))
+        fail(QStringLiteral("写入后重新读取校验失败, 未覆盖原文件."));
+    candidate.hash = sha256(candidate.bytes);
+    return candidate;
+}
+
 QTransform renderTransform(const pdf::PDFPage* page, qreal scale)
 {
     const QRectF box = page->getCropBox();
@@ -720,6 +748,86 @@ QByteArray PdfDocument::fileSha256(const QString& path, QString* error)
     return hash.result();
 }
 
+QByteArray PdfDocument::recoveryFingerprint() const
+{
+    if (!d->state)
+        return {};
+    QByteArray identity = d->sourceSha256;
+    identity += isReadOnly() ? QByteArray("\0readonly", 9) : QByteArray("\0editable", 9);
+    if (!isReadOnly())
+        identity += editData(d->state->pages);
+    return sha256(identity);
+}
+
+bool PdfDocument::writeRecoveryCopy(const QString& path, QString* error,
+                                    QByteArray* writtenSha256) const
+{
+    return writeRecoveryCopyClaimed(path, {}, error, writtenSha256);
+}
+
+bool PdfDocument::writeRecoveryCopyClaimed(const QString& path,
+    const std::function<bool(const QByteArray&, qint64)>& claim,
+    QString* error, QByteArray* writtenSha256) const
+{
+    if (writtenSha256) writtenSha256->clear();
+    try {
+        if (!d->state)
+            fail(QStringLiteral("尚未打开 PDF, 无法创建恢复副本."));
+        const QString target = normalizedPath(path);
+        auto targetOccupied = [&] {
+            const QFileInfo info(target);
+            return info.exists() || info.isSymLink() || info.isJunction();
+        };
+        if (target.isEmpty() || samePath(target, d->path) || targetOccupied())
+            fail(QStringLiteral("恢复副本必须使用全新路径, 不覆盖源 PDF 或现有文件."));
+        QByteArray bytes;
+        QByteArray hash;
+        if (isReadOnly()) {
+            // Preserve protected legacy data, signatures and encryption byte for
+            // byte. A changed external source is not silently snapshotted.
+            bytes = readFile(d->path);
+            hash = sha256(bytes);
+            if (hash != d->sourceSha256)
+                fail(QStringLiteral("只读源文件已被外部修改, 未创建不匹配的恢复副本."));
+        } else {
+            auto candidate = buildVerifiedCandidate(*d->state);
+            bytes = std::move(candidate.bytes);
+            hash = std::move(candidate.hash);
+        }
+        QLockFile lock(target + QStringLiteral(".propernotes-save.lock"));
+        lock.setStaleLockTime(0);
+        if (!lock.tryLock(0) || targetOccupied())
+            fail(QStringLiteral("恢复副本目标已出现或正被使用, 未覆盖任何文件."));
+        if (claim && !claim(hash, bytes.size())) {
+            if (error) error->clear();
+            return false;
+        }
+        QSaveFile destination(target);
+        destination.setDirectWriteFallback(false);
+        if (!destination.open(QIODevice::WriteOnly))
+            fail(destination.errorString());
+        qint64 offset = 0;
+        while (offset < bytes.size()) {
+            const qint64 count = destination.write(bytes.constData() + offset, bytes.size() - offset);
+            if (count <= 0)
+                fail(destination.errorString());
+            offset += count;
+        }
+        if (targetOccupied())
+            fail(QStringLiteral("恢复副本目标在提交前已出现, 未覆盖它."));
+        if (!destination.commit())
+            fail(destination.errorString());
+        if (writtenSha256) *writtenSha256 = hash;
+        if (error) error->clear();
+        return true;
+    } catch (const pdf::PDFException& exception) {
+        if (error) *error = exception.getMessage();
+    } catch (const std::exception& exception) {
+        if (error) *error = QString::fromUtf8(exception.what());
+    }
+    return false;
+}
+
 bool PdfDocument::save(const QString& requestedPath, const QByteArray& expectedTargetSha256)
 {
     try {
@@ -758,22 +866,8 @@ bool PdfDocument::save(const QString& requestedPath, const QByteArray& expectedT
             d->error.clear();
             return true;
         }
-        pdf::PDFDocument output = compactSupersededOwnedObjects(*d->state, withInk(*d->state));
-        QByteArray bytes;
-        QBuffer buffer(&bytes);
-        if (!buffer.open(QIODevice::WriteOnly))
-            fail(QStringLiteral("无法创建 PDF 写入缓冲区."));
-        pdf::PDFDocumentWriter writer(nullptr);
-        const auto writeResult = writer.write(&buffer, &output);
-        if (!writeResult)
-            fail(writeResult.getErrorMessage());
-        buffer.close();
-        if (bytes.isEmpty() || bytes.size() > MaxFileBytes)
-            fail(QStringLiteral("输出 PDF 大小超出此原型范围, 未覆盖原文件."));
-        auto verified = std::make_unique<LoadedState>(loadState(bytes));
-        if (!verified->readOnlyReason.isEmpty() || editData(verified->pages) != editData(d->state->pages))
-            fail(QStringLiteral("写入后重新读取校验失败, 未覆盖原文件."));
-        const QByteArray verifiedHash = sha256(bytes);
+        auto candidate = buildVerifiedCandidate(*d->state);
+        const auto& bytes = candidate.bytes;
         QSaveFile destination(target);
         destination.setDirectWriteFallback(false);
         if (!destination.open(QIODevice::WriteOnly))
@@ -790,9 +884,9 @@ bool PdfDocument::save(const QString& requestedPath, const QByteArray& expectedT
         checkTarget();
         if (!destination.commit())
             fail(destination.errorString());
-        d->state = std::move(verified); // Already stripped of owned AP and native catalog data.
+        d->state = std::move(candidate.verified); // Already stripped of owned AP and native catalog data.
         d->path = target;
-        d->sourceSha256 = verifiedHash;
+        d->sourceSha256 = std::move(candidate.hash);
         d->modified = false;
         d->error.clear();
         return true;

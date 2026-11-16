@@ -16,6 +16,16 @@ No Qt SDK, Node.js or WebView2 installation is required by this package.
 4. Save or Save As writes a PDF containing both standard annotation appearances
    and this preview's editable pressure samples. Reopen that PDF in this preview
    to continue adding or erasing its strokes.
+5. Open Settings to choose the system/light/dark theme, sidebar and current pen
+   style. Applied preferences persist beside the program. Moving the entire
+   portable directory keeps its default relative Backups location.
+6. Local backups default to 5 minutes and 10 copies per PDF, only after content
+   changes. Count 0 stops creation and preserves old copies. Changing the folder
+   affects later backups by default; optional migration copies/verifies first.
+7. In Backup Management, inspect source paths and sizes, clean current/checked/all
+   PDF groups, or select a snapshot for verified restoration to a separate PDF.
+   Restoring does not overwrite the original PDF. Keep ordinary Save separate
+   from the backup status.
 
 Older ProperNotes v1-v4 files and unsupported or inconsistent editing data can be
 read-only. A read-only banner explains the reason. Editing arbitrary handwriting
@@ -34,6 +44,10 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 重開可繼續新增和擦除筆跡. 舊版 v1-v4 或不支援的資料可能唯讀, 原因見
 介面提示. 本包尚未經啟動及裝置驗收, 詳見 KNOWN-LIMITATIONS.md.
 
+設定與備份: 透過「設定與本地備份」調整主題、側欄、筆色/粗細及備份規則.
+預設程式根目錄 Backups, 5 分鐘、每 PDF 10 份; 0 停新增保留舊份.
+可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
+
 ## Simplified Chinese (zh-SC)
 
 保持完整程序目录, 双击 `Start-ProperNotes.cmd`. 选择「打开 PDF」后, 用笔、
@@ -44,3 +58,7 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 保存或另存后, 标准批注外观与可编辑的压感数据同存在 PDF 内. 用本原型
 重开可继续新增和擦除笔迹. 旧版 v1-v4 或不支持的数据可能只读, 原因见
 界面提示. 本包尚未经过启动及设备验收, 详见 KNOWN-LIMITATIONS.md.
+
+设置与备份: 通过「设置与本地备份」调整主题、侧栏、笔色/粗细及备份规则.
+默认程序根目录 Backups, 5 分钟、每 PDF 10 份; 0 停新增保留旧份.
+可选迁移, 管理器支持当前/勾选/全部清理和校验后另存恢复副本. 不代替普通保存.
