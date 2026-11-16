@@ -666,7 +666,7 @@ void MainWindow::createBackup(bool manual)
             // acknowledged, so ink added while the worker writes is still due.
             if (result.ok && generation == window->m_documentGeneration)
                 window->m_backedUpRevision = std::max(window->m_backedUpRevision, revision);
-            const QString text = backupResultText(result, result.changed
+            const QString text = backupResultText(result, !result.skipped && result.affectedSnapshots > 0
                 ? QStringLiteral("本地备份已创建并校验。") : QStringLiteral("已有相同内容的备份，无需新增。"));
             window->m_backupWarning = (!result.ok || !result.warnings.isEmpty()) ? text : QString();
             window->finishBackupOperation();
