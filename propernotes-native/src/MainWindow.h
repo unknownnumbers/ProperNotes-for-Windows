@@ -92,6 +92,7 @@ private:
     bool m_rendering = false;
     bool m_updatingUi = false;
     bool m_allowClose = false;
+    bool m_resumeRenderAfterSaveFailure = false;
     std::function<void()> m_afterSave;
 };
 

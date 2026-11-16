@@ -350,15 +350,26 @@ void MainWindow::resolveUnsaved(const std::function<void()>& continuation)
         continuation();
         return;
     }
+    // A modal message box runs an event loop. Do not let a delayed zoom
+    // render make saveFile() busy after the user has chosen Save.
+    const bool renderPending = m_renderTimer->isActive();
+    m_renderTimer->stop();
     QMessageBox box(QMessageBox::Question, QStringLiteral("保存修改"),
                     QStringLiteral("当前 PDF 有未保存的笔迹。是否先保存？"),
                     QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
     box.setDefaultButton(QMessageBox::Save);
     const auto result = box.exec();
-    if (result == QMessageBox::Save)
+    if (result == QMessageBox::Save) {
+        m_resumeRenderAfterSaveFailure = renderPending;
         saveFile(false, continuation);
-    else if (result == QMessageBox::Discard)
+        // A cancelled file picker or an early refusal starts no async save.
+        if (!m_fileBusy && std::exchange(m_resumeRenderAfterSaveFailure, false))
+            m_renderTimer->start();
+    } else if (result == QMessageBox::Discard) {
         continuation();
+    } else if (renderPending) {
+        m_renderTimer->start();
+    }
 }
 
 void MainWindow::beginOpen(const QString& path)
@@ -445,7 +456,10 @@ void MainWindow::rememberCanvas()
 void MainWindow::finishFileOperation()
 {
     m_fileBusy = false;
+    const bool resumeRender = std::exchange(m_resumeRenderAfterSaveFailure, false);
     updateUi();
+    if (resumeRender && m_pageCount > 0 && !m_rendering && !m_allowClose)
+        m_renderTimer->start();
 }
 
 void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
@@ -552,6 +566,7 @@ void MainWindow::performSave(const QString& path, const QByteArray& expectedTarg
             if (ok) {
                 window->m_path = savedPath;
                 window->m_dirty = false;
+                window->m_resumeRenderAfterSaveFailure = false;
             }
             window->finishFileOperation();
             if (!ok) {

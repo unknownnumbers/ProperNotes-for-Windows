@@ -133,8 +133,10 @@ foreach ($module in $lock.qt.sourceArchives) {
         $records = @(Get-Content -LiteralPath $attribution.FullName -Raw | ConvertFrom-Json)
         foreach ($record in $records) {
             $qtAttributions.Add([ordered]@{ module = $module; metadata = $relative.Replace('\', '/'); attribution = $record })
-            if ($record.PSObject.Properties.Name -notcontains 'LicenseFile') { continue }
-            foreach ($licenseName in @($record.LicenseFile)) {
+            $licenseNames = @()
+            if ($record.PSObject.Properties.Name -contains 'LicenseFile') { $licenseNames += @($record.LicenseFile) }
+            if ($record.PSObject.Properties.Name -contains 'LicenseFiles') { $licenseNames += @($record.LicenseFiles) }
+            foreach ($licenseName in $licenseNames | Select-Object -Unique) {
                 $licenseSource = [IO.Path]::GetFullPath((Join-Path $attribution.DirectoryName $licenseName))
                 $modulePrefix = [IO.Path]::GetFullPath($moduleRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
                 if (-not $licenseSource.StartsWith($modulePrefix, [StringComparison]::OrdinalIgnoreCase)) {
