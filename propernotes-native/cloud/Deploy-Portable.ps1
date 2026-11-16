@@ -212,6 +212,8 @@ Write-Utf8 (Join-Path $portable 'build-metadata/pe-imports.json') (ConvertTo-Jso
 
 $sourceCommit = (& git -C $ProjectDirectory rev-parse HEAD | Out-String).Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceCommit -notmatch '^[0-9a-f]{40}$') { throw 'Cannot identify the project source commit.' }
+$repositoryRoot = (& git -C $ProjectDirectory rev-parse --show-toplevel | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $repositoryRoot) { throw 'Cannot identify the project repository root.' }
 $provenance = [ordered]@{
     schemaVersion = 1
     name = $PackageName
@@ -238,7 +240,18 @@ Copy-File (Join-Path $PSScriptRoot 'vcpkg/vcpkg.json') (Join-Path $portable 'bui
 # Archive only source inputs, never the runner's downloaded executable build tools.
 $sourceInputs = Join-Path $sourceBundle 'source-inputs'
 New-Item -ItemType Directory -Path $sourceInputs | Out-Null
-Invoke-PackTool -File git -Arguments @('-C', $ProjectDirectory, 'archive', '--format=zip', '--prefix=propernotes-native/', "--output=$sourceInputs/ProperNotes-native-source.zip", "${sourceCommit}:propernotes-native")
+Invoke-PackTool -File git -Arguments @('-C', $repositoryRoot, 'archive', '--format=zip', '--prefix=propernotes-native/', "--output=$sourceInputs/ProperNotes-native-source.zip", "${sourceCommit}:propernotes-native")
+$expectedProjectFiles = @(& git -C $repositoryRoot ls-tree -r --name-only "${sourceCommit}:propernotes-native")
+if ($LASTEXITCODE -ne 0 -or $expectedProjectFiles.Count -eq 0) { throw 'The committed native source tree is empty or unreadable.' }
+$projectArchive = [IO.Compression.ZipFile]::OpenRead((Join-Path $sourceInputs 'ProperNotes-native-source.zip'))
+try {
+    $archivedProjectFiles = @($projectArchive.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName -replace '^propernotes-native/', '' })
+    if ($archivedProjectFiles.Count -ne $expectedProjectFiles.Count -or
+        @(Compare-Object -ReferenceObject $expectedProjectFiles -DifferenceObject $archivedProjectFiles).Count -ne 0) {
+        throw 'The native source ZIP does not contain every committed native source file.'
+    }
+}
+finally { $projectArchive.Dispose() }
 Invoke-PackTool -File git -Arguments @('-C', $PdfSourceDirectory, 'archive', '--format=zip', '--prefix=PDF4QT/', "--output=$sourceInputs/PDF4QT-$($lock.pdf4qt.version)-source.zip", $lock.pdf4qt.commit)
 Invoke-PackTool -File git -Arguments @('-C', $VcpkgRoot, 'archive', '--format=zip', '--prefix=vcpkg/', "--output=$sourceInputs/vcpkg-port-snapshot.zip", $lock.vcpkg.commit)
 foreach ($module in $lock.qt.sourceArchives) {
