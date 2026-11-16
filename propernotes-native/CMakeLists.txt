@@ -24,6 +24,9 @@ set(PDF4QT_INSTALL_MSVC_REDISTRIBUTABLE OFF CACHE BOOL "" FORCE)
 set(PDF4QT_INSTALL_PREPARE_WIX_INSTALLER OFF CACHE BOOL "" FORCE)
 set(PDF4QT_INSTALL_INCLUDE OFF CACHE BOOL "" FORCE)
 add_subdirectory("${PDF4QT_SOURCE_DIR}" "${CMAKE_BINARY_DIR}/pdf4qt")
+# PDF4QT writes config.h into its own binary directory. Its standalone build
+# finds that through the top-level binary include, which changes when embedded.
+target_include_directories(Pdf4QtLibCore PRIVATE "${CMAKE_BINARY_DIR}/pdf4qt")
 
 find_package(Qt6 6.11.3 EXACT REQUIRED COMPONENTS Core Gui Widgets Svg Xml Network)
 qt_add_executable(ProperNotesNative WIN32
