@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindow.h"
+#include "MainWindowState.h"
+#include "FavoritesBar.h"
 #include "DocumentSession.h"
 #include "ThumbnailBrowser.h"
 #include <QAction>
@@ -125,6 +127,7 @@ void MainWindow::commitAnnotations(int page, const PageAnnotations& before, cons
     if (auto* item = m_pages->item(page)) item->setIcon(QIcon());
     m_sidebarPreviewTimer->start();
     updateUi();
+    scheduleWorkspaceSave();
 }
 
 void MainWindow::editHistory(bool redo)
@@ -173,26 +176,63 @@ void MainWindow::editHistory(bool redo)
     m_view->restoreViewState(state);
     m_restoringView = false;
     updateUi();
+    scheduleWorkspaceSave();
 }
 
 bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
 {
-    if (tool == InkCanvas::Tool::Pen) return m_preferences.tools.penSingleUse;
-    if (tool == InkCanvas::Tool::ObjectEraser) return m_preferences.tools.eraserSingleUse;
-    if (tool == InkCanvas::Tool::TextBox) return m_preferences.tools.textSingleUse;
+    const auto preferences=effectiveToolPreferences();
+    if (tool == InkCanvas::Tool::Pen) return preferences.penSingleUse;
+    if (tool == InkCanvas::Tool::ObjectEraser) return preferences.eraserSingleUse;
+    if (tool == InkCanvas::Tool::TextBox) return preferences.textSingleUse;
     return false;
+}
+
+qreal MainWindow::effectivePenWidth() const
+{
+    auto tools=m_preferences.tools;auto color=m_preferences.penColor;qreal width=m_preferences.penWidthPt;
+    if(m_liveFavorite&&m_liveFavorite->active)propernotes::applyFavorite(*m_liveFavorite->active,tools,color,width);
+    return width;
+}
+
+void MainWindow::beginPendingDefaultChange()
+{
+    m_liveFavorite->pendingDefaultChange=true;
+}
+
+bool MainWindow::finishPendingDefaultChange(bool success)
+{
+    const bool pending=std::exchange(m_liveFavorite->pendingDefaultChange,false);
+    if(pending&&success){clearFavoriteSelection();return true;}
+    return false;
+}
+
+void MainWindow::rememberPersistentTool()
+{
+    if(!m_liveFavorite||isSingleUse(m_tool))return;
+    FavoriteState::RuntimeTool state;
+    state.tool=m_tool;
+    state.snapshot=captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));
+    state.snapshot.id=QUuid(); // Runtime default snapshots are not stored favorites.
+    if(m_liveFavorite->active&&m_liveFavorite->active->tool==m_tool&&!m_liveFavorite->active->id.isNull())state.favorite=m_liveFavorite->active;
+    auto& history=m_liveFavorite->persistent;
+    for(qsizetype index=history.size();index>0;--index){
+        const auto& old=history[index-1];
+        const bool samePreset=(!old.favorite&&!state.favorite)||(old.favorite&&state.favorite&&old.favorite->id==state.favorite->id);
+        if(old.tool==state.tool&&samePreset)history.removeAt(index-1);
+    }
+    history.append(std::move(state));
+    if(history.size()>64)history.removeFirst();
 }
 
 void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
 {
     ++m_toolSerial;
     m_view->finishGesture();
+    if(userChoice&&m_liveFavorite->active){clearFavoriteSelection();applyPreferences(m_preferences);}
     m_tool = tool;
     m_view->setTool(tool);
-    if (userChoice && !isSingleUse(tool)) {
-        m_persistentTools.removeAll(tool);
-        m_persistentTools.append(tool);
-    }
+    if(userChoice)rememberPersistentTool();
     updateToolUi();
 }
 
@@ -203,11 +243,18 @@ void MainWindow::toolCompleted(InkCanvas::Tool tool, const QString&)
     const quint64 serial = m_toolSerial;
     QTimer::singleShot(0, this, [this, tool, serial] {
         if (m_toolSerial != serial || m_tool != tool || !isSingleUse(tool)) return;
-        auto previous = InkCanvas::Tool::Pan;
-        for (auto it = m_persistentTools.crbegin(); it != m_persistentTools.crend(); ++it) {
-            if (*it != tool && !isSingleUse(*it)) { previous = *it; break; }
+        auto current=captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));current.id=QUuid();
+        const auto activeId=m_liveFavorite->active?m_liveFavorite->active->id:QUuid();
+        std::optional<FavoriteState::RuntimeTool> previous;
+        for(auto it=m_liveFavorite->persistent.crbegin();it!=m_liveFavorite->persistent.crend();++it){
+            const auto presetId=it->favorite?it->favorite->id:QUuid();
+            if(it->tool==tool&&presetId==activeId&&favoriteToolsJson({it->snapshot})==favoriteToolsJson({current}))continue;
+            previous=*it;break;
         }
-        chooseTool(previous, false);
+        ++m_toolSerial;m_view->finishGesture();
+        if(previous){m_liveFavorite->active=previous->favorite?previous->favorite:std::optional<FavoriteTool>(previous->snapshot);m_tool=previous->tool;}
+        else{m_liveFavorite->active.reset();m_tool=InkCanvas::Tool::Pan;}
+        applyPreferences(m_preferences);m_view->setTool(m_tool);updateToolUi();
     });
 }
 
@@ -225,6 +272,10 @@ void MainWindow::updateToolUi()
     m_lockAction->setEnabled(!m_preferencesBusy && !m_backupBusy && !m_fileBusy && m_preferencesWritable &&
         (m_tool == InkCanvas::Tool::Pen || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox));
     m_updatingUi = wasUpdating;
+    if(m_favoritesBar){
+        m_favoritesBar->setCurrentTool(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth());
+        m_favoritesBar->setActiveFavoriteId(m_liveFavorite->active&&m_liveFavorite->active->tool==m_tool?m_liveFavorite->active->id:QUuid());
+    }
 }
 
 void MainWindow::viewChanged(const DocumentView::ViewState& state, const QString& reason)
@@ -243,6 +294,7 @@ void MainWindow::viewChanged(const DocumentView::ViewState& state, const QString
         m_viewHistoryIndex = int(m_viewHistory.size()) - 1;
     }
     m_lastViewReason = reason; m_lastViewChangeMs = now;
+    scheduleWorkspaceSave();
     updateUi();
 }
 
@@ -256,7 +308,7 @@ void MainWindow::navigateHistory(int direction)
     m_restoringView = true;
     m_view->restoreViewState(m_viewHistory[next]);
     m_restoringView = false;
-    m_lastViewReason.clear(); updateUi();
+    m_lastViewReason.clear(); updateUi();scheduleWorkspaceSave();
 }
 
 void MainWindow::goToPage(int page)

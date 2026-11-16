@@ -6,8 +6,46 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+English (en): The `0.3.1-native-preview.1` source integrates the workspace and favorites
+features below. Compilation status comes from each artifact's provenance; application
+startup, tests and runtime acceptance have not been performed. The scope is 32
+horizontal tabs with independent unsaved models and content/view histories, individual
+unsaved checks on close/exit, protection against Save As over another tab including an
+unloaded placeholder, and independent backups for loaded background tabs. Recent files
+are limited to 100 entries, reading records to 256, metadata to 4MiB, with approximately
+650ms coalesced writes. Startup restoration defaults on and creates ordered lazy,
+retryable placeholders with active-tab/reading state; it reads current disk files and
+does not recover unsaved ink, PDF content or undo stacks. A previous dirty marker directs
+the user to backups. Clearing recents preserves PDFs, backups and reading/session records.
+The single small-icon favorites bar supports the five existing tools, with snapshot
+create/edit/duplicate/delete/drag reorder/collapse/left-right dock/float, up to 128 presets.
+Preset management,
+tool defaults and selected objects remain separate; applying a preset affects later
+operations. Multiple bars and other tool presets remain later work. Retaining loaded
+background PDF models increases memory use; these limits are not a process-memory budget.
+
+Traditional Chinese (zh-TC): `0.3.1-native-preview.1` 工作區/收藏源碼已接入, 編譯狀態見各構件
+provenance; 應用尚未啟動、測試或實際驗收.
+範圍為 32 個橫向標籤、各自未儲存模型及內容/視角歷史、關閉/退出逐一確認、另存保護其他標籤
+含未載入佔位項, 以及已載入背景標籤的獨立備份. 最近 100 筆、閱讀 256 筆、中繼資料 4MiB,
+約 650ms 合併寫入. 啟動恢復預設開啟, 恢復標籤順序/活動項/閱讀狀態, 按需載入且失敗可重試.
+讀取目前磁碟文件, 不恢復未儲存墨跡、PDF 正文或撤銷棧; 舊未儲存標記提示核對備份.
+清理最近不刪 PDF、備份或閱讀/會話登記. 單一小圖示收藏欄覆蓋現有五工具快照,
+可新增/編輯/複製/刪除/拖排/折疊/左右停靠/浮動, 上限 128 預設; 管理收藏、工具預設及已選物件分開,
+點擊後僅影響後續操作. 多收藏欄及其他工具預設後續. 背景 PDF 模型仍佔記憶體, 不由這些數量推定總記憶體上限.
+
+Simplified Chinese (zh-SC): `0.3.1-native-preview.1` 工作区/收藏源码已接入, 编译状态见各构件
+provenance; 应用尚未启动、测试或实际验收.
+范围为 32 个横向标签、各自未保存模型及内容/视角历史、关闭/退出逐一确认、另存保护其他标签
+含未加载占位项, 以及已加载后台标签的独立备份. 最近 100 条、阅读 256 条、元数据 4MiB,
+约 650ms 合并写入. 启动恢复默认开启, 恢复标签顺序/活动项/阅读状态, 按需加载且失败可重试.
+读取当前磁盘文档, 不恢复未保存墨迹、PDF 正文或撤销栈; 旧未保存标记提示核对备份.
+清理最近不删 PDF、备份或阅读/会话登记. 单个小图标收藏栏覆盖现有五工具快照,
+可新建/编辑/复制/删除/拖排/折叠/左右停靠/浮动, 上限 128 预设; 管理收藏、工具默认及已选对象分开,
+点击后仅影响后续操作. 多收藏栏及其他工具预设后续. 后台 PDF 模型仍占内存, 不由这些数量推定总内存上限.
+
 - Pen pressure is collected through Qt tablet events when the device/driver reports it. Mouse input is a constant-pressure fallback. Device and driver coverage is not asserted.
-- The 0.3.0 source adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. Text selection/search/review markup, shapes, bookmarks, tabs/recent files/session restoration, full custom navigation/shortcuts and other previously confirmed first-batch tools remain to be migrated. This is not the complete first batch.
+- The compiled 0.3.0 baseline adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. The 0.3.1 source integrates tabs/recent files/session restoration and single-bar favorites. Text selection/search/review markup, shapes, bookmarks, annotation lists/locking, full custom navigation/shortcuts and other previously confirmed first-batch tools remain to be migrated. This is not the complete first batch.
 - Input and serialized output are currently capped at 512MiB. A 1GB-class document is a future design/acceptance target, not supported capacity claimed by this build. See LARGE-DOCUMENTS.md for the verified parser/serialization constraints and planned work.
 - Recovery backups are full PDFs in the native backup catalog, not edits to the original file. Restore creates a separate PDF. Legacy web-preview backup catalogs are not imported. Atomic writes, source checks and verified copies do not guarantee recovery under every disk, power or filesystem failure.
 - An interrupted migration can leave pending entries visible for inspection or retry. Source data is preserved until destination copies are verified and committed. A corrupt or foreign catalog is protected rather than silently repaired.

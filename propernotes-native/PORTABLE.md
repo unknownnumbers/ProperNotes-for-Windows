@@ -4,6 +4,28 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+The `0.3.1-native-preview.1` source integrates the workspace features below. See each
+artifact's provenance for compilation status; application startup, tests and runtime
+acceptance have not been performed. Open adds a horizontal tab or activates the same registered
+path, up to 32 tabs. Each tab keeps its own unsaved content and editing/view history.
+Closing or exiting checks unsaved tabs individually; cancelling or failing a save keeps
+them open. Save As protects other tabs' paths, including unloaded restoration placeholders.
+Loaded background documents retain their own backup revisions and schedules.
+
+Recent files (100 visible entries) support reopen/activate, individual removal and clear.
+Clearing does not delete PDFs, backups or the separate reading/session registry (256
+records). Workspace metadata is limited to 4MiB and writes are coalesced for approximately
+650ms. Startup restoration defaults on: ordered lazy placeholders preserve the active tab
+and reading state, and a failed file remains retryable. Reopening reads the current disk
+file; unsaved ink, PDF content and undo stacks are not restored from session metadata.
+An earlier unsaved-state marker directs you to backups.
+
+The small-icon favorites bar snapshots Pen, Eraser, Pan, Select/Move and Text Box
+styles. Create/edit/duplicate/delete or drag-reorder presets, collapse the bar, dock it
+left/right or float it, up to the project's 128-preset limit. Editing a preset does not modify tool defaults or selected PDF
+objects; selecting the preset applies it to subsequent operations. Multiple bars and
+presets for additional tools remain future work.
+
 For 0.3.0: pen input uses the selected tool. Mouse-left and one finger initially pan;
 enable the visible mouse-and-touch switch to draw/select/create text with those inputs.
 Two fingers always pan/zoom. The tool's Persistent button retains that tool; switch it
@@ -53,6 +75,21 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+`0.3.1-native-preview.1` 工作區源碼已接入. 編譯狀態見各構件 provenance,
+應用尚未啟動、測試或實際驗收. 開啟文件新增
+橫向標籤, 同一登記路徑啟用已有標籤, 最多 32 個. 各標籤保留未儲存內容與編輯/視角歷史;
+關閉或退出逐一確認, 取消或儲存失敗保留標籤. 另存保護其他標籤文件, 包含未載入佔位項.
+已載入背景文件保留獨立備份修訂及排程.
+
+最近列表最多 100 筆, 可開啟/啟用、逐筆移除或清空, 不刪 PDF、備份或另存的 256 筆
+閱讀/會話登記. 工作區中繼資料上限 4MiB, 約 650ms 合併寫入. 啟動恢復預設開啟,
+按順序建立按需載入佔位標籤並記住活動標籤/閱讀狀態, 失敗可重試; 重新讀取目前磁碟檔案,
+不從會話恢復未儲存墨跡、PDF 正文或撤銷棧. 上次未儲存標記會提示查備份.
+
+小圖示收藏欄支援筆、橡皮、平移、框選/移動和文字框樣式快照, 可新增/編輯/複製/
+刪除/拖排、折疊、左右停靠或浮動, 專案上限 128 預設. 編輯收藏不改工具預設或已選 PDF 物件, 點擊後才套用
+後續操作. 多收藏欄及其他工具預設另列後續.
+
 0.3.0: 筆直接使用所選工具. 滑鼠左鍵與單指預設瀏覽, 開啟「滑鼠與手跟隨工具」
 後才跟隨所選工具; 兩指始終瀏覽. 「持續使用」取消後, 成功使用一次回前一常駐工具.
 整筆/局部橡皮可選, 筆尾為臨時擦除. 框選後拖移; 文字框拖出後輸入, Enter換行,
@@ -73,6 +110,21 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+`0.3.1-native-preview.1` 工作区源码已接入. 编译状态见各构件 provenance,
+应用尚未启动、测试或实际验收. 打开文档新增
+横向标签, 同一登记路径激活已有标签, 最多 32 个. 各标签保留未保存内容与编辑/视角历史;
+关闭或退出逐一确认, 取消或保存失败保留标签. 另存保护其他标签文件, 包含未加载占位项.
+已加载后台文档保留独立备份修订及调度.
+
+最近列表最多 100 条, 可打开/激活、逐条移除或清空, 不删 PDF、备份或另存的 256 条
+阅读/会话登记. 工作区元数据上限 4MiB, 约 650ms 合并写入. 启动恢复默认开启,
+按顺序建立按需加载占位标签并记住活动标签/阅读状态, 失败可重试; 重新读取当前磁盘文件,
+不从会话恢复未保存墨迹、PDF 正文或撤销栈. 上次未保存标记会提示查备份.
+
+小图标收藏栏支持笔、橡皮、平移、框选/移动和文字框样式快照, 可新建/编辑/复制/
+删除/拖排、折叠、左右停靠或浮动, 项目上限 128 预设. 编辑收藏不改工具默认或已选 PDF 对象, 点击后才应用
+后续操作. 多收藏栏及其他工具预设另列后续.
 
 0.3.0: 笔直接使用所选工具. 鼠标左键与单指默认浏览, 开启「鼠标与手跟随工具」
 后才跟随所选工具; 两指始终浏览. 「持续使用」取消后, 成功使用一次回前一常驻工具.

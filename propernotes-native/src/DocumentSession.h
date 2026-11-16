@@ -5,6 +5,6 @@
 namespace propernotes {
 struct DocumentSession {
     std::unique_ptr<PdfDocument> document;
-    std::unique_ptr<AppPreferences> preferences;
+    std::shared_ptr<AppPreferences> preferences;
 };
 }

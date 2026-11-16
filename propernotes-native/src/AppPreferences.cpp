@@ -100,6 +100,9 @@ QString AppPreferences::normalizeDirectory(const QString& selected) const
 
 bool AppPreferences::validate(const AppPreferenceValues& value, QString* error)
 {
+    if (!validFavoriteTools(value.favorites, error)) return false;
+    if (!validFavoritesBarPreferences(value.favoritesBar))
+        return fail(error, QStringLiteral("工具收藏栏位置或布局无效，原设置保留。"));
     if (!validToolPreferences(value.tools))
         return fail(error, QStringLiteral("工具或阅读偏好无效，未覆盖设置。"));
     if (!QStringList{QStringLiteral("system"), QStringLiteral("light"), QStringLiteral("dark")}.contains(value.theme))
@@ -163,11 +166,13 @@ bool AppPreferences::load()
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(&m_error, QStringLiteral("设置文件已损坏；采用临时默认值，不覆盖原文件。"));
     const QJsonObject root = document.object();
-    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 2))
+    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 3))
         return fail(&m_error, QStringLiteral("设置版本不受支持；采用临时默认值，不覆盖原文件。"));
     QStringList rootKeys{QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
                         QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")};
-    if (root.value(QStringLiteral("schemaVersion")).toInt() == 2) rootKeys.append(QStringLiteral("tools"));
+    const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt();
+    if (schemaVersion >= 2) rootKeys.append(QStringLiteral("tools"));
+    if (schemaVersion >= 3) { rootKeys.append(QStringLiteral("favorites")); rootKeys.append(QStringLiteral("favoritesBar")); }
     if (!exactKeys(root, rootKeys))
         return fail(&m_error, QStringLiteral("设置文件含未知字段；未覆盖原文件。"));
     const QJsonObject backup = root.value(QStringLiteral("backup")).toObject();
@@ -179,9 +184,14 @@ bool AppPreferences::load()
         !backup.value(QStringLiteral("directory")).isString() || !backup.value(QStringLiteral("knownDirectories")).isArray())
         return fail(&m_error, QStringLiteral("设置字段类型或范围无效；未覆盖原文件。"));
     AppPreferenceValues candidate;
-    if (root.value(QStringLiteral("schemaVersion")).toInt() == 2 &&
+    if (schemaVersion >= 2 &&
         (!root.value(QStringLiteral("tools")).isObject() || !readToolPreferences(root.value(QStringLiteral("tools")).toObject(), candidate.tools)))
         return fail(&m_error, QStringLiteral("工具设置字段无效，原设置文件保留。"));
+    if (schemaVersion >= 3 &&
+        (!root.value(QStringLiteral("favorites")).isArray() || !root.value(QStringLiteral("favoritesBar")).isObject() ||
+         !readFavoriteTools(root.value(QStringLiteral("favorites")).toArray(),candidate.favorites) ||
+         !readFavoritesBar(root.value(QStringLiteral("favoritesBar")).toObject(),candidate.favoritesBar)))
+        return fail(&m_error, QStringLiteral("工具收藏或收藏栏设置无效，原设置文件保留。"));
     candidate.theme = root.value(QStringLiteral("theme")).toString();
     candidate.sidebarVisible = root.value(QStringLiteral("sidebarVisible")).toBool();
     candidate.sidebarWidth = root.value(QStringLiteral("sidebarWidth")).toInt();
@@ -244,10 +254,12 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                        {QStringLiteral("retainCount"), candidate.backupRetainCount},
                        {QStringLiteral("directory"), candidate.backupDirectory},
                        {QStringLiteral("knownDirectories"), directories}};
-    const QJsonObject root{{QStringLiteral("schemaVersion"), 2}, {QStringLiteral("theme"), candidate.theme},
+    const QJsonObject root{{QStringLiteral("schemaVersion"), 3}, {QStringLiteral("theme"), candidate.theme},
                            {QStringLiteral("sidebarVisible"), candidate.sidebarVisible}, {QStringLiteral("sidebarWidth"), candidate.sidebarWidth},
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
-                           {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)}};
+                           {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)},
+                           {QStringLiteral("favorites"),favoriteToolsJson(candidate.favorites)},
+                           {QStringLiteral("favoritesBar"),favoritesBarJson(candidate.favoritesBar)}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (bytes.size() > MaximumSettingsBytes)
         return fail(&m_error, QStringLiteral("设置内容超过当前大小上限，未保存。"));

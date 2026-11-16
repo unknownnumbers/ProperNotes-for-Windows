@@ -17,6 +17,7 @@
 #include <QToolBar>
 #include <QVBoxLayout>
 #include <algorithm>
+#include <cmath>
 
 namespace propernotes {
 void MainWindow::buildUi() {
@@ -54,10 +55,13 @@ void MainWindow::buildUi() {
     connect(m_undoAction,&QAction::triggered,this,[this]{editHistory(false);});
     connect(m_redoAction,&QAction::triggered,this,[this]{editHistory(true);});
     connect(m_followAction,&QAction::triggered,this,[this](bool on){auto p=m_preferences;p.tools.inputFollowsTool=on;persistPreferences(p);});
-    connect(m_lockAction,&QAction::triggered,this,[this](bool locked){auto p=m_preferences;
+    connect(m_lockAction,&QAction::triggered,this,[this](bool locked){
+        if(m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable||locked==!isSingleUse(m_tool))return;
+        auto p=m_preferences;p.tools=effectiveToolPreferences();p.penColor=m_color;p.penWidthPt=effectivePenWidth();
         if(m_tool==InkCanvas::Tool::Pen)p.tools.penSingleUse=!locked;
         if(m_tool==InkCanvas::Tool::ObjectEraser)p.tools.eraserSingleUse=!locked;
-        if(m_tool==InkCanvas::Tool::TextBox)p.tools.textSingleUse=!locked;persistPreferences(p);});
+        if(m_tool==InkCanvas::Tool::TextBox)p.tools.textSingleUse=!locked;
+        beginPendingDefaultChange();persistPreferences(p);});
     addToolBarBreak();auto* style=addToolBar(QStringLiteral("笔与对象属性"));style->setMovable(false);
     m_colorAction=style->addAction(QStringLiteral("颜色"));
     m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSingleStep(0.5);m_width->setSuffix(QStringLiteral(" pt"));style->addWidget(m_width);
@@ -70,13 +74,34 @@ void MainWindow::buildUi() {
     m_textSize=new QDoubleSpinBox;m_textSize->setRange(4,144);m_textSize->setSuffix(QStringLiteral(" pt 字号"));style->addWidget(m_textSize);
     for(auto* spin:{m_width,m_opacity,m_eraserSize,m_textSize})spin->setKeyboardTracking(false);
     m_sensitivity->setKeyboardTracking(false);
-    auto saveStyle=[this]{if(m_updatingUi||m_preferencesBusy||m_backupBusy||!m_preferencesWritable)return;auto p=m_preferences;
-        p.penWidthPt=m_width->value();p.tools.opacity=m_opacity->value()/100.;p.tools.pressureEnabled=m_pressure->isChecked();p.tools.pressureSensitivity=m_sensitivity->value();
-        p.tools.eraserMode=m_eraseMode->currentData().toString();p.tools.eraserRadiusPt=m_eraserSize->value();p.tools.textFamily=m_textFamily->currentFont().family();p.tools.textSizePt=m_textSize->value();persistPreferences(p);};
-    for(auto* spin:{m_width,m_opacity,m_eraserSize,m_textSize})connect(spin,&QDoubleSpinBox::editingFinished,this,saveStyle);
-    connect(m_sensitivity,&QSpinBox::editingFinished,this,saveStyle);connect(m_pressure,&QCheckBox::clicked,this,[saveStyle](bool){saveStyle();});
-    connect(m_eraseMode,&QComboBox::activated,this,[saveStyle](int){saveStyle();});connect(m_textFamily,&QFontComboBox::currentFontChanged,this,[this,saveStyle](const QFont&){if(!m_updatingUi)saveStyle();});
-    connect(m_colorAction,&QAction::triggered,this,[this]{m_view->finishGesture();auto c=QColorDialog::getColor(m_color,this,QStringLiteral("笔与新文字框颜色"));if(c.isValid()){auto p=m_preferences;p.penColor=c;persistPreferences(p);}});
+    auto saveStyle=[this](const QString& field){
+        if(m_updatingUi||m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable)return;
+        const auto old=effectiveToolPreferences();const qreal oldWidth=effectivePenWidth();
+        const auto changed=[](QDoubleSpinBox* spin,qreal original){const qreal scale=std::pow(10.0,spin->decimals());return !qFuzzyCompare(spin->value()+1,std::round(original*scale)/scale+1);};
+        bool modified=false;auto p=m_preferences;p.tools=old;p.penColor=m_color;p.penWidthPt=oldWidth;
+        if(field==QStringLiteral("width")){modified=changed(m_width,oldWidth);p.penWidthPt=m_width->value();}
+        else if(field==QStringLiteral("opacity")){modified=changed(m_opacity,old.opacity*100);p.tools.opacity=m_opacity->value()/100.;}
+        else if(field==QStringLiteral("radius")){modified=changed(m_eraserSize,old.eraserRadiusPt);p.tools.eraserRadiusPt=m_eraserSize->value();}
+        else if(field==QStringLiteral("text-size")){modified=changed(m_textSize,old.textSizePt);p.tools.textSizePt=m_textSize->value();}
+        else if(field==QStringLiteral("sensitivity")){modified=m_sensitivity->value()!=old.pressureSensitivity;p.tools.pressureSensitivity=m_sensitivity->value();}
+        else if(field==QStringLiteral("pressure")){modified=m_pressure->isChecked()!=old.pressureEnabled;p.tools.pressureEnabled=m_pressure->isChecked();}
+        else if(field==QStringLiteral("erase-mode")){modified=m_eraseMode->currentData().toString()!=old.eraserMode;p.tools.eraserMode=m_eraseMode->currentData().toString();}
+        else if(field==QStringLiteral("family")){modified=m_textFamily->currentFont().family()!=old.textFamily;p.tools.textFamily=m_textFamily->currentFont().family();}
+        if(!modified)return;beginPendingDefaultChange();persistPreferences(p);
+    };
+    connect(m_width,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("width"));});
+    connect(m_opacity,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("opacity"));});
+    connect(m_eraserSize,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("radius"));});
+    connect(m_textSize,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("text-size"));});
+    connect(m_sensitivity,&QSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("sensitivity"));});
+    connect(m_pressure,&QCheckBox::clicked,this,[saveStyle](bool){saveStyle(QStringLiteral("pressure"));});
+    connect(m_eraseMode,&QComboBox::activated,this,[saveStyle](int){saveStyle(QStringLiteral("erase-mode"));});
+    connect(m_textFamily,&QFontComboBox::currentFontChanged,this,[this,saveStyle](const QFont&){if(!m_updatingUi)saveStyle(QStringLiteral("family"));});
+    connect(m_colorAction,&QAction::triggered,this,[this]{
+        if(m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable)return;
+        m_view->finishGesture();auto c=QColorDialog::getColor(m_color,this,QStringLiteral("笔与新文字框颜色"));
+        if(c.isValid()&&c!=m_color){auto p=m_preferences;p.tools=effectiveToolPreferences();p.penWidthPt=effectivePenWidth();p.penColor=c;beginPendingDefaultChange();persistPreferences(p);}
+    });
     addToolBarBreak();auto* read=addToolBar(QStringLiteral("阅读"));read->setMovable(false);
     m_backAction=read->addAction(QStringLiteral("视角返回"));m_backAction->setShortcut(QKeySequence(Qt::ALT|Qt::Key_Left));
     m_forwardAction=read->addAction(QStringLiteral("视角前进"));m_forwardAction->setShortcut(QKeySequence(Qt::ALT|Qt::Key_Right));

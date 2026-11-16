@@ -5,6 +5,8 @@
 #include "SettingsDialog.h"
 #include "DocumentSession.h"
 #include "ThumbnailBrowser.h"
+#include "MainWindowState.h"
+#include "FavoritesBar.h"
 
 #include <QAction>
 #include <QActionGroup>
@@ -41,6 +43,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QVariant>
+#include <QTabBar>
+#include <QDateTime>
 
 #include <algorithm>
 #include <cmath>
@@ -66,6 +70,8 @@ struct OpenResult {
     int pageCount = 0;
     QVector<PageGeometry> geometry;
     QMap<int, PageAnnotations> annotations;
+    qint64 fileSize = -1;
+    QDateTime modifiedUtc;
 };
 
 struct PreferenceResult {
@@ -90,19 +96,27 @@ QString backupResultText(const BackupResult& result, const QString& success)
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent), m_session(std::make_shared<DocumentSession>()),
+      m_services(m_session), m_allSessions(std::make_shared<QVector<std::shared_ptr<DocumentSession>>>()),
       m_renderEpoch(std::make_shared<std::atomic<quint64>>(0))
 {
+    m_workspace = std::make_unique<WorkspaceState>();
+    m_liveFavorite = std::make_unique<FavoriteState>();
     resize(1240, 860);
     setMinimumSize(800, 560);
     buildUi();
+    buildWorkspaceUi();
+    rememberPersistentTool();
 
     m_workerThread = new QThread(this);
     m_workerContext = new QObject;
     m_workerContext->moveToThread(m_workerThread);
-    const auto session = m_session;
-    connect(m_workerThread, &QThread::finished, m_workerContext, [session] {
-        session->document.reset();
-        session->preferences.reset();
+    m_allSessions->append(m_session);
+    const auto sessions = m_allSessions;
+    connect(m_workerThread, &QThread::finished, m_workerContext, [sessions] {
+        for (const auto& session : *sessions) {
+            session->document.reset();
+            session->preferences.reset();
+        }
     }, Qt::DirectConnection);
     connect(m_workerThread, &QThread::finished, m_workerContext, &QObject::deleteLater);
     m_workerThread->start();
@@ -112,7 +126,7 @@ MainWindow::MainWindow(QWidget* parent)
     });
     loadPreferences();
     updateUi();
-    statusBar()->showMessage(QStringLiteral("原生最小原型 · 笔 / 鼠标批注，触摸浏览 · 设备及性能待验证"));
+    statusBar()->showMessage(QStringLiteral("原生预览 · 阅读、批注与工具收藏 · 设备及性能待验证"));
 }
 
 MainWindow::~MainWindow()
@@ -133,14 +147,14 @@ void MainWindow::loadPreferences(bool reopenSettings)
     m_resumeRenderAfterPreferences |= m_renderTimer->isActive();
     m_renderTimer->stop();
     updateUi();
-    const auto session = m_session;
+    const auto session = m_services;
     const QPointer<MainWindow> window(this);
     const QString applicationDirectory = QCoreApplication::applicationDirPath();
     QMetaObject::invokeMethod(m_workerContext, [session, window, applicationDirectory, reopenSettings] {
         PreferenceResult result;
         try {
             if (!session->preferences)
-                session->preferences = std::make_unique<AppPreferences>(applicationDirectory);
+                session->preferences = std::make_shared<AppPreferences>(applicationDirectory);
             result.ok = session->preferences->load();
             result.values = session->preferences->values();
             result.error = session->preferences->lastError();
@@ -165,9 +179,8 @@ void MainWindow::loadPreferences(bool reopenSettings)
             window->scheduleBackup();
             if (std::exchange(window->m_resumeRenderAfterPreferences, false) && window->m_pageCount > 0)
                 window->m_renderTimer->start();
-            const QString pending = std::exchange(window->m_pendingOpen, QString());
-            if (!pending.isEmpty())
-                window->openFile(pending);
+            if (!window->m_workspaceLoaded)
+                window->loadWorkspace();
             else if (reopenSettings)
                 window->openSettings();
         }, Qt::QueuedConnection);
@@ -176,39 +189,38 @@ void MainWindow::loadPreferences(bool reopenSettings)
 
 void MainWindow::applyPreferences(const AppPreferenceValues& values)
 {
+    AppPreferenceValues effective = values;
+    if (m_liveFavorite && m_liveFavorite->active)
+        propernotes::applyFavorite(*m_liveFavorite->active, effective.tools, effective.penColor, effective.penWidthPt);
     const bool layoutChanged = values.tools.layout != m_preferences.tools.layout;
     const bool previouslySingle = isSingleUse(m_tool);
     m_preferences = values;
-    if (previouslySingle && !isSingleUse(m_tool)) {
-        m_persistentTools.removeAll(m_tool);
-        m_persistentTools.append(m_tool);
-    }
-    m_color = values.penColor;
+    m_color = effective.penColor;
     const bool wasUpdating = m_updatingUi;
     m_updatingUi = true;
-    m_width->setValue(values.penWidthPt);
+    m_width->setValue(effective.penWidthPt);
     m_sidebarAction->setChecked(values.sidebarVisible);
     m_navigation->setVisible(values.sidebarVisible);
     m_splitter->setSizes({values.sidebarWidth, std::max(1, m_splitter->width() - values.sidebarWidth)});
-    m_view->setPenColor(values.penColor);
-    m_view->setPenWidth(values.penWidthPt);
-    m_view->setPenOpacity(values.tools.opacity);
-    m_view->setPressureEnabled(values.tools.pressureEnabled);
-    m_view->setPressureSensitivity(values.tools.pressureSensitivity);
-    m_view->setEraserMode(values.tools.eraserMode == QStringLiteral("partial")
+    m_view->setPenColor(effective.penColor);
+    m_view->setPenWidth(effective.penWidthPt);
+    m_view->setPenOpacity(effective.tools.opacity);
+    m_view->setPressureEnabled(effective.tools.pressureEnabled);
+    m_view->setPressureSensitivity(effective.tools.pressureSensitivity);
+    m_view->setEraserMode(effective.tools.eraserMode == QStringLiteral("partial")
         ? InkCanvas::EraseMode::PartialStroke : InkCanvas::EraseMode::WholeStroke);
-    m_view->setEraserRadius(values.tools.eraserRadiusPt);
+    m_view->setEraserRadius(effective.tools.eraserRadiusPt);
     m_view->setInputFollowsTool(values.tools.inputFollowsTool);
-    QColor textColor = values.penColor;
-    textColor.setAlphaF(values.tools.opacity);
-    m_view->setTextStyle(values.tools.textFamily, values.tools.textSizePt, textColor);
-    m_opacity->setValue(values.tools.opacity * 100);
-    m_pressure->setChecked(values.tools.pressureEnabled);
-    m_sensitivity->setValue(values.tools.pressureSensitivity);
-    m_eraseMode->setCurrentIndex(m_eraseMode->findData(values.tools.eraserMode));
-    m_eraserSize->setValue(values.tools.eraserRadiusPt);
-    m_textFamily->setCurrentFont(QFont(values.tools.textFamily));
-    m_textSize->setValue(values.tools.textSizePt);
+    QColor textColor = effective.penColor;
+    textColor.setAlphaF(effective.tools.opacity);
+    m_view->setTextStyle(effective.tools.textFamily, effective.tools.textSizePt, textColor);
+    m_opacity->setValue(effective.tools.opacity * 100);
+    m_pressure->setChecked(effective.tools.pressureEnabled);
+    m_sensitivity->setValue(effective.tools.pressureSensitivity);
+    m_eraseMode->setCurrentIndex(m_eraseMode->findData(effective.tools.eraserMode));
+    m_eraserSize->setValue(effective.tools.eraserRadiusPt);
+    m_textFamily->setCurrentFont(QFont(effective.tools.textFamily));
+    m_textSize->setValue(effective.tools.textSizePt);
     m_layout->setCurrentIndex(m_layout->findData(values.tools.layout));
     if (layoutChanged) {
         const auto layout = values.tools.layout == QStringLiteral("single") ? DocumentView::LayoutMode::SinglePage
@@ -219,7 +231,12 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     }
     m_updatingUi = wasUpdating;
     applyTheme();
+    if (m_favoritesBar) {
+        m_favoritesBar->setFavorites(values.favorites);
+        m_favoritesBar->setBarPreferences(values.favoritesBar);
+    }
     updateToolUi();
+    if(previouslySingle&&!isSingleUse(m_tool))rememberPersistentTool();
 }
 
 void MainWindow::applyTheme()
@@ -270,8 +287,10 @@ void MainWindow::applyTheme()
 
 void MainWindow::persistPreferences(AppPreferenceValues values, bool migrate)
 {
-    if (m_preferencesBusy || m_backupBusy || !m_preferencesWritable)
+    if (m_preferencesBusy || m_backupBusy || !m_preferencesWritable) {
+        finishPendingDefaultChange(false);
         return;
+    }
     m_view->finishGesture();
     if (m_sidebarTimer->isActive() && m_navigation->isVisible())
         values.sidebarWidth = std::clamp(m_splitter->sizes().value(0, values.sidebarWidth), 112, 400);
@@ -281,7 +300,7 @@ void MainWindow::persistPreferences(AppPreferenceValues values, bool migrate)
     m_renderTimer->stop();
     m_preferencesBusy = true;
     updateUi();
-    const auto session = m_session;
+    const auto session = m_services;
     const QPointer<MainWindow> window(this);
     QMetaObject::invokeMethod(m_workerContext, [session, window, values = std::move(values), migrate]() mutable {
         PreferenceResult result;
@@ -331,10 +350,12 @@ void MainWindow::persistPreferences(AppPreferenceValues values, bool migrate)
                 return;
             window->m_preferencesBusy = false;
             window->m_preferencesWritable = result.writable;
+            const bool defaultChanged=window->finishPendingDefaultChange(result.ok);
             if (result.ok) {
                 window->m_preferencesValid = true;
                 window->m_preferencesWarning.clear();
                 window->applyPreferences(result.values);
+                if(defaultChanged)window->rememberPersistentTool();
                 window->m_backupWarning = result.migrationWarning;
                 window->statusBar()->showMessage(QStringLiteral("设置已保存。"), 5000);
             } else {
@@ -351,6 +372,12 @@ void MainWindow::persistPreferences(AppPreferenceValues values, bool migrate)
                 window->showError(QStringLiteral("设置已保存，新旧目录均保留在管理列表。\n") + result.migrationWarning);
             if (std::exchange(window->m_closeAfterPreferences, false))
                 window->close();
+            else if (window->m_liveFavorite->queuedBar && window->m_preferencesWritable) {
+                auto values = window->m_preferences;
+                values.favoritesBar = *window->m_liveFavorite->queuedBar;
+                window->m_liveFavorite->queuedBar.reset();
+                window->persistPreferences(values);
+            }
         }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
 }
@@ -409,14 +436,22 @@ void MainWindow::scheduleBackup(int delayMs)
     if (!m_preferencesLoaded || !m_preferencesValid || !m_preferencesWritable ||
         m_preferencesBusy || m_settingsDialog || m_preferences.backupRetainCount == 0)
         return;
-    const int delay = delayMs >= 0 ? delayMs : m_preferences.backupIntervalMinutes * 60 * 1000;
+    const qint64 now=QDateTime::currentMSecsSinceEpoch();
+    qint64 wait=m_preferences.backupIntervalMinutes*60000LL;
+    if(delayMs<0)for(int i=0;i<m_tabs.size();++i){
+        const auto& tab=*m_tabs[i];
+        const quint64 revision=i==m_activeTab?m_contentRevision:tab.contentRevision;
+        const quint64 backed=i==m_activeTab?m_backedUpRevision:tab.backedUpRevision;
+        if(tab.loaded&&!tab.readOnly&&revision>backed)wait=std::min(wait,std::max(100LL,tab.nextBackupMs-now));
+    }
+    const int delay = delayMs >= 0 ? delayMs : int(wait);
     m_backupTimer->start(delay);
 }
 
 void MainWindow::createBackup(bool manual)
 {
     if (!m_preferencesValid || !m_preferencesWritable || m_preferences.backupRetainCount == 0 ||
-        m_readOnly || m_pageCount < 1) {
+        (manual && (m_readOnly || m_pageCount < 1))) {
         if (manual && m_settingsDialog)
             m_settingsDialog->setStatus(QStringLiteral("当前 PDF 无法备份，或保留数量为 0。已有备份未清理。"));
         scheduleBackup();
@@ -424,26 +459,30 @@ void MainWindow::createBackup(bool manual)
     }
     if (m_backupBusy || m_preferencesBusy || m_fileBusy || m_rendering ||
         m_view->hasActiveGesture() || m_sidebarTimer->isActive() ||
-        (!manual && (m_settingsDialog || QApplication::activeModalWidget()))) {
+        m_closingAll || (!manual && (m_settingsDialog || QApplication::activeModalWidget()))) {
         if (!manual)
             scheduleBackup(5000);
         return;
     }
-    if (!manual && m_contentRevision <= m_backedUpRevision) {
-        scheduleBackup();
-        return;
-    }
-    const auto snapshot = m_pageAnnotations;
-    const quint64 generation = m_documentGeneration;
-    const quint64 revision = m_contentRevision;
-    const auto session = m_session;
+    stashActiveTab();
+    std::shared_ptr<TabState> tab;
+    const qint64 now=QDateTime::currentMSecsSinceEpoch();
+    if(manual&&m_activeTab>=0)tab=m_tabs[m_activeTab];
+    else for(const auto& candidate:std::as_const(m_tabs))
+        if(candidate->loaded&&!candidate->readOnly&&candidate->contentRevision>candidate->backedUpRevision&&candidate->nextBackupMs<=now&&
+           (!tab||candidate->nextBackupMs<tab->nextBackupMs))tab=candidate;
+    if(!tab||!tab->session){scheduleBackup();return;}
+    const auto snapshot = tab->annotations;
+    const quint64 revision = tab->contentRevision;
+    const auto session = tab->session;
+    tab->nextBackupMs=now+m_preferences.backupIntervalMinutes*60000LL;
     const QPointer<MainWindow> window(this);
     m_backupBusy = true;
     m_backupTimer->stop();
     if (m_settingsDialog)
         m_settingsDialog->setBusy(true, QStringLiteral("正在创建并校验本地备份…"));
     updateUi();
-    QMetaObject::invokeMethod(m_workerContext, [session, window, snapshot, generation, revision, manual] {
+    QMetaObject::invokeMethod(m_workerContext, [session, window, snapshot, tab, revision, manual] {
         BackupResult result;
         try {
             if (!session->document || !session->preferences)
@@ -466,16 +505,18 @@ void MainWindow::createBackup(bool manual)
         } catch (...) { result.error = exceptionText(); }
         if (!window)
             return;
-        QMetaObject::invokeMethod(window.data(), [window, result, generation, revision, manual] {
+        QMetaObject::invokeMethod(window.data(), [window, result, tab, revision, manual] {
             if (!window)
                 return;
             // A save never resets contentRevision. Only the captured state is
             // acknowledged, so ink added while the worker writes is still due.
-            if (result.ok && generation == window->m_documentGeneration)
-                window->m_backedUpRevision = std::max(window->m_backedUpRevision, revision);
+            if(result.ok)tab->backedUpRevision=std::max(tab->backedUpRevision,revision);
+            const bool active=window->m_activeTab>=0&&window->m_tabs[window->m_activeTab]==tab;
+            if(result.ok&&active)window->m_backedUpRevision=std::max(window->m_backedUpRevision,revision);
             const QString text = backupResultText(result, !result.skipped && result.affectedSnapshots > 0
                 ? QStringLiteral("本地备份已创建并校验。") : QStringLiteral("已有相同内容的备份，无需新增。"));
-            window->m_backupWarning = (!result.ok || !result.warnings.isEmpty()) ? text : QString();
+            tab->backupWarning=(!result.ok||!result.warnings.isEmpty())?text:QString();
+            if(active)window->m_backupWarning=tab->backupWarning;
             window->finishBackupOperation();
             window->statusBar()->showMessage(text, 12000);
             if (manual && window->m_settingsDialog) {
@@ -496,6 +537,11 @@ void MainWindow::finishBackupOperation()
     }
     updateUi();
     scheduleBackup();
+    QTimer::singleShot(0,this,[this]{
+        if(m_liveFavorite->queuedBar&&m_preferencesWritable&&!m_preferencesBusy&&!m_backupBusy&&!m_fileBusy&&!m_closingAll&&!m_settingsDialog){
+            auto values=m_preferences;values.favoritesBar=*m_liveFavorite->queuedBar;m_liveFavorite->queuedBar.reset();persistPreferences(values);
+        }
+    });
 }
 
 void MainWindow::refreshBackupCatalog()
@@ -620,11 +666,11 @@ void MainWindow::updateUi()
     if (m_updatingUi) return;
     m_updatingUi = true;
     const bool document = m_pageCount > 0;
-    const bool ready = document && !m_fileBusy;
+    const bool ready = document && !m_fileBusy && !m_closingAll;
     const bool editable = ready && !m_readOnly;
     const bool textEditing = m_view->isTextEditing();
-    const bool filesReady = !m_fileBusy && !m_backupBusy && !m_preferencesBusy && !m_thumbnailBrowser;
-    const bool preferencesReady = !m_preferencesBusy && !m_backupBusy && !m_fileBusy && m_preferencesWritable;
+    const bool filesReady = !m_fileBusy && !m_backupBusy && !m_preferencesBusy && !m_workspaceLoading && !m_thumbnailBrowser && !m_closingAll;
+    const bool preferencesReady = !m_preferencesBusy && !m_backupBusy && !m_fileBusy && m_preferencesWritable && !m_closingAll;
     m_openAction->setEnabled(filesReady);
     m_saveAction->setEnabled(editable && filesReady && (m_dirty || textEditing));
     m_saveAsAction->setEnabled(editable && filesReady);
@@ -649,7 +695,7 @@ void MainWindow::updateUi()
     m_nextAction->setEnabled(ready && m_currentPage + 1 < m_pageCount);
     m_pageNumber->setEnabled(ready); m_pages->setEnabled(ready);
     for (auto* action : {m_zoomInAction,m_zoomOutAction,m_fitAction,m_fitPageAction,m_fitHeightAction}) action->setEnabled(ready);
-    m_view->setEnabled(!m_fileBusy);
+    m_view->setEnabled(!m_fileBusy&&!m_closingAll);
     m_view->setEditingEnabled(editable);
     m_pageNumber->setMaximum(std::max(1,m_pageCount));
     if (document) {
@@ -667,14 +713,22 @@ void MainWindow::updateUi()
     m_fileLabel->setText((m_dirty?QStringLiteral("● "):QString())+name+(m_readOnly?QStringLiteral(" · 只读"):QString()));
     m_fileLabel->setToolTip(m_path);
     setWindowTitle(QStringLiteral("ProperNotes for Windows — 原生预览")+(document?QStringLiteral(" · ")+name:QString())+(m_dirty?QStringLiteral(" *"):QString()));
-    m_documentBanner->setVisible(document&&m_readOnly);
-    m_documentBanner->setText(QStringLiteral("只读：")+m_readOnlyReason+QStringLiteral(" 本版本不会覆盖此文件。"));
+    const bool placeholder=m_activeTab>=0&&!m_tabs[m_activeTab]->loaded&&!m_fileBusy;
+    m_documentBanner->setVisible((document&&m_readOnly)||placeholder);
+    m_documentBanner->setText(placeholder?QStringLiteral("尚未加载：%1\n%2\n点击标签或“文件 → 重试加载当前标签”可重试；关闭标签不会删除文件。").arg(m_path,m_tabs[m_activeTab]->loadError):
+        QStringLiteral("只读：")+m_readOnlyReason+QStringLiteral(" 本版本不会覆盖此文件。"));
     QStringList warnings;
     if(!m_preferencesWarning.isEmpty())warnings.append(m_preferencesWarning+QStringLiteral(" 自动备份已暂停，请在设置中重新读取有效配置。"));
     if(!m_backupWarning.isEmpty())warnings.append(m_backupWarning);
+    if(!m_workspaceWarning.isEmpty())warnings.append(m_workspaceWarning+QStringLiteral(" 阅读/会话记录未保存；PDF 保存状态不受影响。"));
     m_preferencesBanner->setText(warnings.join(QLatin1Char('\n')));m_preferencesBanner->setVisible(!warnings.isEmpty());
     m_updatingUi=false;
     updateToolUi();
+    refreshTabs();
+    if(m_favoritesBar){
+        m_favoritesBar->setWritable(preferencesReady&&!m_closingAll&&!m_settingsDialog);
+        m_favoritesBar->setActivationEnabled(filesReady&&!m_settingsDialog);
+    }
 }
 void MainWindow::showError(const QString& message)
 {
@@ -689,23 +743,29 @@ void MainWindow::chooseOpenFile()
     if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy)
         return;
     m_view->finishGesture();
-    const QString path = QFileDialog::getOpenFileName(this, QStringLiteral("打开 PDF"), {}, QStringLiteral("PDF 文件 (*.pdf)"));
-    if (!path.isEmpty())
-        openFile(path);
+    const QString path=QFileDialog::getOpenFileName(this,QStringLiteral("打开 PDF"),{},QStringLiteral("PDF 文件 (*.pdf)"));
+    if(!path.isEmpty())openFile(path);
 }
 
 void MainWindow::openFile(const QString& path)
 {
     if (path.isEmpty())
         return;
-    if (!m_preferencesLoaded) {
+    if (!m_preferencesLoaded || !m_workspaceLoaded) {
         m_pendingOpen = path;
         return;
     }
-    if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy)
+    if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy || m_workspaceLoading || m_closingAll || m_thumbnailBrowser || m_settingsDialog)
         return;
     m_view->finishGesture();
-    resolveUnsaved([this, path] { beginOpen(path); });
+    const QString normalized=WorkspaceStore::normalizedPath(path);
+    const QString canonical=QFileInfo(path).canonicalFilePath();
+    const QString key=WorkspaceStore::pathKey(canonical.isEmpty()?normalized:canonical);
+    for(int i=0;i<m_tabs.size();++i)if(WorkspaceStore::pathKey(m_tabs[i]->path)==key||WorkspaceStore::pathKey(m_tabs[i]->path)==WorkspaceStore::pathKey(normalized)){
+        activateTab(i);if(m_activeTab==i&&m_tabs[i]->loaded)rememberOpenedFile();return;
+    }
+    if(m_tabs.size()>=WorkspaceStore::MaximumSessionPaths){showError(QStringLiteral("当前最多同时保留 32 个标签，请先关闭不需要的标签。"));return;}
+    m_openingTab=-1;beginOpen(path);
 }
 
 void MainWindow::resolveUnsaved(const std::function<void()>& continuation)
@@ -719,7 +779,7 @@ void MainWindow::resolveUnsaved(const std::function<void()>& continuation)
     const bool renderPending = m_renderTimer->isActive();
     m_renderTimer->stop();
     QMessageBox box(QMessageBox::Question, QStringLiteral("保存修改"),
-                    QStringLiteral("当前 PDF 有未保存的笔迹。是否先保存？"),
+                    QStringLiteral("当前 PDF 有未保存的批注。是否先保存？"),
                     QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel, this);
     box.setDefaultButton(QMessageBox::Save);
     const auto result = box.exec();
@@ -746,8 +806,11 @@ void MainWindow::beginOpen(const QString& path)
     m_view->setRenderingSuspended(true);
     m_fileBusy=true;updateUi();
     statusBar()->showMessage(QStringLiteral("正在打开 PDF…"));
-    const auto session=m_session;const QPointer<MainWindow> window(this);
-    QMetaObject::invokeMethod(m_workerContext,[session,window,path]{
+    const auto opening=m_openingTab>=0&&m_openingTab<m_tabs.size()?m_tabs[m_openingTab]:std::shared_ptr<TabState>();
+    m_openingTab=-1;
+    const auto session=std::make_shared<DocumentSession>();session->preferences=m_services->preferences;m_allSessions->append(session);
+    const QPointer<MainWindow> window(this);
+    QMetaObject::invokeMethod(m_workerContext,[session,window,path,opening]{
         OpenResult result;
         try {
             auto candidate=std::make_unique<PdfDocument>();
@@ -772,15 +835,36 @@ void MainWindow::beginOpen(const QString& path)
                     else {
                         result.path=candidate->currentPath();result.pageCount=candidate->pageCount();
                         result.readOnly=candidate->isReadOnly();result.readOnlyReason=candidate->readOnlyReason();
+                        const QFileInfo info(result.path);result.fileSize=info.size();result.modifiedUtc=info.lastModified().toUTC();
                         result.ok=true;session->document=std::move(candidate);
                     }
                 }
             }
         }catch(...){result.error=exceptionText();}
         if(!window)return;
-        QMetaObject::invokeMethod(window.data(),[window,result=std::move(result)]{
+        QMetaObject::invokeMethod(window.data(),[window,session,opening,result=std::move(result)]{
             if(!window)return;
-            if(!result.ok){window->finishFileOperation();window->showError(result.error.isEmpty()?QStringLiteral("打开失败，原文档仍保留。"):result.error);return;}
+            if(!result.ok){
+                if(opening)opening->loadError=result.error;
+                window->finishFileOperation();window->showError(result.error.isEmpty()?QStringLiteral("打开失败，原文档仍保留。"):result.error);return;
+            }
+            window->stashActiveTab();
+            auto tab=opening;
+            if(!tab){
+                tab=std::make_shared<TabState>();tab->id=++window->m_nextTabId;tab->path=result.path;
+                for(const auto& entry:window->m_workspace->values.readingStates)if(WorkspaceStore::pathKey(entry.path)==WorkspaceStore::pathKey(result.path)){
+                    // The store contains metadata only. Always reopen current disk bytes.
+                    tab->viewState.page=entry.view.page;tab->viewState.pdfAnchor=entry.view.pdfAnchor;
+                    tab->viewState.viewportAnchor=entry.view.viewportAnchor;tab->viewState.zoom=entry.view.zoom;tab->viewState.valid=entry.view.valid;
+                    tab->viewState.layout=entry.view.layout==QStringLiteral("single")?DocumentView::LayoutMode::SinglePage:entry.view.layout==QStringLiteral("facing")?DocumentView::LayoutMode::FacingPages:entry.view.layout==QStringLiteral("facing-continuous")?DocumentView::LayoutMode::FacingContinuous:DocumentView::LayoutMode::SingleContinuous;
+                    tab->viewState.zoomMode=entry.view.zoomMode==QStringLiteral("free")?DocumentView::ZoomMode::Free:entry.view.zoomMode==QStringLiteral("fit-page")?DocumentView::ZoomMode::FitPage:entry.view.zoomMode==QStringLiteral("fit-height")?DocumentView::ZoomMode::FitHeight:DocumentView::ZoomMode::FitWidth;
+                    tab->hadUnsavedChanges=entry.hadUnsavedChanges;break;
+                }
+                window->m_tabs.append(tab);
+            }
+            tab->loaded=true;tab->loadError.clear();tab->session=session;tab->path=result.path;
+            tab->nextBackupMs=QDateTime::currentMSecsSinceEpoch()+window->m_preferences.backupIntervalMinutes*60000LL;
+            window->m_activeTab=int(window->m_tabs.indexOf(tab));window->m_session=session;
             window->m_restoringView=true;
             window->m_path=result.path;window->m_readOnly=result.readOnly;window->m_readOnlyReason=result.readOnlyReason;
             window->m_pageCount=result.pageCount;window->m_currentPage=0;window->m_targetPage=0;
@@ -797,10 +881,21 @@ void MainWindow::beginOpen(const QString& path)
                 layout==QStringLiteral("facing")?DocumentView::LayoutMode::FacingPages:
                 layout==QStringLiteral("facing-continuous")?DocumentView::LayoutMode::FacingContinuous:DocumentView::LayoutMode::SingleContinuous);
             window->m_view->setDocument(result.geometry,result.annotations);
+            if(tab->viewState.valid){auto view=tab->viewState;view.page=std::clamp(view.page,0,result.pageCount-1);window->m_view->restoreViewState(view);}
+            else window->m_view->setZoomMode(DocumentView::ZoomMode::FitWidth);
+            window->m_currentPage=window->m_view->currentPage();window->m_targetPage=window->m_currentPage;
             window->m_restoringView=false;
             window->viewChanged(window->m_view->captureViewState(),QStringLiteral("document"));
+            ReadingEntry entry;entry.path=result.path;entry.fileSize=result.fileSize;entry.modifiedUtc=result.modifiedUtc;
+            for(const auto& old:window->m_workspace->values.readingStates)if(WorkspaceStore::pathKey(old.path)==WorkspaceStore::pathKey(result.path)){entry.view=old.view;entry.hadUnsavedChanges=old.hadUnsavedChanges;break;}
+            WorkspaceStore::rememberReading(window->m_workspace->values,entry);
+            window->stashActiveTab();window->rememberOpenedFile();
             window->finishFileOperation();window->scheduleBackup();window->m_sidebarPreviewTimer->start();
             window->statusBar()->showMessage(result.readOnly?QStringLiteral("PDF 以只读方式打开。"):QStringLiteral("PDF 已打开。"));
+            if(tab->hadUnsavedChanges){
+                window->statusBar()->showMessage(QStringLiteral("上次会话标记有未保存修改。本次打开的是磁盘 PDF；请到“本地备份”核对副本。"),20000);
+                tab->hadUnsavedChanges=false;
+            }
         },Qt::QueuedConnection);
     },Qt::QueuedConnection);
 }
@@ -813,6 +908,11 @@ void MainWindow::finishFileOperation()
     m_sidebarPreviewTimer->start();
     if (resumeRender && m_pageCount > 0 && !m_rendering && !m_allowClose)
         m_renderTimer->start();
+    QTimer::singleShot(0,this,[this]{
+        if(m_liveFavorite->queuedBar&&m_preferencesWritable&&!m_preferencesBusy&&!m_backupBusy&&!m_fileBusy&&!m_closingAll){
+            auto values=m_preferences;values.favoritesBar=*m_liveFavorite->queuedBar;m_liveFavorite->queuedBar.reset();persistPreferences(values);
+        }
+    });
 }
 
 void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
@@ -830,6 +930,10 @@ void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
         if (!target.endsWith(QStringLiteral(".pdf"), Qt::CaseInsensitive))
             target += QStringLiteral(".pdf");
         saveAs = true;
+    }
+    if(targetUsedByOtherTab(target)){
+        showError(QStringLiteral("另一个标签已登记此 PDF（包括尚未加载的恢复标签），不能覆盖它。请改用其他目标文件。"));
+        return;
     }
     m_afterSave = std::move(afterSuccess);
     m_fileBusy = true;
@@ -864,6 +968,7 @@ void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
             if (!window)
                 return;
             if (!error.isEmpty()) {
+                window->m_closingAll=false;
                 window->m_afterSave = {};
                 window->finishFileOperation();
                 window->showError(error);
@@ -875,6 +980,7 @@ void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
                 box.setText(QStringLiteral("目标文件已存在：\n%1\n\n是否用当前 PDF 覆盖？若确认后目标改变，将停止保存。").arg(target));
                 box.setDefaultButton(QMessageBox::No);
                 if (box.exec() != QMessageBox::Yes) {
+                    window->m_closingAll=false;
                     window->m_afterSave = {};
                     window->finishFileOperation();
                     return;
@@ -888,6 +994,10 @@ void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
 void MainWindow::performSave(const QString& path, const QByteArray& expectedTargetSha256,
                               const QMap<int, PageAnnotations>& snapshot)
 {
+    if(targetUsedByOtherTab(path)){
+        m_afterSave={};m_closingAll=false;finishFileOperation();
+        showError(QStringLiteral("保存目标属于另一个标签，未覆盖。"));return;
+    }
     statusBar()->showMessage(QStringLiteral("正在保存 PDF…"));
     const auto session = m_session;
     const QPointer<MainWindow> window(this);
@@ -895,6 +1005,8 @@ void MainWindow::performSave(const QString& path, const QByteArray& expectedTarg
         bool ok = false;
         QString error;
         QString savedPath;
+        qint64 savedSize=-1;
+        QDateTime savedModifiedUtc;
         try {
             if (!session->document)
                 error = QStringLiteral("文档已不可用，当前笔迹仍保留。");
@@ -911,30 +1023,38 @@ void MainWindow::performSave(const QString& path, const QByteArray& expectedTarg
                     ok = session->document->save(path, expectedTargetSha256);
                     error = ok ? QString() : session->document->lastError();
                     savedPath = session->document->currentPath();
+                    if(ok){const QFileInfo info(savedPath);savedSize=info.size();savedModifiedUtc=info.lastModified().toUTC();}
                 }
             }
         } catch (...) { error = exceptionText(); }
         if (!window)
             return;
-        QMetaObject::invokeMethod(window.data(), [window, ok, savedPath, error, snapshot] {
+        QMetaObject::invokeMethod(window.data(), [window, ok, savedPath, error, snapshot, savedSize, savedModifiedUtc] {
             if (!window)
                 return;
             auto continuation = std::move(window->m_afterSave);
             window->m_afterSave = {};
             if (ok) {
+                const QString oldPath=window->m_path;
                 if (window->m_path.compare(savedPath, Qt::CaseInsensitive) != 0)
                     window->m_backedUpRevision = 0;
                 window->m_path = savedPath;
                 window->m_savedAnnotations = snapshot;
                 window->m_dirty = window->m_pageAnnotations != snapshot;
                 window->m_resumeRenderAfterSaveFailure = false;
+                window->rememberOpenedFile(true,oldPath);
+                ReadingEntry entry;entry.path=savedPath;entry.fileSize=savedSize;entry.modifiedUtc=savedModifiedUtc;
+                for(const auto& previous:window->m_workspace->values.readingStates)if(WorkspaceStore::pathKey(previous.path)==WorkspaceStore::pathKey(savedPath)){entry.view=previous.view;break;}
+                WorkspaceStore::rememberReading(window->m_workspace->values,entry);
+                window->stashActiveTab();
             }
             window->finishFileOperation();
             if (!ok) {
+                window->m_closingAll=false;window->updateUi();
                 window->showError(error.isEmpty() ? QStringLiteral("保存未获确认，当前笔迹仍保留。请核对目标文件。") : error);
                 return;
             }
-            window->statusBar()->showMessage(QStringLiteral("PDF 已保存 · 重新打开可继续擦除和修改本原型笔迹"));
+            window->statusBar()->showMessage(QStringLiteral("PDF 已保存 · 重开可继续编辑本程序的笔迹和文字框"));
             if (continuation)
                 continuation();
         }, Qt::QueuedConnection);
@@ -947,10 +1067,16 @@ void MainWindow::closeEvent(QCloseEvent* event)
         event->accept();
         return;
     }
-    if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy || m_settingsDialog || m_thumbnailBrowser) {
+    if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy || m_workspaceLoading || m_settingsDialog || m_thumbnailBrowser) {
         event->ignore();
         statusBar()->showMessage(QStringLiteral("PDF 正在处理，请完成后再关闭。"));
         return;
+    }
+    m_favoritesBar->setWritable(false);
+    if(m_preferencesBusy){event->ignore();m_closeAfterPreferences=true;return;}
+    if(m_liveFavorite->queuedBar&&m_preferencesWritable){
+        event->ignore();auto values=m_preferences;values.favoritesBar=*m_liveFavorite->queuedBar;m_liveFavorite->queuedBar.reset();
+        m_closeAfterPreferences=true;persistPreferences(values);return;
     }
     if (m_sidebarTimer->isActive() && m_preferencesWritable) {
         event->ignore();
@@ -960,16 +1086,8 @@ void MainWindow::closeEvent(QCloseEvent* event)
         persistPreferences(values);
         return;
     }
-    m_view->finishGesture();
-    if (!m_dirty) {
-        event->accept();
-        return;
-    }
     event->ignore();
-    resolveUnsaved([this] {
-        m_allowClose = true;
-        close();
-    });
+    closeAllTabs();
 }
 
 } // namespace propernotes

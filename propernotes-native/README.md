@@ -8,6 +8,29 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The source for `0.3.1-native-preview.1` integrates up to 32 horizontal document tabs,
+with independent unsaved content, editing/view histories and reading positions. Closing
+a tab or exiting checks unsaved documents individually; a cancelled or unsuccessful
+save keeps the tab. Save As must not overwrite another tab's file, including an unloaded
+session placeholder. Loaded background tabs retain independent backup revisions and schedules.
+
+Workspace metadata supports 100 recent files, 256 reading records, a 4MiB metadata
+limit and approximately 650ms coalesced writes. Startup tab restoration defaults on and
+can be disabled. It restores tab order, the active tab and reading state through lazy
+placeholders; missing or inaccessible files remain retryable. Loading reads the current
+disk PDF. Session metadata contains no PDF content, unsaved ink or undo stack; a previous
+unsaved-state marker prompts checking backups. Removing recent entries does not delete
+PDFs, backups or the reading/session registry.
+
+One compact favorites bar supports the five existing tools: Pen, Eraser,
+Pan, Select/Move and Text Box. Tool/style snapshots support create, edit, duplicate,
+delete, drag reorder, collapse, left/right docking and floating, with small icons and
+a project limit of 128 presets.
+Preset editing is separate from tool defaults and selected-object editing; activating a
+preset configures subsequent operations. Multiple bars and presets for tools not yet
+migrated remain later work. Compilation status is recorded in each artifact's provenance;
+application startup, tests and runtime acceptance have not been performed.
+
 The 0.3.0 source adds four reading layouts (single/facing, paged/continuous), fit
 width/page/height, independent view back/forward, full-screen resizable page previews,
 document-wide session undo/redo, whole/partial erasure, selection/movement and editable
@@ -46,6 +69,21 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+`0.3.1-native-preview.1` 源碼已接入最多 32 個橫向文件標籤, 各自保留未儲存內容、
+編輯/視角歷史及閱讀位置. 關閉標籤或退出時逐一確認未儲存文件, 取消或儲存失敗
+保留標籤; 另存不得覆蓋其他標籤的文件, 包含尚未載入的會話佔位標籤.
+已載入的背景標籤分別保留備份修訂及排程.
+
+工作區上限為 100 筆最近文件、256 筆閱讀記錄及 4MiB 中繼資料, 約 650ms 合併寫入.
+啟動恢復預設開啟且可關閉, 透過按需載入的佔位標籤恢復順序、活動標籤及閱讀狀態;
+缺失或無權存取的文件保留重試. 載入讀取目前磁碟 PDF, 會話不含 PDF 正文、未儲存
+墨跡或撤銷棧; 上次未儲存標記提示核對備份. 清理最近列表不刪 PDF、備份或閱讀/會話登記.
+
+單一小圖示收藏欄已接入筆、橡皮、平移、框選/移動及文字框五種現有工具的樣式快照,
+支援新增、編輯、複製、刪除、拖排、折疊、左右停靠及浮動, 專案上限 128 預設. 編輯收藏、工具預設及
+已選物件分開, 點擊收藏才設定後續操作. 多收藏欄及尚未遷入工具的預設仍列後續.
+編譯狀態以各構件的 provenance 為準; 應用尚未啟動、測試或實際驗收.
+
 0.3.0 原生源碼增加單/雙頁及連續/分頁閱讀、適寬/適頁/適高、獨立視角歷史、
 真正全螢幕且可調尺寸的縮圖、整文件會話撤銷/重做、整筆/局部擦除、框選移動及
 純文字框. 筆有壓感開關/靈敏度、顏色/粗細/透明度, 工具持續/單次設定可記憶.
@@ -67,6 +105,21 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+`0.3.1-native-preview.1` 源码已接入最多 32 个横向文档标签, 各自保留未保存内容、
+编辑/视角历史及阅读位置. 关闭标签或退出时逐一确认未保存文档, 取消或保存失败
+保留标签; 另存不得覆盖其他标签的文件, 包含尚未加载的会话占位标签.
+已加载的后台标签分别保留备份修订及调度.
+
+工作区上限为 100 条最近文件、256 条阅读记录及 4MiB 元数据, 约 650ms 合并写入.
+启动恢复默认开启且可关闭, 通过按需加载的占位标签恢复顺序、活动标签及阅读状态;
+缺失或无权访问的文件保留重试. 加载读取当前磁盘 PDF, 会话不含 PDF 正文、未保存
+墨迹或撤销栈; 上次未保存标记提示核对备份. 清理最近列表不删 PDF、备份或阅读/会话登记.
+
+单个小图标收藏栏已接入笔、橡皮、平移、框选/移动及文字框五种现有工具的样式快照,
+支持新建、编辑、复制、删除、拖排、折叠、左右停靠及浮动, 项目上限 128 预设. 编辑收藏、工具默认及
+已选对象分开, 点击收藏才设置后续操作. 多收藏栏及尚未迁入工具的预设仍列后续.
+编译状态以各构件的 provenance 为准; 应用尚未启动、测试或实际验收.
 
 0.3.0 原生源码增加单/双页及连续/分页阅读、适宽/适页/适高、独立视角历史、
 真正全屏且可调尺寸的缩略图、整文档会话撤销/重做、整笔/局部擦除、框选移动及

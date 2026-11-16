@@ -6,17 +6,20 @@ Developed through human and AI collaboration. Some AI-assisted code and text may
 
 本项目由人类与 AI 协作开发. 部分 AI 协助产生的代码与文字可能尚未经过完整人工审查.
 
-## Native prototype (0.2.x)
+## Native preview (0.3.x)
 
-English (en): The new focused prototype uses Qt 6 and PDF4QT, with tablet pressure through Qt. It implements opening an existing PDF, handwriting, whole-stroke erasure and current-page undo, saving a single PDF, and reopening its own editable strokes. This is a separate program from the previous preview. It does not yet port the full earlier feature set. Compilation and packaging status are recorded with each artifact; application launch, functional tests and device acceptance are not performed by the workflow. See [native scope and portable use](propernotes-native/README.md), [limits](propernotes-native/KNOWN-LIMITATIONS.md) and [cloud build inputs](propernotes-native/cloud/README.md).
+English (en): The new focused prototype uses Qt 6 and PDF4QT, with tablet pressure through Qt. It implements opening an existing PDF, handwriting, whole/partial erasure, editable text boxes and document-session undo/redo, saving a single PDF, and reopening its own editable annotations. This is a separate program from the previous preview. It does not yet port the full earlier feature set. Compilation and packaging status are recorded with each artifact; application launch, functional tests and device acceptance are not performed by the workflow. See [native scope and portable use](propernotes-native/README.md), [limits](propernotes-native/KNOWN-LIMITATIONS.md) and [cloud build inputs](propernotes-native/cloud/README.md).
 
-Traditional Chinese (zh-TC): 新原生原型採 Qt 6 + PDF4QT, 透過 Qt 接收筆壓, 聚焦開啟 PDF、手寫、整筆擦除/目前頁撤銷、儲存單一 PDF, 以及重開繼續編輯本原型筆跡. 此為獨立程式, 尚未移植前版全部功能. 每份產物附編譯及組包紀錄, 流程不啟動應用或執行功能/裝置驗收. 詳見上述原生版說明及限制.
+Traditional Chinese (zh-TC): 新原生原型採 Qt 6 + PDF4QT, 透過 Qt 接收筆壓, 聚焦開啟 PDF、手寫、整筆/局部擦除、文字框及整文件會話撤銷/重做、儲存單一 PDF, 以及重開繼續編輯原生批注. 此為獨立程式, 尚未移植前版全部功能. 每份產物附編譯及組包紀錄, 流程不啟動應用或執行功能/裝置驗收. 詳見上述原生版說明及限制.
 
-Simplified Chinese (zh-SC): 新原生原型采用 Qt 6 + PDF4QT, 通过 Qt 接收笔压, 聚焦打开 PDF、手写、整笔擦除/当前页撤销、保存单一 PDF, 以及重开继续编辑本原型笔迹. 这是独立程序, 尚未移植前版全部功能. 每份产物附编译及组包记录, 流程不启动应用或执行功能/设备验收. 详见上述原生版说明及限制.
+Simplified Chinese (zh-SC): 新原生原型采用 Qt 6 + PDF4QT, 通过 Qt 接收笔压, 聚焦打开 PDF、手写、整笔/局部擦除、文字框及整文档会话撤销/重做、保存单一 PDF, 以及重开继续编辑原生批注. 这是独立程序, 尚未移植前版全部功能. 每份产物附编译及组包记录, 流程不启动应用或执行功能/设备验收. 详见上述原生版说明及限制.
 
 The 0.2.1 native source additionally provides theme/sidebar/pen preferences and local recovery-backup management. Defaults are 5 minutes, 10 copies per PDF, and Backups beside the program; count 0 preserves old copies and stops creation. See the native README for scope, unperformed acceptance and the [large-document design](propernotes-native/LARGE-DOCUMENTS.md). 原生版亦增加設定/偏好及本地備份, 詳見原生版說明. 原生版亦增加设置/偏好及本地备份, 详见原生版说明.
 
 The 0.3.0 native source adds single/facing continuous and paged reading, fit width/page/height, view history, full-screen resizable page previews, document-session undo/redo, whole/partial erasure, selection/movement, pressure/opacity controls and editable plain-text boxes. Mouse/touch routing and persistent/single-use behavior follow the project's confirmed interaction policy. Native format v2 adds text boxes while retaining editable native v1 ink. This is still part of the confirmed first batch, not completion of every earlier feature. The current 512MiB guard and deferred SumatraPDF-inspired large-file work remain documented in the native design record. 原生 0.3.0 增加上述閱讀與基礎批注能力, 仍待裝置及功能驗收. 原生 0.3.0 增加上述阅读与基础批注能力, 仍待设备及功能验收.
+
+
+The 0.3.1 native source adds horizontal document tabs with independent edit/view histories, recent files, reading-state and lazy session recovery, and a single dockable/floating favorites bar with tool/style presets. Session metadata reopens current disk files; it does not contain unsaved annotations or undo stacks. Favorites activate styles for future annotations without changing existing objects or stored tool defaults. The workflow compiles and packages without launching or testing the application. 原生 0.3.1 增加多文件標籤、最近檔案、閱讀位置/延遲會話恢復與可停靠/浮動的單收藏欄, 仍待實際驗收. 原生 0.3.1 增加多文档标签、最近文件、阅读位置/按需会话恢复与可停靠/浮动的单收藏栏, 仍待实际验收.
 
 ## Retained previous preview (0.1.x)
 
