@@ -6,6 +6,18 @@ Developed through human and AI collaboration. Some AI-assisted code and text may
 
 本项目由人类与 AI 协作开发. 部分 AI 协助产生的代码与文字可能尚未经过完整人工审查.
 
+## Native prototype (0.2.x)
+
+English (en): The new focused prototype uses Qt 6 and PDF4QT, with tablet pressure through Qt. It implements opening an existing PDF, handwriting, whole-stroke erasure and current-page undo, saving a single PDF, and reopening its own editable strokes. This is a separate program from the previous preview. It does not yet port the full earlier feature set. Compilation and packaging status are recorded with each artifact; application launch, functional tests and device acceptance are not performed by the workflow. See [native scope and portable use](propernotes-native/README.md), [limits](propernotes-native/KNOWN-LIMITATIONS.md) and [cloud build inputs](propernotes-native/cloud/README.md).
+
+Traditional Chinese (zh-TC): 新原生原型採 Qt 6 + PDF4QT, 透過 Qt 接收筆壓, 聚焦開啟 PDF、手寫、整筆擦除/目前頁撤銷、儲存單一 PDF, 以及重開繼續編輯本原型筆跡. 此為獨立程式, 尚未移植前版全部功能. 每份產物附編譯及組包紀錄, 流程不啟動應用或執行功能/裝置驗收. 詳見上述原生版說明及限制.
+
+Simplified Chinese (zh-SC): 新原生原型采用 Qt 6 + PDF4QT, 通过 Qt 接收笔压, 聚焦打开 PDF、手写、整笔擦除/当前页撤销、保存单一 PDF, 以及重开继续编辑本原型笔迹. 这是独立程序, 尚未移植前版全部功能. 每份产物附编译及组包记录, 流程不启动应用或执行功能/设备验收. 详见上述原生版说明及限制.
+
+## Retained previous preview (0.1.x)
+
+The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.
+
 ## English (en)
 
 ProperNotes is a local Windows PDF reader and annotation project. Its source implements handwriting, shapes, text boxes, sticky notes, text review annotations, object editing, bookmarks, continuous/facing-page layouts, document tabs, recent files, reading-state recovery, preferences and local backups.
