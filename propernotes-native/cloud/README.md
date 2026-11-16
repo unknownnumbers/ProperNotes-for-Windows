@@ -48,6 +48,18 @@ The entry point expects the root CMake project to accept `PDF4QT_SOURCE_DIR`, ad
 upstream core subdirectory, and define `ProperNotesNative`. It passes the vcpkg toolchain,
 installed directory, exact triplet, and Qt prefix explicitly. `VCPKG_MANIFEST_INSTALL=OFF`
 prevents CMake from installing a second dependency graph during configuration.
+`VCPKG_TOOLCHAIN` is set internally by the toolchain after initialization; the build
+does not predefine it, because that variable is also its early-return guard.
+
+The workflow caches dependency binary archives and their extracted/patched source
+together. The cache key includes the dependency lock, manifest, source-cache implementation,
+and Windows image family. vcpkg additionally checks its compiler/toolchain ABI when
+choosing binary archives. A restored source cache must pass its file SHA-256 inventory
+before binary-cache reads are enabled; otherwise dependencies are built from source.
+After successful dependency installation, source is copied back into the shared cache
+before application compilation. An `always()` save step can preserve those completed
+dependencies even when a later application compile fails. Unchanged caches are not saved
+again. Cache restore/save actions are pinned; cache hits do not omit the source ZIP inputs.
 
 ## Portable output and source
 
@@ -56,9 +68,24 @@ It runs Qt's deployment tool, then copies the image's app-local release CRT DLLs
 It does not run a runtime installer. Windows 10/11 x64 system libraries remain OS
 prerequisites; no external browser runtime is required.
 
+Deployment uses the Qt 6.11.3 tool's documented/source-defined `--no-patchqt`,
+`--no-opengl-sw`, and `--no-system-d3d-compiler` switches. `qt.conf` supplies relative
+paths. This keeps official Qt DLL input bytes intact and avoids optional software
+OpenGL/D3D compiler copies for this QWidget/QPainter application. Static PE-import
+inspection still checks direct imports against deployed DLLs or the operating system.
+
 The portable root contains `ProperNotes.cmd`, the EXE and DLLs, Qt plugins, licenses,
 build provenance, a static PE-import inventory, and SHA-256 file hashes. The CMD is
 provided for the recipient to launch manually. Packaging does not execute it.
+
+Both archives include `file-license-index.json`. It inventories every outer file and,
+for source input ZIPs, each nested ZIP entry with SHA-256, component, and license/source
+evidence. Runtime DLLs are matched against actual build, Qt, installed-vcpkg, and CRT
+input hashes; vcpkg ownership comes from the actual installed file lists. Qt is not
+classified as MIT, and its separately licensed bundled components remain relevant.
+`NOASSERTION` explicitly marks a license conclusion not established by the recorded
+evidence. It is not a permission grant or a claim that notices are unnecessary.
+The index and hash manifest omit their own cyclic hashes; external ZIP hashes cover them.
 
 The companion source ZIP contains:
 

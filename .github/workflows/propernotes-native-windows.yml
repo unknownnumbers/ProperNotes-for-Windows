@@ -35,6 +35,15 @@ jobs:
             propernotes-native
           sparse-checkout-cone-mode: true
 
+      - name: Restore dependency binaries together with their patched source
+        id: dependency_cache
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: '${{ runner.temp }}/propernotes-native-dependency-cache'
+          key: native-deps-v1-windows2022-${{ hashFiles('propernotes-native/cloud/dependencies.lock.json', 'propernotes-native/cloud/vcpkg/vcpkg.json', 'propernotes-native/cloud/Dependency-SourceCache.ps1') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            native-deps-v1-windows2022-${{ hashFiles('propernotes-native/cloud/dependencies.lock.json', 'propernotes-native/cloud/vcpkg/vcpkg.json', 'propernotes-native/cloud/Dependency-SourceCache.ps1') }}-
+
       - name: Select pinned Python for the Qt download tool
         uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
         with:
@@ -60,12 +69,20 @@ jobs:
           set-env: true
 
       - name: Compile and assemble portable files without running the application
+        id: native_build
         env:
-          VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/propernotes-native-cache,readwrite'
+          PROPERNOTES_DEPENDENCY_CACHE: '${{ runner.temp }}/propernotes-native-dependency-cache'
         run: >-
           ./propernotes-native/cloud/Build-Native.ps1
           -WorkDirectory '${{ runner.temp }}/propernotes-native-work'
           -ArtifactDirectory '${{ github.workspace }}/native-artifacts'
+
+      - name: Save completed dependencies even when application compilation fails
+        if: always() && steps.native_build.outputs.dependencies-ready == 'true' && steps.native_build.outputs.cache-changed == 'true'
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: '${{ runner.temp }}/propernotes-native-dependency-cache'
+          key: ${{ steps.dependency_cache.outputs.cache-primary-key }}
 
       - name: Upload compiled preview and matching source evidence
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

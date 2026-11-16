@@ -75,7 +75,8 @@ foreach ($dll in Get-ChildItem -LiteralPath (Join-Path $tripletDirectory 'bin') 
     Copy-File $dll.FullName (Join-Path $portable $dll.Name)
 }
 Invoke-PackTool -File (Join-Path $QtRoot 'bin/windeployqt.exe') -Arguments @(
-    '--release', '--no-compiler-runtime', '--no-translations', '--dir', $portable,
+    '--release', '--no-compiler-runtime', '--no-translations', '--no-patchqt',
+    '--no-opengl-sw', '--no-system-d3d-compiler', '--dir', $portable,
     (Join-Path $portable $exeName), (Join-Path $portable 'Pdf4QtLibCore.dll')
 )
 # Use app-local release CRT DLLs. Never run vc_redist or copy debug_nonredist files.
@@ -220,6 +221,7 @@ $provenance = [ordered]@{
     configuration = 'Release'
     dependencyLock = $lock
     msvcRuntimeVersion = $redistVersion
+    validatedDependencySourceCacheRestored = ($env:PROPERNOTES_SOURCE_CACHE_RESTORED -eq 'true')
     compiled = $true
     applicationStarted = $false
     applicationTestsRun = $false
@@ -269,6 +271,14 @@ This archive does not include proprietary compiler/SDK binaries or build-only to
 Those tools are prerequisites; their versions/image identity are recorded where available.
 The application was compiled and packaged in the cloud, but not started or device-tested.
 '@
+. (Join-Path $PSScriptRoot 'File-LicenseIndex.ps1')
+$indexArguments = @{
+    ProjectDirectory = $ProjectDirectory; BuildDirectory = $BuildDirectory; QtRoot = $QtRoot
+    PdfSourceDirectory = $PdfSourceDirectory; VcpkgRoot = $VcpkgRoot; InstalledDirectory = $InstalledDirectory
+    CrtDirectory = $crt[0].FullName; Lock = $lock
+}
+Write-FileLicenseIndex -Directory $portable -Kind portable @indexArguments
+Write-FileLicenseIndex -Directory $sourceBundle -Kind sources @indexArguments
 Write-Hashes $portable
 Write-Hashes $sourceBundle
 [IO.Compression.ZipFile]::CreateFromDirectory($portable, (Join-Path $ArtifactDirectory "$PackageName.zip"), [IO.Compression.CompressionLevel]::Optimal, $true)

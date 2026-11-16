@@ -13,7 +13,9 @@
 #include <pdffont.h>
 #include <pdfmeshqualitysettings.h>
 #include <pdfobject.h>
+#include <pdfobjectutils.h>
 #include <pdfoptionalcontent.h>
+#include <pdfoptimizer.h>
 #include <pdfpage.h>
 #include <pdfrenderer.h>
 #include <pdftextlayout.h>
@@ -263,6 +265,7 @@ struct LoadedState {
     pdf::PDFDocument base;
     QVector<QVector<InkStroke>> pages;
     QHash<QUuid, OwnedAnnotation> owned;
+    std::optional<Reference> privateData;
     QString readOnlyReason;
 };
 
@@ -433,6 +436,8 @@ LoadedState loadState(const QByteArray& bytes)
         }
         if (found.size() != expectedIds.size())
             fail(QStringLiteral("部分原生 Ink 缺失, 不用旧元数据覆盖外部修改."));
+        if (native.getDictionary()->get("Data").isReference())
+            state.privateData = native.getDictionary()->get("Data").getReference();
 
         pdf::PDFDocumentBuilder clean(&state.base);
         std::set<Reference> ownedReferences;
@@ -464,6 +469,7 @@ LoadedState loadState(const QByteArray& bytes)
         state.readOnlyReason = QString::fromUtf8(exception.what());
         state.pages = QVector<QVector<InkStroke>>(count);
         state.owned.clear();
+        state.privateData.reset();
     }
     return state;
 }
@@ -600,6 +606,54 @@ pdf::PDFDocument withInk(const LoadedState& state)
     return builder.build();
 }
 
+pdf::PDFDocument compactSupersededOwnedObjects(const LoadedState& previous,
+                                               const pdf::PDFDocument& output)
+{
+    // These references were established by validating the native metadata and
+    // matching Ink/AP records on open. Never infer ownership merely because an
+    // arbitrary original PDF object is unreachable.
+    std::set<Reference> candidates;
+    if (previous.privateData)
+        candidates.insert(*previous.privateData);
+    for (const auto& owned : previous.owned) {
+        candidates.insert(owned.annotation);
+        if (owned.appearance)
+            candidates.insert(*owned.appearance);
+    }
+    if (candidates.empty())
+        return output;
+
+    const auto& storage = output.getStorage();
+    const auto reachable = pdf::PDFObjectUtils::getReferences(
+        { storage.getTrailerDictionary() }, storage);
+    pdf::PDFDocumentBuilder cleaned(&output);
+    bool removed = false;
+    for (const auto& reference : candidates) {
+        // A foreign annotation, reply, attachment or resource may still refer
+        // to an older owned object. Preserve it whenever the final graph does.
+        if (!reachable.count(reference)
+            && !storage.getObjectByReference(reference).isNull()) {
+            cleaned.setObject(reference, Object::createNull());
+            removed = true;
+        }
+    }
+    if (!removed)
+        return output;
+
+    const auto originalVersion = output.getInfo()->version;
+    pdf::PDFDocument pruned = cleaned.build();
+    // Only compact free slots and remap actual PDF reference objects. The
+    // upstream visitor copies raw stream bytes unchanged. Global unused-object
+    // removal, resource merging, dereferencing and recompression stay disabled.
+    pdf::PDFOptimizer optimizer(pdf::PDFOptimizer::ShrinkObjectStorage, nullptr);
+    optimizer.setDocument(&pruned);
+    optimizer.optimize();
+    // takeOptimizedDocument() hard-codes PDF 2.0 in this upstream version.
+    // Rebuild from the optimized storage with the original version instead.
+    pdf::PDFDocumentBuilder compacted(optimizer.getStorage(), originalVersion);
+    return compacted.build();
+}
+
 QTransform renderTransform(const pdf::PDFPage* page, qreal scale)
 {
     const QRectF box = page->getCropBox();
@@ -704,7 +758,7 @@ bool PdfDocument::save(const QString& requestedPath, const QByteArray& expectedT
             d->error.clear();
             return true;
         }
-        pdf::PDFDocument output = withInk(*d->state);
+        pdf::PDFDocument output = compactSupersededOwnedObjects(*d->state, withInk(*d->state));
         QByteArray bytes;
         QBuffer buffer(&bytes);
         if (!buffer.open(QIODevice::WriteOnly))
