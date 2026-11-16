@@ -136,6 +136,8 @@ foreach ($module in $lock.qt.sourceArchives) {
             $licenseNames = @()
             if ($record.PSObject.Properties.Name -contains 'LicenseFile') { $licenseNames += @($record.LicenseFile) }
             if ($record.PSObject.Properties.Name -contains 'LicenseFiles') { $licenseNames += @($record.LicenseFiles) }
+            if ($record.PSObject.Properties.Name -contains 'CopyrightFile') { $licenseNames += @($record.CopyrightFile) }
+            if ($record.PSObject.Properties.Name -contains 'CopyrightFiles') { $licenseNames += @($record.CopyrightFiles) }
             foreach ($licenseName in $licenseNames | Select-Object -Unique) {
                 $licenseSource = [IO.Path]::GetFullPath((Join-Path $attribution.DirectoryName $licenseName))
                 $modulePrefix = [IO.Path]::GetFullPath($moduleRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
