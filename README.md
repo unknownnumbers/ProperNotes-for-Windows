@@ -16,6 +16,8 @@ Simplified Chinese (zh-SC): 新原生原型采用 Qt 6 + PDF4QT, 通过 Qt 接�
 
 The 0.2.1 native source additionally provides theme/sidebar/pen preferences and local recovery-backup management. Defaults are 5 minutes, 10 copies per PDF, and Backups beside the program; count 0 preserves old copies and stops creation. See the native README for scope, unperformed acceptance and the [large-document design](propernotes-native/LARGE-DOCUMENTS.md). 原生版亦增加設定/偏好及本地備份, 詳見原生版說明. 原生版亦增加设置/偏好及本地备份, 详见原生版说明.
 
+The 0.3.0 native source adds single/facing continuous and paged reading, fit width/page/height, view history, full-screen resizable page previews, document-session undo/redo, whole/partial erasure, selection/movement, pressure/opacity controls and editable plain-text boxes. Mouse/touch routing and persistent/single-use behavior follow the project's confirmed interaction policy. Native format v2 adds text boxes while retaining editable native v1 ink. This is still part of the confirmed first batch, not completion of every earlier feature. The current 512MiB guard and deferred SumatraPDF-inspired large-file work remain documented in the native design record. 原生 0.3.0 增加上述閱讀與基礎批注能力, 仍待裝置及功能驗收. 原生 0.3.0 增加上述阅读与基础批注能力, 仍待设备及功能验收.
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

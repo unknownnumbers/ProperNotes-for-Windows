@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QString>
 #include <QStringList>
+#include "ToolPreferences.h"
 
 namespace propernotes {
 
@@ -14,6 +15,7 @@ struct AppPreferenceValues {
     int sidebarWidth = 160;
     QColor penColor = QColor(QStringLiteral("#202833"));
     qreal penWidthPt = 2.5;
+    ToolPreferences tools;
     int backupIntervalMinutes = 5;
     int backupRetainCount = 10;
     // The literal Backups entry moves with the portable program directory.

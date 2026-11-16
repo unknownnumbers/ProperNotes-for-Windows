@@ -10,6 +10,13 @@ still has a 512MiB input/output safety limit. It has not been launched or benchm
 The current package is Windows x64; ARM64 and individual device/driver coverage remain
 separate work. Real pressure requires the device and driver to report it through Qt.
 
+The current priority is completing the confirmed critical native reading and annotation
+features. The large-document improvements below remain required backlog work, deferred
+until a later stage; they are not a prerequisite for that feature work. Preserve clear,
+extensible boundaries between Qt views/pen input and PDF source/object/render/save layers
+so these improvements can be introduced later. The 512MiB guard is a current preview
+restriction chosen by this project, not a permanent capacity target.
+
 ### What the comparison establishes
 
 SumatraPDF 3.6.1 reads small local files into memory, but keeps larger files open for
@@ -33,7 +40,7 @@ not bound peak memory. Compressed images, object streams, page dimensions and ha
 density all affect the cost. A tile cache bounds page bitmaps, not these other layers.
 Full-PDF recovery backups also incur serialization and disk-space costs.
 
-### Planned work, in order
+### Deferred large-document work: internal implementation sequence
 
 | Step | Concrete work | Boundary |
 | --- | --- | --- |
@@ -58,6 +65,11 @@ Qt + PDF4QT remains the selected application architecture.
 目前仍有 512MiB 輸入/輸出防線, 尚未啟動、測試或量測容量. 本包為 x64,
 ARM64、各筆/數位板/驅動及防誤觸另行驗收, 不由裝置名稱推定壓感一定可用.
 
+目前先補齊已確認的關鍵原生閱讀與批注功能. 以下大檔案改造仍須完成, 保留為
+後續專項, 暫不作為關鍵功能的前置條件. 後續開發保留 Qt 視圖/筆輸入與 PDF
+讀取/物件/渲染/儲存層之間可擴充的邊界. 512MiB 是目前預覽版的專案限制,
+不是永久容量目標.
+
 SumatraPDF 的 32MiB 是小檔整讀/大檔檔案流的策略分界, 不是容量上限.
 目前 PDF4QT 會整本讀取及解析, 本適配器儲存還有輸出緩衝及重讀驗證.
 只加頁面/瓦片快取不能解決這些峰值. 後續依次處理可見瓦片與位元組預算、
@@ -69,6 +81,11 @@ SumatraPDF 的 32MiB 是小檔整讀/大檔檔案流的策略分界, 不是容�
 方向为尽可能兼容 Windows 笔设备, 并把 1GB 级 PDF 纳入后续设计与验收目标.
 目前仍有 512MiB 输入/输出防线, 尚未启动、测试或测量容量. 本包为 x64,
 ARM64、各笔/数位板/驱动及防误触另行验收, 不由设备名称推定压感一定可用.
+
+目前先补齐已确认的关键原生阅读与批注功能. 以下大文件改造仍须完成, 保留为
+后续专项, 暂不作为关键功能的前置条件. 后续开发保留 Qt 视图/笔输入与 PDF
+读取/对象/渲染/保存层之间可扩展的边界. 512MiB 是当前预览版的项目限制,
+不是永久容量目标.
 
 SumatraPDF 的 32MiB 是小文件整读/大文件流的策略分界, 不是容量上限.
 目前 PDF4QT 会整本读取及解析, 本适配器保存还有输出缓冲及重读验证.

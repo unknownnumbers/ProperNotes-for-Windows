@@ -100,6 +100,8 @@ QString AppPreferences::normalizeDirectory(const QString& selected) const
 
 bool AppPreferences::validate(const AppPreferenceValues& value, QString* error)
 {
+    if (!validToolPreferences(value.tools))
+        return fail(error, QStringLiteral("工具或阅读偏好无效，未覆盖设置。"));
     if (!QStringList{QStringLiteral("system"), QStringLiteral("light"), QStringLiteral("dark")}.contains(value.theme))
         return fail(error, QStringLiteral("界面主题无效。"));
     if (value.sidebarWidth < 112 || value.sidebarWidth > 400 || !value.penColor.isValid() || value.penColor.alpha() != 255 ||
@@ -161,10 +163,12 @@ bool AppPreferences::load()
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(&m_error, QStringLiteral("设置文件已损坏；采用临时默认值，不覆盖原文件。"));
     const QJsonObject root = document.object();
-    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 1))
+    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 2))
         return fail(&m_error, QStringLiteral("设置版本不受支持；采用临时默认值，不覆盖原文件。"));
-    if (!exactKeys(root, {QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
-                          QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")}))
+    QStringList rootKeys{QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
+                        QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")};
+    if (root.value(QStringLiteral("schemaVersion")).toInt() == 2) rootKeys.append(QStringLiteral("tools"));
+    if (!exactKeys(root, rootKeys))
         return fail(&m_error, QStringLiteral("设置文件含未知字段；未覆盖原文件。"));
     const QJsonObject backup = root.value(QStringLiteral("backup")).toObject();
     if (!root.value(QStringLiteral("theme")).isString() || !root.value(QStringLiteral("sidebarVisible")).isBool() ||
@@ -175,6 +179,9 @@ bool AppPreferences::load()
         !backup.value(QStringLiteral("directory")).isString() || !backup.value(QStringLiteral("knownDirectories")).isArray())
         return fail(&m_error, QStringLiteral("设置字段类型或范围无效；未覆盖原文件。"));
     AppPreferenceValues candidate;
+    if (root.value(QStringLiteral("schemaVersion")).toInt() == 2 &&
+        (!root.value(QStringLiteral("tools")).isObject() || !readToolPreferences(root.value(QStringLiteral("tools")).toObject(), candidate.tools)))
+        return fail(&m_error, QStringLiteral("工具设置字段无效，原设置文件保留。"));
     candidate.theme = root.value(QStringLiteral("theme")).toString();
     candidate.sidebarVisible = root.value(QStringLiteral("sidebarVisible")).toBool();
     candidate.sidebarWidth = root.value(QStringLiteral("sidebarWidth")).toInt();
@@ -237,10 +244,10 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                        {QStringLiteral("retainCount"), candidate.backupRetainCount},
                        {QStringLiteral("directory"), candidate.backupDirectory},
                        {QStringLiteral("knownDirectories"), directories}};
-    const QJsonObject root{{QStringLiteral("schemaVersion"), 1}, {QStringLiteral("theme"), candidate.theme},
+    const QJsonObject root{{QStringLiteral("schemaVersion"), 2}, {QStringLiteral("theme"), candidate.theme},
                            {QStringLiteral("sidebarVisible"), candidate.sidebarVisible}, {QStringLiteral("sidebarWidth"), candidate.sidebarWidth},
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
-                           {QStringLiteral("backup"), backup}};
+                           {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);
     if (bytes.size() > MaximumSettingsBytes)
         return fail(&m_error, QStringLiteral("设置内容超过当前大小上限，未保存。"));

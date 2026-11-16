@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.24)
-project(ProperNotesNative VERSION 0.2.1 LANGUAGES CXX)
+project(ProperNotesNative VERSION 0.3.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,12 +32,16 @@ find_package(Qt6 6.11.3 EXACT REQUIRED COMPONENTS Core Gui Widgets Svg Xml Netwo
 qt_add_executable(ProperNotesNative WIN32
     src/main.cpp
     src/MainWindow.h src/MainWindow.cpp
+    src/MainWindowUi.cpp src/MainWindowActions.cpp src/DocumentSession.h
     src/InkCanvas.h src/InkCanvas.cpp
     src/InkData.h
     src/PdfDocument.h src/PdfDocument.cpp
     src/AppPreferences.h src/AppPreferences.cpp
     src/SettingsDialog.h src/SettingsDialog.cpp
     src/BackupStore.h src/BackupStore.cpp
+    src/DocumentView.h src/DocumentView.cpp
+    src/ThumbnailBrowser.h src/ThumbnailBrowser.cpp
+    src/ToolPreferences.h
 )
 target_link_libraries(ProperNotesNative PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg Qt6::Xml Qt6::Network Pdf4QtLibCore)

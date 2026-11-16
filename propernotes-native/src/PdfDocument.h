@@ -43,7 +43,14 @@ public:
     int pageCount() const;
     QSizeF pageSize(int pageIndex) const;
     QRectF pageRect(int pageIndex) const;
+    QTransform pageToDisplayTransform(int pageIndex) const;
     RenderedPage renderPage(int pageIndex, qreal pixelsPerPoint);
+    PageAnnotations annotations(int pageIndex) const;
+    // Atomically validates this page together with all other pages. UUIDs are
+    // unique across ink and text throughout the document. Marks content dirty
+    // only when the complete page value changes.
+    bool setAnnotations(int pageIndex, const PageAnnotations& annotations);
+    // Compatibility helpers preserve the page's text boxes.
     QVector<InkStroke> strokes(int pageIndex) const;
     bool setStrokes(int pageIndex, const QVector<InkStroke>& strokes);
 
