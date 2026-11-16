@@ -1,0 +1,78 @@
+# Install this file at .github/workflows/propernotes-native-windows.yml.
+# SPDX-License-Identifier: GPL-3.0-only
+name: ProperNotes native Windows preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [propernotes-native-build]
+    paths:
+      - 'propernotes-native/**'
+      - '.github/workflows/propernotes-native-windows.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propernotes-native-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  portable:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      VCPKG_DISABLE_METRICS: '1'
+      VCPKG_BINARY_SOURCES: 'clear;files,${{ runner.temp }}/propernotes-native-cache,readwrite'
+    steps:
+      - name: Check out native source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            propernotes-native
+          sparse-checkout-cone-mode: true
+
+      - name: Select pinned Python for the Qt download tool
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.13.3'
+          check-latest: false
+
+      # The action subdirectory avoids its top-level composite's mutable nested action ref.
+      # Qt and source downloads occur only on this GitHub-hosted machine.
+      - name: Install pinned Qt binaries and matching source on runner
+        uses: jurplel/install-qt-action/action@48d3ad6db93f3627c8ee7a0454bc6f3744f7e730 # v4.3.1
+        with:
+          version: '6.11.3'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          archives: 'qtbase qtsvg qttools'
+          source: true
+          src-archives: 'qtbase qtsvg'
+          dir: '${{ runner.temp }}/propernotes-qt'
+          cache: false
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
+          py7zrversion: '==1.0.0'
+          set-env: true
+
+      - name: Compile and assemble portable files without running the application
+        run: >-
+          ./propernotes-native/cloud/Build-Native.ps1
+          -WorkDirectory '${{ runner.temp }}/propernotes-native-work'
+          -ArtifactDirectory '${{ github.workspace }}/native-artifacts'
+
+      - name: Upload compiled preview and matching source evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ProperNotes-native-win-x64-${{ github.run_id }}
+          path: |
+            native-artifacts/*.zip
+            native-artifacts/ARTIFACT-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

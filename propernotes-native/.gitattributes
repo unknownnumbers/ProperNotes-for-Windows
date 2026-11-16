@@ -1,0 +1,2 @@
+# Keep exact source bytes for native build and source provenance.
+* -text

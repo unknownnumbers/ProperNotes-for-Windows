@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "platform": "windows-x64-msvc2022",
+  "pdf4qt": {
+    "repository": "https://github.com/JakubMelka/PDF4QT.git",
+    "version": "1.7.0.0",
+    "commit": "3e50f636551907db3f018e99748fe7daa56ff497",
+    "target": "Pdf4QtLibCore",
+    "license": "MIT"
+  },
+  "qt": {
+    "version": "6.11.3",
+    "architecture": "win64_msvc2022_64",
+    "binaryArchives": ["qtbase", "qtsvg", "qttools"],
+    "sourceArchives": ["qtbase", "qtsvg"],
+    "pythonVersion": "3.13.3",
+    "setupPythonActionCommit": "83679a892e2d95755f2dac6acb0bfd1e9ac5d548",
+    "installActionCommit": "48d3ad6db93f3627c8ee7a0454bc6f3744f7e730",
+    "aqtInstallCommit": "076e1659807d0b362a3ed684d54c2e9c775eb9c7"
+  },
+  "vcpkg": {
+    "repository": "https://github.com/microsoft/vcpkg.git",
+    "commit": "84297877a7c1a155661ea562462f1b72fab080d1",
+    "triplet": "x64-windows-release",
+    "overlay": "vcpkg/overlays/general"
+  },
+  "application": {
+    "target": "ProperNotesNative",
+    "executable": "ProperNotes.Native.exe",
+    "codeLicense": "GPL-3.0-only",
+    "documentationLicense": "CC-BY-SA-4.0"
+  }
+}
