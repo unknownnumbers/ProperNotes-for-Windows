@@ -166,7 +166,7 @@ bool AppPreferences::load()
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(&m_error, QStringLiteral("设置文件已损坏；采用临时默认值，不覆盖原文件。"));
     const QJsonObject root = document.object();
-    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 3))
+    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 4))
         return fail(&m_error, QStringLiteral("设置版本不受支持；采用临时默认值，不覆盖原文件。"));
     QStringList rootKeys{QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
                         QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")};
@@ -254,7 +254,7 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                        {QStringLiteral("retainCount"), candidate.backupRetainCount},
                        {QStringLiteral("directory"), candidate.backupDirectory},
                        {QStringLiteral("knownDirectories"), directories}};
-    const QJsonObject root{{QStringLiteral("schemaVersion"), 3}, {QStringLiteral("theme"), candidate.theme},
+    const QJsonObject root{{QStringLiteral("schemaVersion"), 4}, {QStringLiteral("theme"), candidate.theme},
                            {QStringLiteral("sidebarVisible"), candidate.sidebarVisible}, {QStringLiteral("sidebarWidth"), candidate.sidebarWidth},
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
                            {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)},

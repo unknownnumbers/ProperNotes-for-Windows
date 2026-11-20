@@ -21,6 +21,7 @@
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <memory>
 #include <utility>
 
@@ -156,6 +157,32 @@ bool rectHit(const QRectF& rect, const QPointF& from, const QPointF& to, qreal r
     }
     return false;
 }
+
+QPainterPath eraserArea(const QPointF& from, const QPointF& to, qreal radius)
+{
+    QPainterPath path;
+    if (from == to) {
+        path.addEllipse(from, radius, radius);
+        return path;
+    }
+    path.moveTo(from);
+    path.lineTo(to);
+    QPainterPathStroker stroker;
+    stroker.setWidth(radius * 2);
+    stroker.setCapStyle(Qt::RoundCap);
+    return stroker.createStroke(path);
+}
+
+void paintTextQuads(QPainter& painter, const QVector<TextMarkupQuad>& quads, const QColor& color)
+{
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(color);
+    for (const auto& quad : quads) {
+        QPolygonF polygon;
+        polygon << quad.topLeft << quad.topRight << quad.bottomRight << quad.bottomLeft;
+        painter.drawPolygon(polygon);
+    }
+}
 } // namespace
 
 InkCanvas::InkCanvas(QWidget* parent) : QWidget(parent)
@@ -177,8 +204,12 @@ void InkCanvas::setPage(int pageIndex, const QImage& background, const QTransfor
                         const QRectF& pageRect, qreal rasterScale, const PageAnnotations& annotations)
 {
     finishActiveOperation();
-    if (pageIndex != m_pageIndex)
+    if (pageIndex != m_pageIndex) {
         clearSelection();
+        m_textPage.reset();
+        m_selectedTextQuads.clear();
+        m_searchQuads.clear();
+    }
     m_pageIndex = pageIndex;
     m_background = background;
     m_background.setDevicePixelRatio(1.0);
@@ -206,6 +237,7 @@ void InkCanvas::setPageAnnotations(const PageAnnotations& annotations)
     QSet<QUuid> valid;
     for (const auto& stroke : annotations.strokes) valid.insert(stroke.id);
     for (const auto& text : annotations.textBoxes) valid.insert(text.id);
+    for (const auto& markup : annotations.textMarkups) valid.insert(markup.id);
     m_selection.intersect(valid);
     rebuildInkCache();
     Q_EMIT selectionChanged();
@@ -219,6 +251,9 @@ void InkCanvas::clearPage()
     m_inkCache = {};
     m_pageRect = {};
     m_annotations = {};
+    m_textPage.reset();
+    m_selectedTextQuads.clear();
+    m_searchQuads.clear();
     clearSelection();
     m_editingEnabled = false;
     updateExtent();
@@ -229,6 +264,8 @@ void InkCanvas::setTool(Tool tool)
     if (m_tool == tool) return;
     finishActiveOperation();
     m_tool = tool;
+    if (tool == Tool::TextSelect)
+        clearSelection();
     updateCursor();
     update();
 }
@@ -254,6 +291,24 @@ void InkCanvas::setEditingEnabled(bool enabled)
 }
 
 bool InkCanvas::hasActiveGesture() const { return m_gesture != Gesture::None || m_editor != nullptr; }
+
+void InkCanvas::setTextPage(const std::shared_ptr<const PdfTextPage>& text)
+{
+    if (m_gesture != Gesture::TextSelection)
+        m_textPage = text;
+}
+
+void InkCanvas::setTextSelection(const QVector<TextMarkupQuad>& quads)
+{
+    m_selectedTextQuads = quads;
+    update();
+}
+
+void InkCanvas::setSearchHighlight(const QVector<TextMarkupQuad>& quads)
+{
+    m_searchQuads = quads;
+    update();
+}
 
 void InkCanvas::setZoom(qreal zoom)
 {
@@ -316,12 +371,19 @@ qreal InkCanvas::effectivePressure(qreal reported, bool nativePen) const
 
 void InkCanvas::rebuildInkCache()
 {
-    if (m_background.isNull()) { m_inkCache = {}; update(); return; }
-    m_inkCache = QImage(m_background.size(), QImage::Format_ARGB32_Premultiplied);
-    m_inkCache.fill(Qt::transparent);
+    if (m_background.isNull() || (m_annotations.strokes.isEmpty() && m_annotations.textBoxes.isEmpty()
+        && m_annotations.textMarkups.isEmpty())) {
+        m_inkCache = {};
+        update();
+        return;
+    }
+    // Composite highlights against the page itself so Multiply preserves the
+    // original ink of the printed text beneath a translucent review mark.
+    m_inkCache = m_background.convertToFormat(QImage::Format_ARGB32_Premultiplied);
     QPainter painter(&m_inkCache);
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setWorldTransform(m_pdfToImage);
+    for (const auto& markup : m_annotations.textMarkups) paintTextMarkup(painter, markup);
     for (const auto& stroke : m_annotations.strokes) painter.fillPath(inkStrokeOutline(stroke), stroke.color);
     for (const auto& text : m_annotations.textBoxes) {
         if (!m_editor || text.id != m_editTextId) paintTextBox(painter, text);
@@ -348,12 +410,14 @@ void InkCanvas::paintEvent(QPaintEvent*)
         painter.drawText(paper, Qt::AlignCenter, QStringLiteral("正在显示页面…"));
     } else {
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.drawImage(paper, m_background);
-        painter.drawImage(paper, m_inkCache);
+        painter.drawImage(paper, m_inkCache.isNull() ? m_background : m_inkCache);
     }
     painter.save();
     painter.setClipRect(paper);
     painter.setWorldTransform(pdfToWidget());
+    paintTextQuads(painter, m_searchQuads, QColor(255, 169, 17, 105));
+    const auto& selection = m_gesture == Gesture::TextSelection ? m_textPreview.quads : m_selectedTextQuads;
+    paintTextQuads(painter, selection, QColor(48, 128, 237, 105));
     if (m_gesture == Gesture::Ink) painter.fillPath(inkStrokeOutline(m_pendingStroke), m_pendingStroke.color);
     painter.restore();
     painter.setBrush(Qt::NoBrush);
@@ -392,6 +456,8 @@ QRectF InkCanvas::objectBounds(const QUuid& id) const
         if (stroke.id == id) return inkStrokeOutline(stroke).boundingRect();
     for (const auto& text : m_annotations.textBoxes)
         if (text.id == id) return text.rect;
+    for (const auto& markup : m_annotations.textMarkups)
+        if (markup.id == id) return textMarkupBounds(markup);
     return {};
 }
 
@@ -418,6 +484,10 @@ QSet<QUuid> InkCanvas::objectsIn(const QRectF& rect) const
     }
     for (const auto& text : m_annotations.textBoxes)
         if (rect.intersects(text.rect) || rect.contains(text.rect)) result.insert(text.id);
+    for (const auto& markup : m_annotations.textMarkups) {
+        const auto path = textMarkupPath(markup);
+        if (path.intersects(rect) || rect.contains(path.boundingRect())) result.insert(markup.id);
+    }
     return result;
 }
 
@@ -442,6 +512,11 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     m_source = source;
     m_tailEraser = tailEraser;
     m_previousPanGlobal = global;
+    if (!forcePan && !tailEraser && m_tool == Tool::TextSelect) {
+        setFocus(Qt::MouseFocusReason);
+        beginTextSelection(position);
+        return;
+    }
     if (forcePan || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
         m_gesture = Gesture::Pan;
         updateCursor();
@@ -475,6 +550,13 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
             m_gesture = Gesture::TextResize;
             m_focusId = *m_selection.cbegin();
         } else if (!m_selection.isEmpty() && selectionBounds().contains(m_gestureStart)) {
+            const bool anchored = std::any_of(m_annotations.textMarkups.cbegin(), m_annotations.textMarkups.cend(),
+                [this](const TextMarkup& markup) { return m_selection.contains(markup.id); });
+            if (anchored) {
+                resetGesture();
+                Q_EMIT activity(QStringLiteral("审阅标记跟随正文位置，可以删除或撤销。若要移动其他批注，请单独选择它们。"));
+                return;
+            }
             m_gesture = Gesture::Move;
             m_focusId = *m_selection.cbegin();
         } else {
@@ -492,6 +574,56 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     }
     updateCursor();
     update();
+}
+
+void InkCanvas::beginTextSelection(const QPointF& position)
+{
+    Q_EMIT textSelectionStarted();
+    clearSelection();
+    if (!insidePaper(position)) {
+        resetGesture();
+        return;
+    }
+    if (!m_textPage) {
+        Q_EMIT textPageRequested(m_pageIndex);
+        Q_EMIT activity(QStringLiteral("正在读取本页文字。读取后即可拖动选择。"));
+        resetGesture();
+        return;
+    }
+    if (!m_textPage->error.isEmpty()) {
+        Q_EMIT activity(m_textPage->error);
+        resetGesture();
+        return;
+    }
+    if (m_textPage->glyphs.isEmpty()) {
+        Q_EMIT activity(QStringLiteral("本页没有可选中的 PDF 正文。"));
+        resetGesture();
+        return;
+    }
+    const qreal tolerance = std::min(10 / m_zoom, qreal(16)) / m_pageUserUnit;
+    const int glyph = m_textPage->hitTest(pdfPointAt(position), tolerance);
+    if (glyph < 0) {
+        resetGesture();
+        return;
+    }
+    m_textDragStart = position;
+    m_textFirstGlyph = glyph;
+    m_gesture = Gesture::TextSelection;
+    update();
+}
+
+void InkCanvas::updateTextSelection(const QPointF& position)
+{
+    m_textDragEnd = position;
+    // A click clears the previous selection. Dragging within one glyph still
+    // selects it, which also handles PDF ligatures kept as one glyph cluster.
+    if (m_textLastGlyph < 0 && QLineF(m_textDragStart, position).length() < 3)
+        return;
+    const int glyph = m_textPage->hitTest(clampedPdfPoint(position), std::numeric_limits<qreal>::infinity());
+    if (glyph < 0 || glyph == m_textLastGlyph)
+        return;
+    m_textLastGlyph = glyph;
+    m_textPreview = m_textPage->select(m_textFirstGlyph, glyph);
 }
 
 void InkCanvas::addPoint(const QPointF& position, qreal pressure)
@@ -522,6 +654,8 @@ void InkCanvas::pointerMove(const QPointF& position, const QPointF& global, qrea
         const QPointF next = clampedPdfPoint(position);
         eraseBetween(m_previousErasePoint, next);
         m_previousErasePoint = next;
+    } else if (m_gesture == Gesture::TextSelection) {
+        updateTextSelection(position);
     } else if (m_gesture == Gesture::Move) {
         const QRectF bounds = [&] {
             QRectF result;
@@ -578,6 +712,14 @@ void InkCanvas::eraseBetween(const QPointF& from, const QPointF& to)
     m_annotations.strokes = std::move(strokes);
     for (qsizetype index = m_annotations.textBoxes.size(); index > 0; --index)
         if (rectHit(m_annotations.textBoxes[index - 1].rect, from, to, radius)) m_annotations.textBoxes.removeAt(index - 1);
+    if (!m_annotations.textMarkups.isEmpty()) {
+        const auto area = eraserArea(from, to, radius);
+        for (qsizetype index = m_annotations.textMarkups.size(); index > 0; --index) {
+            const auto& markup = m_annotations.textMarkups[index - 1];
+            if (area.boundingRect().intersects(textMarkupBounds(markup)) && area.intersects(textMarkupPath(markup)))
+                m_annotations.textMarkups.removeAt(index - 1);
+        }
+    }
     rebuildInkCache();
 }
 
@@ -590,6 +732,9 @@ void InkCanvas::resetGesture()
     m_pendingStroke = {};
     m_beforeGesture = {};
     m_selectionBeforeGesture.clear();
+    m_textFirstGlyph = -1;
+    m_textLastGlyph = -1;
+    m_textPreview = {};
     updateCursor();
 }
 
@@ -601,6 +746,7 @@ void InkCanvas::commit(const PageAnnotations& before, const QString& reason, con
         QSet<QUuid> valid;
         for (const auto& stroke : after.strokes) valid.insert(stroke.id);
         for (const auto& text : after.textBoxes) valid.insert(text.id);
+        for (const auto& markup : after.textMarkups) valid.insert(markup.id);
         const auto oldSelection = m_selection;
         m_selection.intersect(valid);
         if (oldSelection != m_selection) Q_EMIT selectionChanged();
@@ -625,6 +771,16 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
     if (m_editor) { finishTextEdit(false); return; }
     if (m_gesture == Gesture::None) return;
     const Gesture gesture = m_gesture;
+    if (gesture == Gesture::TextSelection) {
+        auto selected = std::move(m_textPreview);
+        const auto releasedAt = m_textDragEnd;
+        resetGesture();
+        if (finishReason == FinishReason::NormalRelease && !selected.text.isEmpty())
+            Q_EMIT textSelectionFinished(m_pageIndex, selected, releasedAt);
+        Q_EMIT operationFinished();
+        update();
+        return;
+    }
     const auto before = m_beforeGesture;
     const QUuid focusId = m_focusId;
     const bool completed = finishReason == FinishReason::NormalRelease && !m_tailEraser;
@@ -652,6 +808,12 @@ void InkCanvas::cancelActiveOperation()
 {
     if (m_editor) { finishTextEdit(true); return; }
     if (m_gesture == Gesture::None) return;
+    if (m_gesture == Gesture::TextSelection) {
+        resetGesture();
+        update();
+        Q_EMIT operationFinished();
+        return;
+    }
     if (m_gesture != Gesture::Pan) {
         m_annotations = m_beforeGesture;
         m_selection = m_selectionBeforeGesture;
@@ -799,8 +961,12 @@ void InkCanvas::finishTextEdit(bool cancel)
 
 void InkCanvas::updateCursor()
 {
-    const bool pan = m_gesture == Gesture::Pan;
-    setCursor(pan ? Qt::ClosedHandCursor : m_tool == Tool::Pan || !m_editingEnabled ? Qt::OpenHandCursor : Qt::CrossCursor);
+    if (m_gesture == Gesture::Pan)
+        setCursor(Qt::ClosedHandCursor);
+    else if (m_tool == Tool::TextSelect && !m_hoverEraser)
+        setCursor(Qt::IBeamCursor);
+    else
+        setCursor(m_tool == Tool::Pan || !m_editingEnabled ? Qt::OpenHandCursor : Qt::CrossCursor);
 }
 
 void InkCanvas::tabletEvent(QTabletEvent* event)
@@ -842,7 +1008,7 @@ void InkCanvas::mousePressEvent(QMouseEvent* event)
     m_hoverEraser = false;
     if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton)
         pointerPress(event->position(), event->globalPosition(), 0.6, Source::Mouse, false,
-                     event->button() == Qt::MiddleButton || !m_touchAndMouseAnnotate);
+                     event->button() == Qt::MiddleButton || (!m_touchAndMouseAnnotate && m_tool != Tool::TextSelect));
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent* event)
@@ -1012,17 +1178,21 @@ void InkCanvas::focusOutEvent(QFocusEvent* event)
 void InkCanvas::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Escape) {
-        if (hasActiveGesture()) cancelActiveOperation(); else clearSelection();
+        if (hasActiveGesture()) cancelActiveOperation();
+        else if (m_tool == Tool::TextSelect) Q_EMIT textSelectionStarted();
+        else clearSelection();
         event->accept();
         return;
     }
     if ((event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) &&
-        m_editingEnabled && !m_selection.isEmpty() && !hasActiveGesture()) {
+        m_tool != Tool::TextSelect && m_editingEnabled && !m_selection.isEmpty() && !hasActiveGesture()) {
         const auto before = m_annotations;
         for (qsizetype i = m_annotations.strokes.size(); i > 0; --i)
             if (m_selection.contains(m_annotations.strokes[i - 1].id)) m_annotations.strokes.removeAt(i - 1);
         for (qsizetype i = m_annotations.textBoxes.size(); i > 0; --i)
             if (m_selection.contains(m_annotations.textBoxes[i - 1].id)) m_annotations.textBoxes.removeAt(i - 1);
+        for (qsizetype i = m_annotations.textMarkups.size(); i > 0; --i)
+            if (m_selection.contains(m_annotations.textMarkups[i - 1].id)) m_annotations.textMarkups.removeAt(i - 1);
         clearSelection();
         commit(before, QStringLiteral("delete"), {}, false, Tool::Select);
         event->accept();

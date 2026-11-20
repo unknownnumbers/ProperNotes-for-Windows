@@ -30,6 +30,7 @@ class QThread;
 class QTimer;
 class QTabBar;
 class QMenu;
+class QToolBar;
 
 namespace propernotes {
 class InkCanvas;
@@ -53,6 +54,17 @@ protected:
 
 private:
     void buildUi();
+    void buildTextReviewUi(QToolBar* toolbar, QWidget* central);
+    void updateTextReviewUi();
+    void requestTextPage(int page);
+    void startTextSearch();
+    void continueTextSearch(int page);
+    void resetTextSearch(bool hidePanel);
+    void updateSearchProgress();
+    void copyBodySelection();
+    void applyTextReview(TextMarkupKind kind);
+    void favoriteTextReview();
+    QColor reviewColor(TextMarkupKind kind) const;
     void updateUi();
     void showError(const QString& message);
     void chooseOpenFile();
@@ -220,6 +232,8 @@ private:
     std::unique_ptr<WorkspaceState> m_workspace;
     struct FavoriteState;
     std::unique_ptr<FavoriteState> m_liveFavorite;
+    struct ReviewState;
+    std::unique_ptr<ReviewState> m_review;
     qsizetype m_historyBytes = 0;
     QVector<DocumentView::ViewState> m_viewHistory;
     int m_viewHistoryIndex = -1;

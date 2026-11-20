@@ -38,13 +38,16 @@ QString workerError()
 qsizetype modelBytes(const PageAnnotations& page)
 {
     qsizetype bytes = qsizetype(page.strokes.size()) * sizeof(InkStroke) + qsizetype(page.textBoxes.size()) * sizeof(TextBox);
+    bytes += page.textMarkups.size() * qsizetype(sizeof(TextMarkup));
     for (const auto& stroke : page.strokes) bytes += stroke.points.size() * qsizetype(sizeof(InkPoint));
     for (const auto& text : page.textBoxes) bytes += (text.text.size() + text.fontFamily.size()) * 2;
+    for (const auto& markup : page.textMarkups) bytes += markup.quads.size() * qsizetype(sizeof(TextMarkupQuad));
     return bytes;
 }
 bool modelFits(const QMap<int, PageAnnotations>& pages, QString& error)
 {
     qsizetype strokes = 0, points = 0, texts = 0, characters = 0;
+    qsizetype markupCount = 0, markupQuads = 0, markupElements = 0;
     QSet<QUuid> ids;
     for (const auto& page : pages) {
         strokes += page.strokes.size(); texts += page.textBoxes.size();
@@ -62,6 +65,21 @@ bool modelFits(const QMap<int, PageAnnotations>& pages, QString& error)
             }
             ids.insert(text.id); characters += text.text.size();
         }
+        for (const auto& markup : page.textMarkups) {
+            if (ids.contains(markup.id) || !validTextMarkup(markup)) {
+                error = QStringLiteral("审阅标记的范围或样式无效，本次编辑未应用。");
+                return false;
+            }
+            ids.insert(markup.id);
+            ++markupCount;
+            markupQuads += markup.quads.size();
+            markupElements += textMarkupPathElements(markup);
+            if (markupCount > MaxDocumentTextMarkups || markupQuads > MaxDocumentTextMarkupQuads ||
+                markupElements > MaxDocumentTextMarkupPathElements) {
+                error = QStringLiteral("文档已达到审阅标记上限，本次编辑未应用。");
+                return false;
+            }
+        }
         if (strokes > 100000 || points > 2000000 || texts > 10000 || characters > 2000000) {
             error = QStringLiteral("文档已达到当前批注数量或内容上限，本次编辑未应用；原数据保留。"); return false;
         }
@@ -72,6 +90,7 @@ QRectF focusBounds(const PageAnnotations& page, const QUuid& id)
 {
     for (const auto& stroke : page.strokes) if (stroke.id == id) return inkStrokeOutline(stroke).boundingRect();
     for (const auto& text : page.textBoxes) if (text.id == id) return text.rect;
+    for (const auto& markup : page.textMarkups) if (markup.id == id) return textMarkupBounds(markup);
     return {};
 }
 QString layoutName(DocumentView::LayoutMode mode)
@@ -168,6 +187,13 @@ void MainWindow::editHistory(bool redo)
                 if (!currentText.contains(text.id)) { focus = text.rect; break; }
             }
         }
+        if (focus.isEmpty()) {
+            QSet<QUuid> currentMarkups;
+            for (const auto& markup : value.textMarkups) currentMarkups.insert(markup.id);
+            for (const auto& markup : removed.textMarkups) {
+                if (!currentMarkups.contains(markup.id)) { focus = textMarkupBounds(markup); break; }
+            }
+        }
     }
     if (focus.isEmpty()) focus = m_geometry.value(record.page).pdfRect;
     state.pdfAnchor = focus.center(); state.viewportAnchor = QPointF(0.5, 0.5); state.valid = true;
@@ -209,7 +235,7 @@ bool MainWindow::finishPendingDefaultChange(bool success)
 
 void MainWindow::rememberPersistentTool()
 {
-    if(!m_liveFavorite||isSingleUse(m_tool))return;
+    if(!m_liveFavorite||m_tool==InkCanvas::Tool::TextSelect||isSingleUse(m_tool))return;
     FavoriteState::RuntimeTool state;
     state.tool=m_tool;
     state.snapshot=captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));
@@ -234,6 +260,7 @@ void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
     m_view->setTool(tool);
     if(userChoice)rememberPersistentTool();
     updateToolUi();
+    updateTextReviewUi();
 }
 
 void MainWindow::toolCompleted(InkCanvas::Tool tool, const QString&)
@@ -273,7 +300,10 @@ void MainWindow::updateToolUi()
         (m_tool == InkCanvas::Tool::Pen || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox));
     m_updatingUi = wasUpdating;
     if(m_favoritesBar){
-        m_favoritesBar->setCurrentTool(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth());
+        if (m_tool == InkCanvas::Tool::TextSelect && m_liveFavorite->active && m_liveFavorite->active->markupKind)
+            m_favoritesBar->setCurrentTool(*m_liveFavorite->active);
+        else
+            m_favoritesBar->setCurrentTool(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth());
         m_favoritesBar->setActiveFavoriteId(m_liveFavorite->active&&m_liveFavorite->active->tool==m_tool?m_liveFavorite->active->id:QUuid());
     }
 }
@@ -352,6 +382,7 @@ void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
                     QImage image = result.image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
                     QPainter painter(&image); painter.setWorldTransform(result.pdfToImage);
                     const auto annotations = window->m_pageAnnotations.value(page);
+                    for (const auto& markup : annotations.textMarkups) paintTextMarkup(painter, markup);
                     for (const auto& stroke : annotations.strokes) painter.fillPath(inkStrokeOutline(stroke), stroke.color);
                     for (const auto& text : annotations.textBoxes) paintTextBox(painter, text);
                     painter.end();

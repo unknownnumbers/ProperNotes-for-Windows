@@ -4,6 +4,15 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+In 0.3.2, click **Select Text** (选文字), then drag over the PDF text on one page.
+Use Ctrl+C to copy or click the review button to mark the selection. The review
+menu lets you choose Highlight, Underline, Squiggly or StrikeOut, change color and
+opacity, and save the style as a favorite. Click a review favorite, select text,
+then apply the mark. Search with Ctrl+F, Enter to start, and click a result to jump.
+Search supports a case option, cancellation, and up to 1,000 matches. It reads the
+existing PDF text layer. Hold Shift + wheel to pan horizontally in the document.
+Ctrl + wheel zooms the document or resizes previews in the full-screen page grid.
+
 The `0.3.1-native-preview.1` source integrates the workspace features below. See each
 artifact's provenance for compilation status; application startup, tests and runtime
 acceptance have not been performed. Open adds a horizontal tab or activates the same registered
@@ -75,6 +84,11 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.2 點「選文字」後在同一頁拖選，Ctrl+C 複製。用審閱選單選高亮、底線、
+波浪線或刪除線，選好正文後點按鈕套用。可設定顏色與不透明度並收藏。
+Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結果跳轉，上限 1,000 筆。
+正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。全螢幕縮圖的 Ctrl + 滾輪調整預覽尺寸。
+
 `0.3.1-native-preview.1` 工作區源碼已接入. 編譯狀態見各構件 provenance,
 應用尚未啟動、測試或實際驗收. 開啟文件新增
 橫向標籤, 同一登記路徑啟用已有標籤, 最多 32 個. 各標籤保留未儲存內容與編輯/視角歷史;
@@ -110,6 +124,11 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.2 点「选文字」后在同一页拖选，Ctrl+C 复制。用审阅菜单选高亮、下划线、
+波浪线或删除线，选好正文后点按钮应用。可设置颜色与不透明度并收藏。
+Ctrl+F 搜索已有文字层，Enter 开始，可选大小写、停止，点结果跳转，上限 1,000 条。
+正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。全屏缩略图的 Ctrl + 滚轮调整预览尺寸。
 
 `0.3.1-native-preview.1` 工作区源码已接入. 编译状态见各构件 provenance,
 应用尚未启动、测试或实际验收. 打开文档新增

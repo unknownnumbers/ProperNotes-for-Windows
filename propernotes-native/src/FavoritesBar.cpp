@@ -42,9 +42,31 @@ QIcon toolIcon(const FavoriteTool& favorite)
 {
     QPixmap pixmap(56,56);pixmap.fill(Qt::transparent);
     QPainter p(&pixmap);p.setRenderHint(QPainter::Antialiasing);p.scale(2,2);
-    const QColor color=(favorite.tool==InkCanvas::Tool::Pen||favorite.tool==InkCanvas::Tool::TextBox)?favorite.color:QColor("#3977bd");
+    const QColor color=(favorite.markupKind||favorite.tool==InkCanvas::Tool::Pen||favorite.tool==InkCanvas::Tool::TextBox)?favorite.color:QColor("#3977bd");
     p.setPen(QPen(color,1.6,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));p.setBrush(Qt::NoBrush);
-    if(favorite.tool==InkCanvas::Tool::Pen){
+    if (favorite.markupKind) {
+        const auto kind = *favorite.markupKind;
+        if (kind == TextMarkupKind::Highlight) {
+            QColor fill = color;
+            fill.setAlpha(124);
+            p.fillRect(QRectF(3, 6, 22, 15), fill);
+        }
+        p.setPen(QPen(QColor("#475569"), 1.5));
+        p.drawLine(QPointF(5, 9), QPointF(23, 9));
+        p.drawLine(QPointF(5, 14), QPointF(21, 14));
+        p.setPen(QPen(color, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        if (kind == TextMarkupKind::Underline) p.drawLine(QPointF(5, 20), QPointF(23, 20));
+        if (kind == TextMarkupKind::StrikeOut) p.drawLine(QPointF(4, 12), QPointF(24, 12));
+        if (kind == TextMarkupKind::Squiggly) {
+            QPolygonF wave;
+            for (int x = 5; x <= 23; x += 3) wave << QPointF(x, ((x - 5) / 3) % 2 ? 18 : 21);
+            p.drawPolyline(wave);
+        }
+    } else if(favorite.tool==InkCanvas::Tool::TextSelect){
+        p.drawLine(QPointF(14,5), QPointF(14,23));
+        p.drawLine(QPointF(10,5), QPointF(18,5));
+        p.drawLine(QPointF(10,23), QPointF(18,23));
+    } else if(favorite.tool==InkCanvas::Tool::Pen){
         p.drawLine(QPointF(7,21),QPointF(21,7));p.drawLine(QPointF(10,23),QPointF(23,10));
         p.drawLine(QPointF(21,7),QPointF(23,10));p.drawLine(QPointF(7,21),QPointF(6,24));p.drawLine(QPointF(6,24),QPointF(10,23));
     }else if(favorite.tool==InkCanvas::Tool::ObjectEraser){
@@ -70,6 +92,8 @@ QString literalButtonText(QString text){return text.replace(QChar('&'),QStringLi
 QString tooltip(const QString& text){return QStringLiteral("<qt>")+text.toHtmlEscaped().replace(QLatin1Char('\n'),QStringLiteral("<br>"))+QStringLiteral("</qt>");}
 bool sameRecipe(const FavoriteTool& a,const FavoriteTool& b)
 {
+    if (a.markupKind || b.markupKind)
+        return a.markupKind == b.markupKind && a.color == b.color && qFuzzyCompare(a.tools.opacity, b.tools.opacity);
     auto left=captureFavorite(a.tool,a.tools,a.color,a.widthPt,favoriteToolName(a.tool));
     auto right=captureFavorite(b.tool,b.tools,b.color,b.widthPt,favoriteToolName(b.tool));
     left.id=QUuid();right.id=QUuid();return favoriteToolsJson({left})==favoriteToolsJson({right});
@@ -100,7 +124,10 @@ public:
         m_name=new QLineEdit(original.name);m_name->setMaxLength(80);form->addRow(QStringLiteral("名称"),m_name);
         m_kind=new QComboBox;
         for(const auto kind:{InkCanvas::Tool::Pen,InkCanvas::Tool::ObjectEraser,InkCanvas::Tool::TextBox,InkCanvas::Tool::Select,InkCanvas::Tool::Pan})m_kind->addItem(favoriteToolName(kind),int(kind));
-        m_kind->setCurrentIndex(m_kind->findData(int(original.tool)));form->addRow(QStringLiteral("工具"),m_kind);
+        for (auto kind : {TextMarkupKind::Highlight, TextMarkupKind::Underline, TextMarkupKind::StrikeOut, TextMarkupKind::Squiggly})
+            m_kind->addItem(textMarkupKindName(kind), MarkupOffset + int(kind));
+        m_kind->setCurrentIndex(m_kind->findData(original.markupKind ? MarkupOffset + int(*original.markupKind) : int(original.tool)));
+        form->addRow(QStringLiteral("工具"),m_kind);
         m_colorButton=new QToolButton;m_colorButton->setText(QStringLiteral("选择颜色…"));form->addRow(QStringLiteral("颜色"),m_colorButton);
         m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("笔宽"),m_width);
         m_opacity=new QDoubleSpinBox;m_opacity->setRange(0,100);m_opacity->setSuffix(QStringLiteral("%"));form->addRow(QStringLiteral("不透明度"),m_opacity);
@@ -126,13 +153,27 @@ public:
         ToolPreferences tools;tools.opacity=m_opacity->value()/100;tools.pressureEnabled=m_pressure->isChecked();tools.pressureSensitivity=m_sensitivity->value();
         tools.eraserMode=m_mode->currentData().toString();tools.eraserRadiusPt=m_radius->value();tools.textFamily=m_family->currentFont().family();tools.textSizePt=m_size->value();
         tools.penSingleUse=tools.eraserSingleUse=tools.textSingleUse=m_single->isChecked();
-        auto result=captureFavorite(InkCanvas::Tool(m_kind->currentData().toInt()),tools,m_color,m_width->value(),m_name->text().trimmed());result.id=m_original.id;return result;
+        const int selection = m_kind->currentData().toInt();
+        const QString name = m_name->text().trimmed();
+        FavoriteTool result;
+        if (selection >= MarkupOffset) {
+            result = captureReviewFavorite(TextMarkupKind(selection - MarkupOffset), m_color, name);
+            result.tools.opacity = tools.opacity;
+        } else {
+            result = captureFavorite(InkCanvas::Tool(selection),tools,m_color,m_width->value(),name);
+        }
+        result.id=m_original.id;
+        return result;
     }
 private:
+    static constexpr int MarkupOffset = 100;
     void updateColor(){m_colorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_color.name()));}
     void showKind(){
-        const auto kind=InkCanvas::Tool(m_kind->currentData().toInt());const bool pen=kind==InkCanvas::Tool::Pen,eraser=kind==InkCanvas::Tool::ObjectEraser,text=kind==InkCanvas::Tool::TextBox;
-        m_colorButton->setEnabled(pen||text);m_opacity->setEnabled(pen||text);m_width->setEnabled(pen);m_pressure->setEnabled(pen);m_sensitivity->setEnabled(pen);
+        const int selection = m_kind->currentData().toInt();
+        const bool markup = selection >= MarkupOffset;
+        const bool pen = selection == int(InkCanvas::Tool::Pen), eraser = selection == int(InkCanvas::Tool::ObjectEraser), text = selection == int(InkCanvas::Tool::TextBox);
+        m_colorButton->setEnabled(pen||text||markup);m_opacity->setEnabled(pen||text||markup);m_opacity->setMinimum(markup ? 0.4 : 0);
+        m_width->setEnabled(pen);m_pressure->setEnabled(pen);m_sensitivity->setEnabled(pen);
         m_mode->setEnabled(eraser);m_radius->setEnabled(eraser);m_family->setEnabled(text);m_size->setEnabled(text);m_single->setEnabled(pen||eraser||text);
     }
     FavoriteTool m_original;QColor m_color;QLineEdit* m_name;QComboBox* m_kind;QToolButton* m_colorButton;QDoubleSpinBox* m_width;QDoubleSpinBox* m_opacity;
@@ -173,7 +214,8 @@ void FavoritesBar::setCurrentTool(InkCanvas::Tool tool,const ToolPreferences& to
 {setCurrentTool(captureFavorite(tool,tools,color,width,QStringLiteral("当前工具")));}
 void FavoritesBar::setCurrentTool(const FavoriteTool& current)
 {
-    m_currentTool=current;m_current->setIcon(toolIcon(current));m_current->setText(literalButtonText(favoriteToolName(current.tool)));
+    m_currentTool=current;m_current->setIcon(toolIcon(current));
+    m_current->setText(literalButtonText(current.markupKind ? textMarkupKindName(*current.markupKind) : favoriteToolName(current.tool)));
     m_current->setToolTip(tooltip(QStringLiteral("当前工具\n")+favoriteDescription(current)));
 }
 void FavoritesBar::setActiveFavoriteId(const QUuid& id)

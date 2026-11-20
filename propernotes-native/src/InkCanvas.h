@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #pragma once
 #include "InkData.h"
+#include "PdfTextLayer.h"
 #include <QImage>
 #include <QSet>
 #include <QWidget>
+#include <memory>
 
 class QFocusEvent;
 class QKeyEvent;
@@ -19,7 +21,7 @@ namespace propernotes {
 class InkCanvas final : public QWidget {
     Q_OBJECT
 public:
-    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox };
+    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox, TextSelect };
     enum class EraseMode { WholeStroke, PartialStroke };
     enum class FinishReason { ForcedCommit, NormalRelease };
     Q_ENUM(Tool)
@@ -56,6 +58,9 @@ public:
     bool isTextEditing() const { return m_editor != nullptr; }
     QSet<QUuid> selectionIds() const { return m_selection; }
     void clearSelection();
+    void setTextPage(const std::shared_ptr<const PdfTextPage>& text);
+    void setTextSelection(const QVector<TextMarkupQuad>& quads);
+    void setSearchHighlight(const QVector<TextMarkupQuad>& quads);
     QRectF objectBounds(const QUuid& id) const;
     QPointF pdfPointAt(const QPointF& widgetPoint) const;
     QPointF widgetPointForPdf(const QPointF& pdfPoint) const;
@@ -70,6 +75,10 @@ signals:
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
     void textEditingChanged(bool editing);
+    void textPageRequested(int pageIndex);
+    void textSelectionStarted();
+    void textSelectionFinished(int pageIndex, const propernotes::PdfTextSelection& selection,
+                               const QPointF& releasedAt);
     void operationFinished();
     void penContactChanged(bool down);
     void panRequested(const QPointF& delta);
@@ -90,7 +99,7 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    enum class Gesture { None, Ink, Erase, Pan, Marquee, Move, TextFrame, TextResize };
+    enum class Gesture { None, Ink, Erase, Pan, Marquee, Move, TextFrame, TextResize, TextSelection };
     enum class Source { None, Pen, Mouse, Touch };
     void pointerPress(const QPointF& position, const QPointF& global, qreal pressure, Source source,
                       bool tailEraser = false, bool forcePan = false);
@@ -106,6 +115,8 @@ private:
                 bool normalCompletion, Tool completedTool);
     void beginTextEdit(const QUuid& id, const QRectF& newRect = {});
     void finishTextEdit(bool cancel);
+    void beginTextSelection(const QPointF& position);
+    void updateTextSelection(const QPointF& position);
     void positionEditor();
     QUuid textAt(const QPointF& pdfPoint) const;
     QSet<QUuid> objectsIn(const QRectF& pdfRect) const;
@@ -175,5 +186,13 @@ private:
     QUuid m_editTextId;
     QRectF m_editTextRect;
     PageAnnotations m_beforeTextEdit;
+    std::shared_ptr<const PdfTextPage> m_textPage;
+    QVector<TextMarkupQuad> m_selectedTextQuads;
+    QVector<TextMarkupQuad> m_searchQuads;
+    PdfTextSelection m_textPreview;
+    QPointF m_textDragStart;
+    QPointF m_textDragEnd;
+    int m_textFirstGlyph = -1;
+    int m_textLastGlyph = -1;
 };
 } // namespace propernotes

@@ -131,6 +131,7 @@ MainWindow::MainWindow(QWidget* parent)
 
 MainWindow::~MainWindow()
 {
+    if (m_review->cancelSearch) m_review->cancelSearch->store(true);
     m_renderEpoch->fetch_add(1);
     for (const auto& ticket : std::as_const(m_renderTickets)) ticket->store(true);
     m_workerThread->quit();
@@ -729,6 +730,7 @@ void MainWindow::updateUi()
         m_favoritesBar->setWritable(preferencesReady&&!m_closingAll&&!m_settingsDialog);
         m_favoritesBar->setActivationEnabled(filesReady&&!m_settingsDialog);
     }
+    updateTextReviewUi();
 }
 void MainWindow::showError(const QString& message)
 {
@@ -799,6 +801,7 @@ void MainWindow::resolveUnsaved(const std::function<void()>& continuation)
 void MainWindow::beginOpen(const QString& path)
 {
     m_view->finishGesture();
+    resetTextSearch(false);
     m_renderTimer->stop();m_sidebarPreviewTimer->stop();
     m_renderEpoch->fetch_add(1);
     for(const auto& ticket:std::as_const(m_renderTickets))ticket->store(true);
@@ -936,6 +939,7 @@ void MainWindow::saveFile(bool saveAs, std::function<void()> afterSuccess)
         return;
     }
     m_afterSave = std::move(afterSuccess);
+    if (m_review->running) resetTextSearch(false);
     m_fileBusy = true;
     m_renderTimer->stop();
     m_sidebarPreviewTimer->stop();

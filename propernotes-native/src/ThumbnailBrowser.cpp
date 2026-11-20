@@ -97,6 +97,8 @@ public:
             painter->setWorldTransform(cached->page.pdfToImage, true);
             const auto annotations = m_browser->m_annotations.constFind(page);
             if (annotations != m_browser->m_annotations.cend()) {
+                for (const auto& markup : annotations->textMarkups)
+                    paintTextMarkup(*painter, markup);
                 for (const auto& stroke : annotations->strokes)
                     painter->fillPath(inkStrokeOutline(stroke), stroke.color);
                 for (const auto& text : annotations->textBoxes)

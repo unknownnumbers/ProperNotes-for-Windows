@@ -8,6 +8,12 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The 0.3.2 source adds selection and copying from the existing PDF text layer,
+page-by-page literal search with cancellation and jump-to-result, and Highlight,
+Underline, Squiggly and StrikeOut. Review favorite presets store kind, color and
+opacity. Apply them after selecting text. Hold Shift while turning the wheel to
+pan the PDF horizontally. Ctrl + wheel zooms. See PORTABLE.md for the controls.
+
 The source for `0.3.1-native-preview.1` integrates up to 32 horizontal document tabs,
 with independent unsaved content, editing/view histories and reading positions. Closing
 a tab or exiting checks unsaved documents individually; a cancelled or unsuccessful
@@ -57,7 +63,7 @@ This separate native prototype uses Qt 6.11.3 and PDF4QT 1.7.0.0. It targets ord
 
 The toolbar exposes Pen, Eraser, Pan, Select/Move and Text Box tools. Input routing and single-use behavior follow the user-confirmed application policy. Device, palm-rejection, latency and PDF compatibility acceptance remain unperformed. This is not a port of every feature from the previous preview.
 
-Native edit data is versioned inside the PDF with standard Ink/FreeText annotations and compatible appearances. No adjacent project file is required. The older web preview's v1-v4 editing data, and unknown/inconsistent data, are protected from overwrite and may be opened read-only. Full web-legacy migration is outside this prototype; native v1 ink is supported.
+Native edit data is versioned inside the PDF with standard Ink, FreeText and text review annotations and their appearances. Files containing this build's text review marks use native schema v3. The app continues to read native v1 and v2. The older web preview uses a separate format and opens under overwrite protection.
 
 The 0.2.1 preview adds native settings for system/light/dark theme, page-sidebar visibility/width and the current pen style. Preferences are stored separately from PDF content in `propernotes-native-settings.json` beside the program. Corrupt, future or externally changed settings are not silently overwritten. Local recovery backups default to `Backups` beside the program, every 5 minutes after content changes, retaining 10 copies per PDF. Count 0 stops new backups and preserves existing copies. Registered old directories remain manageable after a directory change; migration is optional. The manager supports current/selected/all PDF cleanup and verified restoration to a separate PDF. Backup success never marks the current document as saved. Legacy web-preview backup catalogs are not imported by this native catalog.
 
@@ -68,6 +74,10 @@ Use `Start-ProperNotes.cmd` only in a complete compiled portable package. This p
 Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.0. Third-party terms, source and notices are preserved separately. See COPYRIGHT.md and the packaged licenses.
 
 ## Traditional Chinese (zh-TC)
+
+0.3.2 源碼加入 PDF 既有文字的拖選、複製、逐頁搜尋與結果跳轉，以及高亮、
+底線、波浪線和刪除線。審閱收藏儲存類型、顏色及不透明度，選好文字後再套用。
+正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。含本版審閱標記的 PDF 使用原生格式 v3，仍可讀原生 v1/v2。
 
 `0.3.1-native-preview.1` 源碼已接入最多 32 個橫向文件標籤, 各自保留未儲存內容、
 編輯/視角歷史及閱讀位置. 關閉標籤或退出時逐一確認未儲存文件, 取消或儲存失敗
@@ -105,6 +115,10 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.2 源码加入 PDF 既有文字的拖选、复制、逐页搜索与结果跳转，以及高亮、
+下划线、波浪线和删除线。审阅收藏保存类型、颜色和不透明度，选好文字后再应用。
+正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。含本版审阅标记的 PDF 使用原生格式 v3，仍可读原生 v1/v2。
 
 `0.3.1-native-preview.1` 源码已接入最多 32 个横向文档标签, 各自保留未保存内容、
 编辑/视角历史及阅读位置. 关闭标签或退出时逐一确认未保存文档, 取消或保存失败

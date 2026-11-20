@@ -21,6 +21,8 @@ The 0.3.0 native source adds single/facing continuous and paged reading, fit wid
 
 The 0.3.1 native source adds horizontal document tabs with independent edit/view histories, recent files, reading-state and lazy session recovery, and a single dockable/floating favorites bar with tool/style presets. Session metadata reopens current disk files; it does not contain unsaved annotations or undo stacks. Favorites activate styles for future annotations without changing existing objects or stored tool defaults. The workflow compiles and packages without launching or testing the application. 原生 0.3.1 增加多文件標籤、最近檔案、閱讀位置/延遲會話恢復與可停靠/浮動的單收藏欄, 仍待實際驗收. 原生 0.3.1 增加多文档标签、最近文件、阅读位置/按需会话恢复与可停靠/浮动的单收藏栏, 仍待实际验收.
 
+The 0.3.2 native source adds text selection and copy, cancellable search of the existing PDF text layer, and Highlight, Underline, Squiggly and StrikeOut review marks. Review styles can be saved as favorites. Shift + wheel pans the document horizontally and Ctrl + wheel zooms. Files containing new review marks use native format v3. 原生 0.3.2 加入既有文字的選取、搜尋及四種審閱標記，Shift + 滾輪左右平移。原生 0.3.2 加入已有文字的选择、搜索及四种审阅标记，Shift + 滚轮左右平移。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

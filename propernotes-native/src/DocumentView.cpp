@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "DocumentView.h"
 
+#include <QApplication>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QScrollBar>
@@ -16,7 +17,10 @@ namespace propernotes {
 namespace {
 constexpr qreal Gap = 8;
 constexpr qint64 CacheBytes = 96LL * 1024 * 1024;
+constexpr qint64 TextCacheBytes = 24LL * 1024 * 1024;
 constexpr int MaximumCanvases = 24;
+constexpr int MaximumCachedTextPages = 8;
+constexpr int MaximumPendingTextPages = 2;
 constexpr qreal MaximumPagePixels = 6'000'000;
 constexpr int MaximumScroll = 1'000'000'000;
 qreal boundedZoom(qreal value) { return std::clamp(value, qreal(0.25), qreal(4)); }
@@ -77,8 +81,13 @@ void DocumentView::clearDocument()
     m_cache.clear();
     m_errors.clear();
     m_wanted.clear();
+    m_pendingTextPages.clear();
+    m_textPages.clear();
     m_currentPage = -1;
     m_contentSize = {};
+    m_shiftWheelRemainder = 0;
+    clearTextSelection();
+    clearSearchResult();
     horizontalScrollBar()->setRange(0, 0);
     verticalScrollBar()->setRange(0, 0);
     viewport()->update();
@@ -93,6 +102,116 @@ void DocumentView::updatePageAnnotations(int page, const PageAnnotations& annota
         if (canvas->pageAnnotations() != annotations)
             canvas->setPageAnnotations(annotations);
     }
+}
+
+void DocumentView::requestTextPage(int page)
+{
+    if (m_suspended || m_tool != InkCanvas::Tool::TextSelect || page < 0 || page >= m_pages.size())
+        return;
+    auto cached = m_textPages.find(page);
+    if (cached != m_textPages.end()) {
+        cached->used = ++m_clock;
+        return;
+    }
+    if (m_pendingTextPages.contains(page) || m_pendingTextPages.size() >= MaximumPendingTextPages)
+        return;
+    m_pendingTextPages.insert(page);
+    Q_EMIT textPageRequested(page);
+}
+
+void DocumentView::deliverTextPage(int page, const std::shared_ptr<const PdfTextPage>& text)
+{
+    if (!m_pendingTextPages.remove(page) || page < 0 || page >= m_pages.size())
+        return;
+    if (text) {
+        m_textPages.insert(page, {text, ++m_clock});
+        if (auto* canvas = m_canvases.value(page, nullptr)) canvas->setTextPage(text);
+        trimTextCache();
+    }
+    // If rapid page navigation filled the two slots, request the page that
+    // ended up active when a slot frees. An absent result is retried on demand.
+    if (page != m_currentPage)
+        requestTextPage(m_currentPage);
+}
+
+void DocumentView::trimTextCache()
+{
+    const auto pageBytes = [](const PdfTextPage& text) -> qint64 {
+        return text.text.size() * qint64(sizeof(QChar)) + text.glyphs.size() * qint64(sizeof(PdfTextGlyph));
+    };
+    qint64 bytes = 0;
+    for (const auto& entry : std::as_const(m_textPages)) bytes += pageBytes(*entry.text);
+    while (m_textPages.size() > MaximumCachedTextPages || bytes > TextCacheBytes) {
+        int victim = -1;
+        quint64 oldest = std::numeric_limits<quint64>::max();
+        for (auto it = m_textPages.cbegin(); it != m_textPages.cend(); ++it) {
+            const auto* canvas = m_canvases.value(it.key(), nullptr);
+            if (it.key() == m_currentPage || (canvas && canvas->hasActiveGesture()))
+                continue;
+            if (it->used < oldest) {
+                victim = it.key();
+                oldest = it->used;
+            }
+        }
+        if (victim < 0)
+            break;
+        bytes -= pageBytes(*m_textPages.take(victim).text);
+        if (auto* canvas = m_canvases.value(victim, nullptr)) canvas->setTextPage({});
+    }
+}
+
+void DocumentView::clearTextSelection()
+{
+    if (m_textSelectionPage < 0)
+        return;
+    if (auto* canvas = m_canvases.value(m_textSelectionPage, nullptr)) canvas->setTextSelection({});
+    m_textSelection = {};
+    m_textSelectionPage = -1;
+    Q_EMIT textSelectionChanged();
+}
+
+void DocumentView::clearSearchResult()
+{
+    if (auto* canvas = m_canvases.value(m_searchPage, nullptr)) canvas->setSearchHighlight({});
+    m_searchPage = -1;
+    m_searchQuads.clear();
+}
+
+void DocumentView::showSearchResult(int page, const QVector<TextMarkupQuad>& quads)
+{
+    if (page < 0 || page >= m_pages.size())
+        return;
+    clearSearchResult();
+    if (quads.isEmpty()) {
+        goToPage(page);
+        return;
+    }
+
+    QRectF bounds;
+    for (const auto& quad : quads) {
+        QPolygonF polygon;
+        polygon << quad.topLeft << quad.topRight << quad.bottomRight << quad.bottomLeft;
+        bounds = bounds.united(polygon.boundingRect());
+    }
+    m_searchPage = page;
+    m_searchQuads = quads;
+    if (auto* canvas = m_canvases.value(page, nullptr)) canvas->setSearchHighlight(quads);
+
+    QScopedValueRollback<bool> adjusting(m_adjusting, true);
+    finishGesture();
+    m_currentPage = page;
+    if (m_zoomMode != ZoomMode::Free)
+        m_zoom = fittedZoom();
+    rebuildLayout();
+    const QRectF pageRect = m_pages[page].pdfRect.normalized();
+    const auto center = bounds.center();
+    const QPointF anchor(std::clamp(center.x(), pageRect.left(), pageRect.right()),
+                         std::clamp(center.y(), pageRect.top(), pageRect.bottom()));
+    const ViewState state{page, anchor, {0.5, 0.5}, m_zoom, m_layout, m_zoomMode, true};
+    restoreAnchor(state);
+    refreshVisible();
+    Q_EMIT currentPageChanged(m_currentPage);
+    Q_EMIT viewStateChanged(state, QStringLiteral("search"));
 }
 
 QPointF DocumentView::offset() const
@@ -422,6 +541,10 @@ void DocumentView::refreshVisible()
             configureCanvas(canvas);
             const auto& geometry = m_pages[page];
             canvas->setPage(page, {}, geometry.pdfToDisplay, geometry.pdfRect, 1, m_annotations.value(page));
+            const auto cachedText = m_textPages.constFind(page);
+            if (cachedText != m_textPages.cend()) canvas->setTextPage(cachedText->text);
+            if (m_textSelectionPage == page) canvas->setTextSelection(m_textSelection.quads);
+            if (m_searchPage == page) canvas->setSearchHighlight(m_searchQuads);
             connect(canvas, &InkCanvas::annotationsCommitted, this,
                 [this](int index, const PageAnnotations& before, const PageAnnotations& after, const QString& reason, const QUuid& focus) {
                     m_annotations[index] = after;
@@ -430,6 +553,28 @@ void DocumentView::refreshVisible()
             connect(canvas, &InkCanvas::normalToolCompleted, this, &DocumentView::normalToolCompleted);
             connect(canvas, &InkCanvas::selectionChanged, this, &DocumentView::selectionChanged);
             connect(canvas, &InkCanvas::textEditingChanged, this, &DocumentView::textEditingChanged);
+            connect(canvas, &InkCanvas::textPageRequested, this, &DocumentView::requestTextPage);
+            connect(canvas, &InkCanvas::textSelectionStarted, this, &DocumentView::clearTextSelection);
+            connect(canvas, &InkCanvas::textSelectionFinished, this,
+                [this, canvas](int index, const PdfTextSelection& selection, const QPointF& releasedAt) {
+                if (m_canvases.value(index, nullptr) != canvas || m_tool != InkCanvas::Tool::TextSelect)
+                    return;
+                const QPointF released = QPointF(canvas->mapTo(viewport(), releasedAt.toPoint())) + offset();
+                const int releasePage = pageAt(released);
+                if (releasePage >= 0 && releasePage != index) {
+                    constexpr int margin = InkCanvas::PageMargin;
+                    const QRectF paper = m_pagePositions[releasePage].adjusted(margin, margin, -margin, -margin);
+                    if (paper.contains(released)) {
+                        Q_EMIT activity(QStringLiteral("请在同一页内选择正文。"));
+                        return;
+                    }
+                }
+                clearTextSelection();
+                m_textSelection = selection;
+                m_textSelectionPage = index;
+                canvas->setTextSelection(selection.quads);
+                Q_EMIT textSelectionChanged();
+            });
             connect(canvas, &InkCanvas::activity, this, &DocumentView::activity);
             connect(canvas, &InkCanvas::operationFinished, this, [this] { m_refreshTimer.start(0); });
             connect(canvas, &InkCanvas::penContactChanged, this, [this](bool) { updatePenContactGate(); });
@@ -455,6 +600,7 @@ void DocumentView::refreshVisible()
         invalidateRequest();
     trimCache();
     requestNext();
+    requestTextPage(m_currentPage);
     viewport()->update();
 }
 
@@ -644,9 +790,34 @@ void DocumentView::wheelEvent(QWheelEvent* event)
         const qreal delta = event->angleDelta().y() != 0 ? event->angleDelta().y() : event->pixelDelta().y();
         setZoom(m_zoom * std::pow(1.0015, delta), event->position());
         event->accept();
-    } else {
-        QAbstractScrollArea::wheelEvent(event);
+        return;
     }
+
+    const auto modifiers = event->modifiers();
+    const auto angle = event->angleDelta();
+    const auto pixels = event->pixelDelta();
+    const bool shiftOnly = modifiers == Qt::ShiftModifier;
+    // Preserve genuine horizontal wheel or touchpad input. Only turn the
+    // vertical component of a Shift + wheel gesture into horizontal motion.
+    const bool vertical = (pixels.y() != 0 || angle.y() != 0) &&
+        (pixels.isNull() ? std::abs(angle.y()) >= std::abs(angle.x()) : std::abs(pixels.y()) >= std::abs(pixels.x()));
+    if (shiftOnly && vertical) {
+        auto* bar = horizontalScrollBar();
+        if (!hasActiveGesture() && bar->maximum() > bar->minimum()) {
+            const qreal delta = pixels.y() != 0 ? pixels.y() / m_horizontalUnit :
+                angle.y() / 120.0 * QApplication::wheelScrollLines() * bar->singleStep();
+            const qreal step = std::trunc(m_shiftWheelRemainder + delta);
+            m_shiftWheelRemainder += delta - step;
+            const qreal target = bar->value() - step;
+            const qreal clamped = std::clamp(target, qreal(bar->minimum()), qreal(bar->maximum()));
+            if (target != clamped) m_shiftWheelRemainder = 0;
+            bar->setValue(int(clamped));
+        }
+        event->accept();
+        return;
+    }
+    m_shiftWheelRemainder = 0;
+    QAbstractScrollArea::wheelEvent(event);
 }
 
 void DocumentView::finishGesture()
@@ -679,11 +850,24 @@ void DocumentView::clearSelection()
 {
     for (auto* canvas : std::as_const(m_canvases))
         canvas->clearSelection();
+    clearTextSelection();
+}
+
+void DocumentView::setTool(InkCanvas::Tool tool)
+{
+    if (m_tool == tool)
+        return;
+    m_tool = tool;
+    for (auto* canvas : std::as_const(m_canvases))
+        canvas->setTool(tool);
+    if (tool == InkCanvas::Tool::TextSelect)
+        requestTextPage(m_currentPage);
+    else
+        clearTextSelection();
 }
 
 #define PROPERNOTES_CANVAS_OPTION(method, member, type, setter) \
 void DocumentView::method(type value) { member = value; for (auto* canvas : std::as_const(m_canvases)) canvas->setter(value); }
-PROPERNOTES_CANVAS_OPTION(setTool, m_tool, InkCanvas::Tool, setTool)
 PROPERNOTES_CANVAS_OPTION(setPenColor, m_penColor, const QColor&, setPenColor)
 PROPERNOTES_CANVAS_OPTION(setPenWidth, m_penWidth, qreal, setPenWidth)
 PROPERNOTES_CANVAS_OPTION(setPenOpacity, m_penOpacity, qreal, setPenOpacity)

@@ -36,6 +36,7 @@
 #include <QSet>
 #include <QStringList>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -48,8 +49,10 @@ constexpr auto NativeKey = "ProperNotesNativeInk";
 constexpr auto OwnerName = "ProperNotesNative";
 constexpr auto IdPrefix = "ProperNotes.NativeInk/";
 constexpr auto TextIdPrefix = "ProperNotes.NativeText/";
+constexpr auto MarkupIdPrefix = "ProperNotes.NativeMarkup/";
 constexpr int InkFormatVersion = 1; // Its pressure/outline interpretation never changes.
-constexpr int FormatVersion = 2;
+constexpr int TextFormatVersion = 2;
+constexpr int MarkupFormatVersion = 3;
 constexpr qint64 MaxFileBytes = 512LL * 1024 * 1024;
 constexpr qsizetype MaxMetadataBytes = 64 * 1024 * 1024;
 constexpr qsizetype MaxTotalPoints = 2'000'000;
@@ -60,6 +63,9 @@ constexpr qsizetype MaxTextLength = 100'000;
 constexpr qsizetype MaxTotalTextLength = 2'000'000;
 constexpr int MaxTextImageSide = 4096;
 constexpr qint64 MaxTextImagePixels = 8'000'000;
+// PDF4QT serializes PDF real objects rounded to five fractional digits.
+// Private JSON and appearance content are compared independently at full precision.
+constexpr double PdfRealWriteTolerance = 5.1e-6;
 
 using Object = pdf::PDFObject;
 using Dictionary = pdf::PDFDictionary;
@@ -254,7 +260,111 @@ QByteArray textBoxDigest(const TextBox& box)
     return sha256(QJsonDocument(textBoxJson(box)).toJson(QJsonDocument::Compact)).toHex();
 }
 
-QJsonObject pageJson(const PageAnnotations& page)
+QByteArray markupSubtype(TextMarkupKind kind)
+{
+    switch (kind) {
+    case TextMarkupKind::Highlight: return "Highlight";
+    case TextMarkupKind::Underline: return "Underline";
+    case TextMarkupKind::StrikeOut: return "StrikeOut";
+    case TextMarkupKind::Squiggly: return "Squiggly";
+    }
+    return {};
+}
+
+// Adobe Reader and the pinned PDF4QT use the Z order for QuadPoints.
+// The explicit AP remains authoritative for the mark's visual appearance.
+std::array<QPointF, 4> markupQuadPoints(const TextMarkupQuad& quad)
+{
+    return { quad.topLeft, quad.topRight, quad.bottomLeft, quad.bottomRight };
+}
+
+QJsonObject textMarkupJson(const TextMarkup& markup)
+{
+    QJsonArray quads;
+    for (const auto& quad : markup.quads) {
+        QJsonArray coordinates;
+        for (const auto& point : markupQuadPoints(quad)) {
+            coordinates.append(point.x());
+            coordinates.append(point.y());
+        }
+        quads.append(coordinates);
+    }
+    return { { "id", markup.id.toString(QUuid::WithoutBraces) },
+        { "kind", QString::fromLatin1(markupSubtype(markup.kind)) },
+        { "color", markup.color.name(QColor::HexArgb) }, { "quads", quads } };
+}
+
+QByteArray textMarkupDigest(const TextMarkup& markup)
+{
+    return sha256(QJsonDocument(textMarkupJson(markup)).toJson(QJsonDocument::Compact)).toHex();
+}
+
+struct MarkupBudget {
+    qsizetype marks = 0;
+    qsizetype quads = 0;
+    qsizetype pathElements = 0;
+
+    void add(const TextMarkup& markup, QSet<QUuid>& ids)
+    {
+        if (!validTextMarkup(markup))
+            fail(QStringLiteral("正文标记包含无效颜色、坐标或区域数量。"));
+        quads += markup.quads.size();
+        pathElements += textMarkupPathElements(markup);
+        if (ids.contains(markup.id) || ++marks > MaxDocumentTextMarkups
+            || quads > MaxDocumentTextMarkupQuads || pathElements > MaxDocumentTextMarkupPathElements)
+            fail(QStringLiteral("正文标记 ID 重复，或文档中的标记、区域或绘制点超出数量上限。"));
+        ids.insert(markup.id);
+    }
+};
+
+TextMarkup parseTextMarkup(const QJsonValue& value)
+{
+    const auto object = value.toObject();
+    if (!value.isObject() || object.size() != 4 || !object.value("id").isString()
+        || !object.value("kind").isString() || !object.value("color").isString()
+        || !object.value("quads").isArray())
+        fail(QStringLiteral("原生正文标记字段未知或缺失。"));
+    TextMarkup markup;
+    markup.id = QUuid(object.value("id").toString());
+    const QByteArray subtype = object.value("kind").toString().toLatin1();
+    if (subtype == "Highlight")
+        markup.kind = TextMarkupKind::Highlight;
+    else if (subtype == "Underline")
+        markup.kind = TextMarkupKind::Underline;
+    else if (subtype == "StrikeOut")
+        markup.kind = TextMarkupKind::StrikeOut;
+    else if (subtype == "Squiggly")
+        markup.kind = TextMarkupKind::Squiggly;
+    else
+        fail(QStringLiteral("原生正文标记种类未知。"));
+    const auto color = object.value("color").toString();
+    markup.color = QColor(color);
+    if (!markup.color.isValid() || markup.color.name(QColor::HexArgb) != color)
+        fail(QStringLiteral("原生正文标记颜色格式无效。"));
+    const auto quads = object.value("quads").toArray();
+    if (quads.isEmpty() || quads.size() > MaxTextMarkupQuads)
+        fail(QStringLiteral("原生正文标记区域数量无效。"));
+    markup.quads.reserve(quads.size());
+    for (const auto& quad : quads) {
+        const auto coordinates = quad.toArray();
+        if (coordinates.size() != 8
+            || !std::all_of(coordinates.begin(), coordinates.end(), [](const QJsonValue& n) { return n.isDouble(); }))
+            fail(QStringLiteral("原生正文标记坐标无效。"));
+        auto point = [&coordinates](int i) { return QPointF(coordinates[i].toDouble(), coordinates[i + 1].toDouble()); };
+        markup.quads.append({ point(0), point(2), point(4), point(6) });
+    }
+    return markup;
+}
+
+int formatVersionFor(const QVector<PageAnnotations>& pages)
+{
+    const bool hasMarkup = std::any_of(pages.cbegin(), pages.cend(), [](const PageAnnotations& page) {
+        return !page.textMarkups.isEmpty();
+    });
+    return hasMarkup ? MarkupFormatVersion : TextFormatVersion;
+}
+
+QJsonObject pageJson(const PageAnnotations& page, int version)
 {
     QJsonArray strokes;
     for (const auto& stroke : page.strokes)
@@ -262,17 +372,25 @@ QJsonObject pageJson(const PageAnnotations& page)
     QJsonArray textBoxes;
     for (const auto& box : page.textBoxes)
         textBoxes.append(textBoxJson(box));
-    return QJsonObject { { "strokes", strokes }, { "textBoxes", textBoxes } };
+    QJsonObject result { { "strokes", strokes }, { "textBoxes", textBoxes } };
+    if (version == MarkupFormatVersion) {
+        QJsonArray textMarkups;
+        for (const auto& markup : page.textMarkups)
+            textMarkups.append(textMarkupJson(markup));
+        result.insert("textMarkups", textMarkups);
+    }
+    return result;
 }
 
 QByteArray editData(const QVector<PageAnnotations>& pages,
                   const QHash<QUuid, QByteArray>* textAppearanceHashes = nullptr)
 {
+    const int version = formatVersionFor(pages);
     QJsonArray pageArray;
     for (const auto& page : pages)
-        pageArray.append(pageJson(page));
+        pageArray.append(pageJson(page, version));
     QJsonObject root { { "application", "ProperNotes.Native" },
-        { "version", FormatVersion }, { "pages", pageArray } };
+        { "version", version }, { "pages", pageArray } };
     if (textAppearanceHashes) {
         QJsonObject appearances;
         for (auto it = textAppearanceHashes->cbegin(); it != textAppearanceHashes->cend(); ++it)
@@ -293,7 +411,7 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
     if (error.error != QJsonParseError::NoError || !json.isObject()
         || root.value("application").toString() != QStringLiteral("ProperNotes.Native")
         || root.value("version").toDouble(-1) != version
-        || (version != InkFormatVersion && version != FormatVersion)
+        || (version != InkFormatVersion && version != TextFormatVersion && version != MarkupFormatVersion)
         || !root.value("pages").isArray()
         || root.value("pages").toArray().size() != pageCount)
         fail(QStringLiteral("原生编辑数据损坏或版本不支持, 不允许覆盖保存."));
@@ -304,23 +422,29 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
     qsizetype textCount = 0;
     qsizetype textLength = 0;
     QSet<QUuid> textIds;
+    MarkupBudget markupBudget;
     const QJsonArray pages = root.value("pages").toArray();
     for (int p = 0; p < pageCount; ++p) {
         QJsonArray strokes;
         QJsonArray textBoxes;
+        QJsonArray textMarkups;
         if (version == InkFormatVersion) {
             if (!pages[p].isArray())
                 fail(QStringLiteral("原生 v1 页笔迹数据无效."));
             strokes = pages[p].toArray();
         } else {
             if (!pages[p].isObject())
-                fail(QStringLiteral("原生 v2 页面对象无效."));
+                fail(QStringLiteral("原生页面对象无效."));
             const auto page = pages[p].toObject();
-            if (page.size() != 2 || !page.value("strokes").isArray()
+            const bool hasMarkupField = version == MarkupFormatVersion;
+            if (page.size() != (hasMarkupField ? 3 : 2) || !page.value("strokes").isArray()
+                || (hasMarkupField && !page.value("textMarkups").isArray())
                 || !page.value("textBoxes").isArray())
-                fail(QStringLiteral("原生 v2 页面字段未知或缺失, 不允许丢弃未知对象."));
+                fail(QStringLiteral("原生页面字段未知或缺失, 不允许丢弃未知对象."));
             strokes = page.value("strokes").toArray();
             textBoxes = page.value("textBoxes").toArray();
+            if (hasMarkupField)
+                textMarkups = page.value("textMarkups").toArray();
         }
         for (const auto& value : strokes) {
             if (!value.isObject())
@@ -378,10 +502,15 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
             textIds.insert(box.id);
             result[p].textBoxes.append(std::move(box));
         }
+        for (const auto& value : textMarkups) {
+            auto markup = parseTextMarkup(value);
+            markupBudget.add(markup, ids);
+            result[p].textMarkups.append(std::move(markup));
+        }
     }
-    if (version == FormatVersion) {
+    if (version != InkFormatVersion) {
         if (root.size() != 4 || !root.value("textAppearances").isObject())
-            fail(QStringLiteral("原生 v2 外观索引缺失或含未知数据."));
+            fail(QStringLiteral("原生外观索引缺失或含未知数据."));
         const auto appearances = root.value("textAppearances").toObject();
         if (appearances.size() != textIds.size())
             fail(QStringLiteral("原生文字外观索引数量不匹配."));
@@ -414,6 +543,8 @@ QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box);
 bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                            const TextBox& box, const QByteArray& expectedAppearanceHash,
                            QVector<Reference>& ownedResources);
+bool markupAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
+                             const TextMarkup& markup, Reference pageReference);
 
 bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                        const InkStroke& stroke)
@@ -433,8 +564,8 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
         const double x = numberValue(document, path.getArray()->getItem(size_t(i) * 2));
         const double y = numberValue(document, path.getArray()->getItem(size_t(i) * 2 + 1));
         if (!std::isfinite(x) || !std::isfinite(y)
-            || std::abs(x - stroke.points[i].position.x()) > 1e-6
-            || std::abs(y - stroke.points[i].position.y()) > 1e-6)
+            || std::abs(x - stroke.points[i].position.x()) > PdfRealWriteTolerance
+            || std::abs(y - stroke.points[i].position.y()) > PdfRealWriteTolerance)
             return false;
     }
     const QRectF box = inkStrokeOutline(stroke).boundingRect();
@@ -444,7 +575,7 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
     const double expected[] = { box.left(), box.top(), box.right(), box.bottom() };
     for (size_t i = 0; i < 4; ++i) {
         const double actual = numberValue(document, rect.getArray()->getItem(i));
-        if (!std::isfinite(actual) || std::abs(actual - expected[i]) > 1e-5)
+        if (!std::isfinite(actual) || std::abs(actual - expected[i]) > PdfRealWriteTolerance)
             return false;
     }
     const auto* appearances = document.getDictionaryFromObject(annotation.get("AP"));
@@ -461,7 +592,7 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
         size_t index = 0;
         for (double expectedValue : expectedValues) {
             const double actual = numberValue(document, value.getArray()->getItem(index++));
-            if (!std::isfinite(actual) || std::abs(actual - expectedValue) > 1e-6)
+            if (!std::isfinite(actual) || std::abs(actual - expectedValue) > PdfRealWriteTolerance)
                 return false;
         }
         return true;
@@ -477,7 +608,7 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
         return false;
     for (const char* key : { "ca", "CA" }) {
         const double actual = numberValue(document, alpha->get(key));
-        if (!std::isfinite(actual) || std::abs(actual - stroke.color.alphaF()) > 1e-6)
+        if (!std::isfinite(actual) || std::abs(actual - stroke.color.alphaF()) > PdfRealWriteTolerance)
             return false;
     }
     return document.getDecodedStream(appearance.getStream()) == appearanceContent(stroke, box);
@@ -523,7 +654,8 @@ LoadedState loadState(const QByteArray& bytes)
                 continue;
             if (stringValue(state.base, annotation->get("PNOwner")) == OwnerName
                 || stringValue(state.base, annotation->get("NM")).startsWith(IdPrefix)
-                || stringValue(state.base, annotation->get("NM")).startsWith(TextIdPrefix))
+                || stringValue(state.base, annotation->get("NM")).startsWith(TextIdPrefix)
+                || stringValue(state.base, annotation->get("NM")).startsWith(MarkupIdPrefix))
                 reservedAnnotations = true;
         }
     }
@@ -540,13 +672,14 @@ LoadedState loadState(const QByteArray& bytes)
             || !hasOnlyKeys(*native.getDictionary(), { "Type", "Version", "Data", "SHA256" }))
             fail(QStringLiteral("原生编辑数据版本未知, 仅可阅读."));
         const double versionValue = numberValue(state.base, native.getDictionary()->get("Version"));
-        if (versionValue != InkFormatVersion && versionValue != FormatVersion)
+        if (versionValue != InkFormatVersion && versionValue != TextFormatVersion
+            && versionValue != MarkupFormatVersion)
             fail(QStringLiteral("原生编辑数据版本未知, 仅可阅读."));
         const int version = int(versionValue);
         const auto& data = state.base.getObject(native.getDictionary()->get("Data"));
         if (!data.isStream())
             fail(QStringLiteral("原生编辑数据流缺失, 仅可阅读."));
-        // Versions 1 and 2 write an unfiltered JSON stream. Refuse transformed or
+        // These versions write an unfiltered JSON stream. Refuse transformed or
         // oversized private streams instead of decoding an unbounded payload.
         if (!data.getStream()->getDictionary()->get("Filter").isNull()
             || data.getStream()->getContent()->size() > MaxMetadataBytes)
@@ -560,6 +693,7 @@ LoadedState loadState(const QByteArray& bytes)
         for (int p = 0; p < count; ++p) {
             QHash<QUuid, InkStroke> expected;
             QHash<QUuid, TextBox> expectedText;
+            QHash<QUuid, const TextMarkup*> expectedMarkup;
             for (const auto& stroke : pages[p].strokes) {
                 expected.insert(stroke.id, stroke);
                 expectedIds.insert(stroke.id);
@@ -568,6 +702,10 @@ LoadedState loadState(const QByteArray& bytes)
                 expectedText.insert(box.id, box);
                 expectedIds.insert(box.id);
             }
+            for (const auto& markup : pages[p].textMarkups) {
+                expectedMarkup.insert(markup.id, &markup);
+                expectedIds.insert(markup.id);
+            }
             const auto* page = state.base.getCatalog()->getPage(size_t(p));
             for (const auto& reference : page->getAnnotations()) {
                 const auto* annotation = state.base.getDictionaryFromObject(Object::createReference(reference));
@@ -575,18 +713,27 @@ LoadedState loadState(const QByteArray& bytes)
                     continue;
                 const bool owner = stringValue(state.base, annotation->get("PNOwner")) == OwnerName;
                 const QByteArray name = stringValue(state.base, annotation->get("NM"));
-                const bool reserved = name.startsWith(IdPrefix) || name.startsWith(TextIdPrefix);
+                const bool isMarkup = name.startsWith(MarkupIdPrefix);
+                const bool reserved = name.startsWith(IdPrefix) || name.startsWith(TextIdPrefix) || isMarkup;
                 if (!owner && !reserved)
                     continue;
                 const bool isText = stringValue(state.base, annotation->get("Subtype")) == "FreeText";
-                const QUuid id(QString::fromUtf8(stringValue(state.base,
-                    annotation->get(isText ? "PNTextID" : "PNStrokeID"))));
+                const char* key = isMarkup ? "PNMarkupID" : isText ? "PNTextID" : "PNStrokeID";
+                const QUuid id(QString::fromUtf8(stringValue(state.base, annotation->get(key))));
                 QVector<Reference> resources;
-                const bool matches = isText
-                    ? (expectedText.contains(id) && textAnnotationMatches(state.base, *annotation,
-                        expectedText.value(id), textAppearanceHashes.value(id), resources))
-                    : (expected.contains(id) && annotationMatches(state.base, *annotation, expected.value(id)));
-                if (!owner || id.isNull() || found.contains(id) || !matches)
+                bool matches = false;
+                if (owner && !id.isNull() && !found.contains(id)) {
+                    if (isMarkup) {
+                        if (const auto* markup = expectedMarkup.value(id, nullptr))
+                            matches = markupAnnotationMatches(state.base, *annotation, *markup, page->getPageReference());
+                    } else if (isText) {
+                        matches = expectedText.contains(id) && textAnnotationMatches(state.base, *annotation,
+                            expectedText.value(id), textAppearanceHashes.value(id), resources);
+                    } else {
+                        matches = expected.contains(id) && annotationMatches(state.base, *annotation, expected.value(id));
+                    }
+                }
+                if (!matches)
                     fail(QStringLiteral("原生批注与编辑数据不一致, 仅可阅读, 不覆盖外部修改."));
                 found.insert(id, reference);
                 OwnedAnnotation owned { reference, std::nullopt, resources };
@@ -643,14 +790,14 @@ QByteArray real(double value)
     return QByteArray::number(std::abs(value) < 1e-12 ? 0.0 : value, 'g', 15);
 }
 
-QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box)
+QByteArray pathAppearanceContent(const QPainterPath& path, const QRectF& box, const QColor& color,
+                                 QByteArray (*number)(double))
 {
-    const QPainterPath path = inkStrokeOutline(stroke);
     QByteArray bytes = "q\n/PNAlpha gs\n";
-    bytes += real(stroke.color.redF()) + ' ' + real(stroke.color.greenF()) + ' '
-             + real(stroke.color.blueF()) + " rg\n";
+    bytes += number(color.redF()) + ' ' + number(color.greenF()) + ' '
+             + number(color.blueF()) + " rg\n";
     auto appendPoint = [&](qreal x, qreal y) {
-        bytes += real(x - box.left()) + ' ' + real(y - box.top());
+        bytes += number(x - box.left()) + ' ' + number(y - box.top());
     };
     for (int i = 0; i < path.elementCount(); ++i) {
         const auto element = path.elementAt(i);
@@ -670,12 +817,19 @@ QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box)
     return bytes;
 }
 
-Object createAppearance(const InkStroke& stroke, const QRectF& box)
+QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box)
+{
+    return pathAppearanceContent(inkStrokeOutline(stroke), box, stroke.color, real);
+}
+
+Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray bytes, bool multiply)
 {
     DictBuilder alpha;
     put(alpha, "Type", Object::createName(QByteArray("ExtGState")));
-    put(alpha, "ca", Object::createReal(stroke.color.alphaF()));
-    put(alpha, "CA", Object::createReal(stroke.color.alphaF()));
+    put(alpha, "ca", Object::createReal(color.alphaF()));
+    put(alpha, "CA", Object::createReal(color.alphaF()));
+    if (multiply)
+        put(alpha, "BM", Object::createName(QByteArray("Multiply")));
     DictBuilder states;
     put(states, "PNAlpha", Object::createDictionary(std::move(alpha)));
     DictBuilder resources;
@@ -687,7 +841,28 @@ Object createAppearance(const InkStroke& stroke, const QRectF& box)
     put(form, "BBox", arrayOf({ 0, 0, box.width(), box.height() }));
     put(form, "Matrix", arrayOf({ 1, 0, 0, 1, 0, 0 }));
     put(form, "Resources", Object::createDictionary(std::move(resources)));
-    return streamObject(std::move(form), appearanceContent(stroke, box));
+    return streamObject(std::move(form), std::move(bytes));
+}
+
+Object createAppearance(const InkStroke& stroke, const QRectF& box)
+{
+    return createVectorAppearance(box, stroke.color, appearanceContent(stroke, box), false);
+}
+
+QByteArray pdfPathNumber(double value)
+{
+    // PDF content streams use decimal real tokens without scientific notation.
+    QByteArray token = QByteArray::number(value, 'f', 8);
+    while (token.endsWith('0'))
+        token.chop(1);
+    if (token.endsWith('.'))
+        token.chop(1);
+    return token == "-0" ? QByteArray("0") : token;
+}
+
+QByteArray markupAppearanceContent(const TextMarkup& markup, const QRectF& box)
+{
+    return pathAppearanceContent(textMarkupPath(markup), box, markup.color, pdfPathNumber);
 }
 
 QByteArray pdfUnicodeString(const QString& text)
@@ -820,10 +995,76 @@ bool matchesNumbers(const pdf::PDFDocument& document, const Object& object,
     size_t index = 0;
     for (double value : expected) {
         const double actual = numberValue(document, array.getArray()->getItem(index++));
-        if (!std::isfinite(actual) || std::abs(actual - value) > 1e-6)
+        if (!std::isfinite(actual) || std::abs(actual - value) > PdfRealWriteTolerance)
             return false;
     }
     return true;
+}
+
+bool markupAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
+                             const TextMarkup& markup, Reference pageReference)
+{
+    const QByteArray id = markup.id.toByteArray(QUuid::WithoutBraces);
+    const QRectF box = textMarkupBounds(markup);
+    const auto& page = annotation.get("P");
+    if (stringValue(document, annotation.get("Type")) != "Annot"
+        || stringValue(document, annotation.get("Subtype")) != markupSubtype(markup.kind)
+        || numberValue(document, annotation.get("PNVersion")) != MarkupFormatVersion
+        || stringValue(document, annotation.get("NM")) != QByteArray(MarkupIdPrefix) + id
+        || stringValue(document, annotation.get("PNMarkupID")) != id
+        || stringValue(document, annotation.get("PNMarkupSHA256")) != textMarkupDigest(markup)
+        || !page.isReference() || page.getReference() != pageReference
+        || numberValue(document, annotation.get("F")) != 4
+        || !annotation.get("AS").isNull() || !annotation.get("OC").isNull() || !annotation.get("IRT").isNull()
+        || !matchesNumbers(document, annotation.get("Rect"), { box.left(), box.top(), box.right(), box.bottom() })
+        || !matchesNumbers(document, annotation.get("C"), { markup.color.redF(), markup.color.greenF(), markup.color.blueF() }))
+        return false;
+    const auto& coordinates = document.getObject(annotation.get("QuadPoints"));
+    if (!coordinates.isArray() || coordinates.getArray()->getCount() != size_t(markup.quads.size()) * 8)
+        return false;
+    size_t index = 0;
+    for (const auto& quad : markup.quads) {
+        for (const auto& point : markupQuadPoints(quad)) {
+            const double x = numberValue(document, coordinates.getArray()->getItem(index++));
+            const double y = numberValue(document, coordinates.getArray()->getItem(index++));
+            if (!std::isfinite(x) || !std::isfinite(y)
+                || std::abs(x - point.x()) > PdfRealWriteTolerance || std::abs(y - point.y()) > PdfRealWriteTolerance)
+                return false;
+        }
+    }
+    const auto* ap = document.getDictionaryFromObject(annotation.get("AP"));
+    if (!ap || !hasOnlyKeys(*ap, { "N" }) || !ap->get("N").isReference())
+        return false;
+    const auto& appearance = document.getObject(ap->get("N"));
+    if (!appearance.isStream())
+        return false;
+    const auto* form = appearance.getStream()->getDictionary();
+    if (!hasOnlyKeys(*form, { "Type", "Subtype", "FormType", "BBox", "Matrix", "Resources", "Length" })
+        || stringValue(document, form->get("Type")) != "XObject"
+        || stringValue(document, form->get("Subtype")) != "Form"
+        || numberValue(document, form->get("FormType")) != 1
+        || !matchesNumbers(document, form->get("BBox"), { 0, 0, box.width(), box.height() })
+        || !matchesNumbers(document, form->get("Matrix"), { 1, 0, 0, 1, 0, 0 }))
+        return false;
+    const auto* resources = document.getDictionaryFromObject(form->get("Resources"));
+    const auto* states = resources ? document.getDictionaryFromObject(resources->get("ExtGState")) : nullptr;
+    const auto* alpha = states ? document.getDictionaryFromObject(states->get("PNAlpha")) : nullptr;
+    if (!alpha || !hasOnlyKeys(*resources, { "ExtGState" }) || !hasOnlyKeys(*states, { "PNAlpha" })
+        || !hasOnlyKeys(*alpha, { "Type", "ca", "CA", "BM" })
+        || stringValue(document, alpha->get("Type")) != "ExtGState")
+        return false;
+    if (markup.kind == TextMarkupKind::Highlight) {
+        if (stringValue(document, alpha->get("BM")) != "Multiply")
+            return false;
+    } else if (!alpha->get("BM").isNull()) {
+        return false;
+    }
+    for (double opacity : { numberValue(document, annotation.get("CA")),
+             numberValue(document, alpha->get("ca")), numberValue(document, alpha->get("CA")) }) {
+        if (!std::isfinite(opacity) || std::abs(opacity - markup.color.alphaF()) > PdfRealWriteTolerance)
+            return false;
+    }
+    return *appearance.getStream()->getContent() == markupAppearanceContent(markup, box);
 }
 
 bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
@@ -831,7 +1072,7 @@ bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& a
                            QVector<Reference>& ownedResources)
 {
     if (stringValue(document, annotation.get("Subtype")) != "FreeText"
-        || numberValue(document, annotation.get("PNVersion")) != FormatVersion
+        || numberValue(document, annotation.get("PNVersion")) != TextFormatVersion
         || stringValue(document, annotation.get("NM")) != QByteArray(TextIdPrefix) + box.id.toByteArray(QUuid::WithoutBraces)
         || stringValue(document, annotation.get("PNTextSHA256")) != textBoxDigest(box)
         || stringValue(document, annotation.get("PNTextAPSHA256")) != expectedAppearanceHash
@@ -902,7 +1143,12 @@ bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& a
 
 pdf::PDFDocument withAnnotations(const LoadedState& state)
 {
-    pdf::PDFDocumentBuilder builder(&state.base);
+    const int dataVersion = formatVersionFor(state.pages);
+    auto pdfVersion = state.base.getInfo()->version;
+    // The new squiggly/multiply/opacity appearances require PDF 1.4.
+    if (dataVersion == MarkupFormatVersion && (pdfVersion.major < 1 || (pdfVersion.major == 1 && pdfVersion.minor < 4)))
+        pdfVersion = pdf::PDFVersion(1, 4);
+    pdf::PDFDocumentBuilder builder(state.base.getStorage(), pdfVersion);
     const auto* catalog = catalogDictionary(state.base);
     QHash<QUuid, QByteArray> textAppearanceHashes;
     for (int p = 0; p < state.pages.size(); ++p) {
@@ -915,6 +1161,53 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
             fail(QStringLiteral("页面批注数组损坏, 未写入文件."));
         pdf::PDFArrayBuilder annotations = existing.isArray()
             ? pdf::PDFArrayBuilder(*existing.getArray()) : pdf::PDFArrayBuilder();
+        for (const auto& markup : state.pages[p].textMarkups) {
+            if (!validTextMarkup(markup))
+                fail(QStringLiteral("正文标记无效，未写入文件。"));
+            const QRectF box = textMarkupBounds(markup);
+            const QByteArray digest = textMarkupDigest(markup);
+            const QByteArray id = markup.id.toByteArray(QUuid::WithoutBraces);
+            const auto found = state.owned.constFind(markup.id);
+            const auto* previous = found == state.owned.cend() ? nullptr
+                : state.base.getDictionaryFromObject(Object::createReference(found.value().annotation));
+            const bool unchanged = previous && found.value().appearance
+                && stringValue(state.base, previous->get("PNMarkupSHA256")) == digest;
+            const auto appearance = unchanged ? *found.value().appearance : builder.addObject(
+                createVectorAppearance(box, markup.color, markupAppearanceContent(markup, box),
+                    markup.kind == TextMarkupKind::Highlight));
+            DictBuilder ap;
+            put(ap, "N", Object::createReference(appearance));
+            pdf::PDFArrayBuilder quadPoints;
+            for (const auto& quad : markup.quads) {
+                for (const auto& point : markupQuadPoints(quad)) {
+                    quadPoints.appendItem(Object::createReal(point.x()));
+                    quadPoints.appendItem(Object::createReal(point.y()));
+                }
+            }
+            DictBuilder annotation = previous ? DictBuilder(*previous) : DictBuilder();
+            put(annotation, "Type", Object::createName(QByteArray("Annot")));
+            put(annotation, "Subtype", Object::createName(markupSubtype(markup.kind)));
+            put(annotation, "Rect", arrayOf({ box.left(), box.top(), box.right(), box.bottom() }));
+            put(annotation, "P", Object::createReference(page->getPageReference()));
+            put(annotation, "F", Object::createInteger(4));
+            put(annotation, "C", arrayOf({ markup.color.redF(), markup.color.greenF(), markup.color.blueF() }));
+            put(annotation, "CA", Object::createReal(markup.color.alphaF()));
+            put(annotation, "QuadPoints", Object::createArray(std::move(quadPoints)));
+            put(annotation, "AP", Object::createDictionary(std::move(ap)));
+            put(annotation, "NM", Object::createString(QByteArray(MarkupIdPrefix) + id));
+            put(annotation, "PNOwner", Object::createName(QByteArray(OwnerName)));
+            put(annotation, "PNVersion", Object::createInteger(MarkupFormatVersion));
+            put(annotation, "PNMarkupID", Object::createString(id));
+            put(annotation, "PNMarkupSHA256", Object::createString(digest));
+            Reference reference;
+            if (found != state.owned.cend()) {
+                reference = found.value().annotation;
+                builder.setObject(reference, Object::createDictionary(std::move(annotation)));
+            } else {
+                reference = builder.addObject(Object::createDictionary(std::move(annotation)));
+            }
+            annotations.appendItem(Object::createReference(reference));
+        }
         for (const auto& stroke : state.pages[p].strokes) {
             validateStroke(stroke);
             const QRectF box = inkStrokeOutline(stroke).boundingRect();
@@ -997,7 +1290,7 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
             put(annotation, "AP", Object::createDictionary(std::move(ap)));
             put(annotation, "NM", Object::createString(QByteArray(TextIdPrefix) + box.id.toByteArray(QUuid::WithoutBraces)));
             put(annotation, "PNOwner", Object::createName(QByteArray(OwnerName)));
-            put(annotation, "PNVersion", Object::createInteger(FormatVersion));
+            put(annotation, "PNVersion", Object::createInteger(TextFormatVersion));
             put(annotation, "PNTextID", Object::createString(box.id.toByteArray(QUuid::WithoutBraces)));
             put(annotation, "PNTextSHA256", Object::createString(textBoxDigest(box)));
             put(annotation, "PNTextAPSHA256", Object::createString(digest));
@@ -1021,7 +1314,7 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
     const auto dataReference = builder.addObject(streamObject(std::move(dataDictionary), data));
     DictBuilder metadata;
     put(metadata, "Type", Object::createName(QByteArray(NativeKey)));
-    put(metadata, "Version", Object::createInteger(FormatVersion));
+    put(metadata, "Version", Object::createInteger(dataVersion));
     put(metadata, "Data", Object::createReference(dataReference));
     put(metadata, "SHA256", Object::createString(sha256(data).toHex()));
     DictBuilder updatedCatalog(*catalog);
@@ -1330,6 +1623,11 @@ QString PdfDocument::readOnlyReason() const { return d->state ? d->state->readOn
 QString PdfDocument::lastError() const { return d->error; }
 QString PdfDocument::currentPath() const { return d->path; }
 bool PdfDocument::isModified() const { return d->modified; }
+
+pdf::PDFDocument* PdfDocument::textSourceDocument() const
+{
+    return d->state ? &d->state->base : nullptr;
+}
 int PdfDocument::pageCount() const { return d->state ? int(d->state->pages.size()) : 0; }
 
 QRectF PdfDocument::pageRect(int index) const
@@ -1375,11 +1673,17 @@ bool PdfDocument::setAnnotations(int index, const PageAnnotations& annotations)
                 fail(QStringLiteral("文字框颜色无效."));
             box.color = QColor(box.color.name(QColor::HexArgb));
         }
+        for (auto& markup : normalized.textMarkups) {
+            if (!markup.color.isValid())
+                fail(QStringLiteral("正文标记颜色无效。"));
+            markup.color = QColor(markup.color.name(QColor::HexArgb));
+        }
         QSet<QUuid> ids;
         qsizetype count = 0;
         qsizetype strokeCount = 0;
         qsizetype textCount = 0;
         qsizetype textLength = 0;
+        MarkupBudget markupBudget;
         for (int p = 0; p < pageCount(); ++p) {
             const auto& page = p == index ? normalized : d->state->pages[p];
             for (const auto& stroke : page.strokes) {
@@ -1398,6 +1702,8 @@ bool PdfDocument::setAnnotations(int index, const PageAnnotations& annotations)
                     fail(QStringLiteral("文字框 ID 重复, 对象数量或文本长度超出原型范围."));
                 ids.insert(box.id);
             }
+            for (const auto& markup : page.textMarkups)
+                markupBudget.add(markup, ids);
         }
         if (!(d->state->pages[index] == normalized)) {
             d->state->pages[index] = std::move(normalized);

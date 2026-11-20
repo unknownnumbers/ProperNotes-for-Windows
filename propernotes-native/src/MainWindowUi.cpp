@@ -122,6 +122,7 @@ void MainWindow::buildUi() {
     m_splitter=new QSplitter;m_splitter->setChildrenCollapsible(false);m_navigation=new QWidget;m_navigation->setMinimumWidth(112);m_navigation->setMaximumWidth(400);
     auto* nav=new QVBoxLayout(m_navigation);nav->setContentsMargins(0,0,0,0);nav->addWidget(new QLabel(QStringLiteral(" 页面预览")));m_pages=new QListWidget;m_pages->setIconSize(QSize(120,170));m_pages->setUniformItemSizes(true);nav->addWidget(m_pages);m_splitter->addWidget(m_navigation);
     m_view=new DocumentView;m_splitter->addWidget(m_view);m_splitter->setStretchFactor(1,1);m_splitter->setSizes({160,1080});box->addWidget(m_splitter,1);setCentralWidget(central);
+    buildTextReviewUi(read, central);
     m_pageLabel=new QLabel;statusBar()->addPermanentWidget(m_pageLabel);
     m_renderTimer=new QTimer(this);m_renderTimer->setSingleShot(true);m_renderTimer->setInterval(180);connect(m_renderTimer,&QTimer::timeout,this,&MainWindow::requestRender);
     m_sidebarTimer=new QTimer(this);m_sidebarTimer->setSingleShot(true);m_sidebarTimer->setInterval(600);

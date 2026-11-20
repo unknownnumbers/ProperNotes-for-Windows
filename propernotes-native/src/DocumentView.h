@@ -70,6 +70,12 @@ public:
     bool hasActiveGesture() const;
     bool isTextEditing() const;
     void clearSelection();
+    void deliverTextPage(int page, const std::shared_ptr<const PdfTextPage>& text);
+    PdfTextSelection textSelection() const { return m_textSelection; }
+    int textSelectionPage() const { return m_textSelectionPage; }
+    void clearTextSelection();
+    void showSearchResult(int page, const QVector<TextMarkupQuad>& quads);
+    void clearSearchResult();
 
 signals:
     // Request IDs are monotonic for this widget, including across documents.
@@ -83,6 +89,8 @@ signals:
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
     void textEditingChanged(bool editing);
+    void textPageRequested(int page);
+    void textSelectionChanged();
     void activity(const QString& message);
 
 protected:
@@ -94,6 +102,7 @@ protected:
 private:
     struct CachedPage { RenderedPage page; qreal scale = 1; quint64 used = 0; quint64 revision = 0; };
     struct Request { int page = -1; qreal scale = 1; quint64 id = 0; };
+    struct CachedTextPage { std::shared_ptr<const PdfTextPage> text; quint64 used = 0; };
     struct Row { int first = 0; int last = 0; qreal top = 0; qreal bottom = 0; };
     void rebuildLayout();
     void refreshVisible();
@@ -103,6 +112,8 @@ private:
     void updatePenContactGate();
     void trimCache();
     void invalidateRequest();
+    void requestTextPage(int page);
+    void trimTextCache();
     void publishState(const QString& reason);
     void restoreAnchor(const ViewState& state);
     ViewState captureAt(const QPointF& viewportPoint) const;
@@ -123,6 +134,12 @@ private:
     QHash<int, CachedPage> m_cache;
     QHash<int, QString> m_errors;
     QSet<int> m_wanted;
+    QSet<int> m_pendingTextPages;
+    QHash<int, CachedTextPage> m_textPages;
+    PdfTextSelection m_textSelection;
+    int m_textSelectionPage = -1;
+    QVector<TextMarkupQuad> m_searchQuads;
+    int m_searchPage = -1;
     Request m_request;
     QSizeF m_contentSize;
     QTimer m_refreshTimer;
@@ -130,6 +147,7 @@ private:
     quint64 m_clock = 0;
     qreal m_horizontalUnit = 1;
     qreal m_verticalUnit = 1;
+    qreal m_shiftWheelRemainder = 0;
     qreal m_zoom = 1;
     int m_currentPage = -1;
     LayoutMode m_layout = LayoutMode::SingleContinuous;

@@ -6,6 +6,20 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+Text features in 0.3.2 use the PDF's existing text layer. Scan-only pages need
+an existing OCR text layer from another tool to participate. Search is literal
+and page-local, with up to 1,000 results. Reading order and geometry depend on
+the PDF's text encoding and layout. Review marks require a same-page selection
+with supported orthogonal glyph geometry. Native v3 PDFs with review marks open
+under overwrite protection in older native builds. Review marks can be erased
+or deleted as whole objects. Their geometry stays anchored to the selected text.
+
+0.3.2 讀取 PDF 既有文字層。搜尋採單頁字面比對，上限 1,000 筆。文字順序與座標取決於 PDF 編碼和排版。
+審閱限同一頁及支援的直角文字座標。審閱標記可整筆擦除或刪除，位置錨定正文。含審閱標記的原生 v3 PDF 在舊原生版受覆寫保護。
+
+0.3.2 读取 PDF 已有文字层。搜索按页作字面匹配，上限 1,000 条。文字顺序与坐标取决于 PDF 编码和排版。
+审阅限同一页及支持的直角文字坐标。审阅标记可整笔擦除或删除，位置锚定正文。含审阅标记的原生 v3 PDF 在旧原生版受覆写保护。
+
 English (en): The `0.3.1-native-preview.1` source integrates the workspace and favorites
 features below. Compilation status comes from each artifact's provenance; application
 startup, tests and runtime acceptance have not been performed. The scope is 32
@@ -45,7 +59,7 @@ provenance; 应用尚未启动、测试或实际验收.
 点击后仅影响后续操作. 多收藏栏及其他工具预设后续. 后台 PDF 模型仍占内存, 不由这些数量推定总内存上限.
 
 - Pen pressure is collected through Qt tablet events when the device/driver reports it. Mouse input is a constant-pressure fallback. Device and driver coverage is not asserted.
-- The compiled 0.3.0 baseline adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. The 0.3.1 source integrates tabs/recent files/session restoration and single-bar favorites. Text selection/search/review markup, shapes, bookmarks, annotation lists/locking, full custom navigation/shortcuts and other previously confirmed first-batch tools remain to be migrated. This is not the complete first batch.
+- The 0.3.0 baseline adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. The 0.3.1 source integrates tabs, recents, session restoration and single-bar favorites. Shapes, bookmarks, annotation lists and locking, full custom navigation and shortcuts, and other confirmed first-batch tools remain open.
 - Input and serialized output are currently capped at 512MiB. A 1GB-class document is a future design/acceptance target, not supported capacity claimed by this build. See LARGE-DOCUMENTS.md for the verified parser/serialization constraints and planned work.
 - Recovery backups are full PDFs in the native backup catalog, not edits to the original file. Restore creates a separate PDF. Legacy web-preview backup catalogs are not imported. Atomic writes, source checks and verified copies do not guarantee recovery under every disk, power or filesystem failure.
 - An interrupted migration can leave pending entries visible for inspection or retry. Source data is preserved until destination copies are verified and committed. A corrupt or foreign catalog is protected rather than silently repaired.

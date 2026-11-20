@@ -47,9 +47,37 @@ struct TextBox {
     QColor color = QColor(25, 55, 95);
 };
 
+enum class TextMarkupKind { Highlight, Underline, StrikeOut, Squiggly };
+
+// Canonical PDF coordinates, in typographic order along the text direction.
+// The top and bottom edges can be rotated relative to the PDF page axes.
+struct TextMarkupQuad {
+    QPointF topLeft;
+    QPointF topRight;
+    QPointF bottomLeft;
+    QPointF bottomRight;
+
+    bool operator==(const TextMarkupQuad&) const = default;
+};
+
+struct TextMarkup {
+    QUuid id = QUuid::createUuid();
+    TextMarkupKind kind = TextMarkupKind::Highlight;
+    QColor color = QColor(255, 224, 64, 136);
+    QVector<TextMarkupQuad> quads;
+
+    bool operator==(const TextMarkup&) const = default;
+};
+
+inline constexpr qsizetype MaxTextMarkupQuads = 2048;
+inline constexpr qsizetype MaxDocumentTextMarkupQuads = 100'000;
+inline constexpr qsizetype MaxDocumentTextMarkups = 10'000;
+inline constexpr qsizetype MaxDocumentTextMarkupPathElements = 1'000'000;
+
 struct PageAnnotations {
     QVector<InkStroke> strokes;
     QVector<TextBox> textBoxes;
+    QVector<TextMarkup> textMarkups;
 };
 
 inline bool operator==(const InkPoint& a, const InkPoint& b)
@@ -62,7 +90,157 @@ inline bool operator==(const TextBox& a, const TextBox& b)
         && a.fontFamily == b.fontFamily && a.fontSizePt == b.fontSizePt && a.color == b.color;
 }
 inline bool operator==(const PageAnnotations& a, const PageAnnotations& b)
-{ return a.strokes == b.strokes && a.textBoxes == b.textBoxes; }
+{ return a.strokes == b.strokes && a.textBoxes == b.textBoxes && a.textMarkups == b.textMarkups; }
+
+inline qreal textMarkupLength(const QPointF& delta)
+{
+    return std::hypot(delta.x(), delta.y());
+}
+
+inline qreal textMarkupHeight(const TextMarkupQuad& quad)
+{
+    return (textMarkupLength(quad.topLeft - quad.bottomLeft)
+            + textMarkupLength(quad.topRight - quad.bottomRight)) / 2;
+}
+
+inline int textMarkupWaveSegments(const TextMarkupQuad& quad)
+{
+    const qreal length = textMarkupLength(quad.bottomRight - quad.bottomLeft);
+    const qreal halfPeriod = qBound(qreal(1.0), textMarkupHeight(quad) * 0.30, qreal(6.0));
+    if (!std::isfinite(length) || !std::isfinite(halfPeriod))
+        return 2;
+    return int(qBound(qreal(2), std::ceil(length / halfPeriod), qreal(128)));
+}
+
+inline qsizetype textMarkupPathElements(const TextMarkup& markup)
+{
+    if (markup.kind != TextMarkupKind::Squiggly)
+        return markup.quads.size() * 5;
+    qsizetype count = 0;
+    for (const auto& quad : markup.quads)
+        count += 2 * (textMarkupWaveSegments(quad) + 1) + 1;
+    return count;
+}
+
+inline bool validTextMarkupQuad(const TextMarkupQuad& quad)
+{
+    const QPointF vertices[] { quad.topLeft, quad.topRight, quad.bottomRight, quad.bottomLeft };
+    for (const QPointF& point : vertices)
+        if (!std::isfinite(point.x()) || !std::isfinite(point.y())
+            || std::abs(point.x()) > 1e8 || std::abs(point.y()) > 1e8)
+            return false;
+    // A repeated corner or inverted/self-intersecting quad is not selectable text.
+    qreal previousCross = 0;
+    for (int i = 0; i < 4; ++i) {
+        const QPointF a = vertices[(i + 1) % 4] - vertices[i];
+        const QPointF b = vertices[(i + 2) % 4] - vertices[(i + 1) % 4];
+        const qreal cross = a.x() * b.y() - a.y() * b.x();
+        if (textMarkupLength(a) < 0.001 || std::abs(cross) < 1e-8
+            || (i > 0 && (cross > 0) != (previousCross > 0)))
+            return false;
+        previousCross = cross;
+    }
+    return true;
+}
+
+inline bool validTextMarkup(const TextMarkup& markup)
+{
+    if (markup.id.isNull() || !markup.color.isValid() || markup.quads.isEmpty()
+        || markup.quads.size() > MaxTextMarkupQuads)
+        return false;
+    switch (markup.kind) {
+    case TextMarkupKind::Highlight:
+    case TextMarkupKind::Underline:
+    case TextMarkupKind::StrikeOut:
+    case TextMarkupKind::Squiggly:
+        break;
+    default:
+        return false;
+    }
+    for (const auto& quad : markup.quads)
+        if (!validTextMarkupQuad(quad))
+            return false;
+    return true;
+}
+
+// Both overlay and PDF appearance use the same fill geometry. The small
+// decorations stay inside the selected quadrilateral even on rotated text.
+inline QPainterPath textMarkupPath(const TextMarkup& markup)
+{
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+    for (const auto& quad : markup.quads) {
+        if (markup.kind == TextMarkupKind::Highlight) {
+            path.moveTo(quad.topLeft);
+            path.lineTo(quad.topRight);
+            path.lineTo(quad.bottomRight);
+            path.lineTo(quad.bottomLeft);
+            path.closeSubpath();
+            continue;
+        }
+        const qreal height = textMarkupHeight(quad);
+        if (!std::isfinite(height) || height <= 0)
+            continue;
+        // Coordinates inside the quad: t follows the text and v runs from
+        // the bottom edge toward the top edge.
+        auto point = [&](qreal t, qreal v) {
+            const QPointF bottom = quad.bottomLeft + (quad.bottomRight - quad.bottomLeft) * t;
+            const QPointF top = quad.topLeft + (quad.topRight - quad.topLeft) * t;
+            return bottom + (top - bottom) * v;
+        };
+        const qreal halfThickness = qMin(qreal(0.15),
+            qBound(qreal(0.20), height * 0.036, qreal(1.25)) / height);
+        if (markup.kind == TextMarkupKind::Squiggly) {
+            const int segments = textMarkupWaveSegments(quad);
+            const qreal amplitude = qMin(qreal(0.08), qreal(1.8) / height);
+            auto waveCenter = [&](int i) {
+                return halfThickness + amplitude * ((i % 2 == 0) ? 1.0 : 3.0);
+            };
+            path.moveTo(point(0, waveCenter(0) + halfThickness));
+            for (int i = 1; i <= segments; ++i)
+                path.lineTo(point(qreal(i) / segments, waveCenter(i) + halfThickness));
+            for (int i = segments; i >= 0; --i)
+                path.lineTo(point(qreal(i) / segments, waveCenter(i) - halfThickness));
+        } else {
+            const qreal center = markup.kind == TextMarkupKind::StrikeOut ? 0.46 : halfThickness + 0.04;
+            path.moveTo(point(0, center + halfThickness));
+            path.lineTo(point(1, center + halfThickness));
+            path.lineTo(point(1, center - halfThickness));
+            path.lineTo(point(0, center - halfThickness));
+        }
+        path.closeSubpath();
+    }
+    return path;
+}
+
+inline QRectF textMarkupBounds(const TextMarkup& markup)
+{
+    if (markup.quads.isEmpty())
+        return QRectF();
+    qreal left = markup.quads.first().topLeft.x();
+    qreal right = left;
+    qreal bottom = markup.quads.first().topLeft.y();
+    qreal top = bottom;
+    for (const auto& quad : markup.quads) {
+        const QPointF corners[] { quad.topLeft, quad.topRight, quad.bottomLeft, quad.bottomRight };
+        for (const auto& point : corners) {
+            left = qMin(left, point.x());
+            right = qMax(right, point.x());
+            bottom = qMin(bottom, point.y());
+            top = qMax(top, point.y());
+        }
+    }
+    return QRectF(QPointF(left, bottom), QPointF(right, top));
+}
+
+inline void paintTextMarkup(QPainter& painter, const TextMarkup& markup)
+{
+    painter.save();
+    painter.setCompositionMode(markup.kind == TextMarkupKind::Highlight
+        ? QPainter::CompositionMode_Multiply : QPainter::CompositionMode_SourceOver);
+    painter.fillPath(textMarkupPath(markup), markup.color);
+    painter.restore();
+}
 
 // Paint with the caller's canonical-PDF-to-device transform. Font dimensions
 // are independent of device DPI. Canvas and the PDF raster appearance share
@@ -166,5 +344,7 @@ inline QPainterPath inkStrokeOutline(const InkStroke& stroke)
 Q_DECLARE_METATYPE(propernotes::InkPoint)
 Q_DECLARE_METATYPE(propernotes::InkStroke)
 Q_DECLARE_METATYPE(propernotes::TextBox)
+Q_DECLARE_METATYPE(propernotes::TextMarkupQuad)
+Q_DECLARE_METATYPE(propernotes::TextMarkup)
 Q_DECLARE_METATYPE(propernotes::PageAnnotations)
 Q_DECLARE_METATYPE(propernotes::RenderedPage)

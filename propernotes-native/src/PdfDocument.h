@@ -2,12 +2,16 @@
 #pragma once
 
 #include "InkData.h"
+#include "PdfTextLayer.h"
 
 #include <QRectF>
 #include <QByteArray>
 #include <QSizeF>
 #include <memory>
 #include <functional>
+#include <atomic>
+
+namespace pdf { class PDFDocument; }
 
 namespace propernotes {
 
@@ -45,6 +49,7 @@ public:
     QRectF pageRect(int pageIndex) const;
     QTransform pageToDisplayTransform(int pageIndex) const;
     RenderedPage renderPage(int pageIndex, qreal pixelsPerPoint);
+    PdfTextPage extractTextPage(int pageIndex, const std::atomic_bool* cancelled = nullptr) const;
     PageAnnotations annotations(int pageIndex) const;
     // Atomically validates this page together with all other pages. UUIDs are
     // unique across ink and text throughout the document. Marks content dirty
@@ -56,6 +61,7 @@ public:
 
 private:
     friend class BackupStore;
+    pdf::PDFDocument* textSourceDocument() const;
     // Storage claims the known digest/size in its journal before the payload
     // commit. Returning false from claim cancels an identical snapshot.
     bool writeRecoveryCopyClaimed(const QString& path,

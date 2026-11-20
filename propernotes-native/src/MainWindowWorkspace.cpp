@@ -130,6 +130,7 @@ void MainWindow::stashActiveTab() {
     }
 }
 void MainWindow::clearActiveDocument() {
+    resetTextSearch(true);
     m_restoringView=true;m_view->clearDocument();m_restoringView=false;
     m_path.clear();m_readOnlyReason.clear();m_backupWarning.clear();m_geometry.clear();
     m_pageAnnotations.clear();m_savedAnnotations.clear();m_editUndo.clear();m_editRedo.clear();m_historyBytes=0;
@@ -357,6 +358,19 @@ ToolPreferences MainWindow::effectiveToolPreferences() const {
 void MainWindow::clearFavoriteSelection() {if(m_liveFavorite)m_liveFavorite->active.reset();}
 void MainWindow::applyFavorite(const FavoriteTool& favorite) {
     if(m_fileBusy||m_backupBusy||m_preferencesBusy||m_thumbnailBrowser||m_settingsDialog||m_closingAll)return;
+    if (favorite.markupKind) {
+        if (m_pageCount < 1 || m_readOnly) return;
+        m_view->finishGesture();
+        rememberPersistentTool();
+        m_liveFavorite->active = favorite;
+        m_review->kind = *favorite.markupKind;
+        applyPreferences(m_preferences);
+        chooseTool(InkCanvas::Tool::TextSelect, false);
+        updateTextReviewUi();
+        statusBar()->showMessage(QStringLiteral("先选正文，再点“%1”。").arg(textMarkupKindName(m_review->kind)), 4500);
+        m_view->setFocus();
+        return;
+    }
     m_view->finishGesture();rememberPersistentTool();m_liveFavorite->active=favorite;applyPreferences(m_preferences);
     chooseTool(favorite.tool,false);
     rememberPersistentTool();
@@ -364,6 +378,7 @@ void MainWindow::applyFavorite(const FavoriteTool& favorite) {
 }
 void MainWindow::addCurrentFavorite() {
     if(!m_preferencesWritable||m_preferencesBusy||m_fileBusy||m_backupBusy||m_closingAll)return;
+    if (m_tool == InkCanvas::Tool::TextSelect) { favoriteTextReview(); return; }
     m_view->finishGesture();
     bool ok=false;const QString name=QInputDialog::getText(this,QStringLiteral("收藏当前工具"),QStringLiteral("预设名称"),QLineEdit::Normal,favoriteToolName(m_tool),&ok);
     if(!ok||name.trimmed().isEmpty())return;

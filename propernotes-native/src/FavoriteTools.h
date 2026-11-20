@@ -5,6 +5,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRect>
+#include <optional>
 
 namespace propernotes {
 
@@ -17,6 +18,7 @@ struct FavoriteTool {
     QColor color = QColor(QStringLiteral("#202833"));
     qreal widthPt = 2.5;
     ToolPreferences tools;
+    std::optional<TextMarkupKind> markupKind;
 };
 
 struct FavoritesBarPreferences {
@@ -29,6 +31,8 @@ struct FavoritesBarPreferences {
 
 FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& tools,
                              const QColor& color, qreal widthPt, const QString& name = {});
+FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color, const QString& name = {});
+QString textMarkupKindName(TextMarkupKind kind);
 // Merge into a runtime snapshot. Calling this never mutates any other preset.
 void applyFavorite(const FavoriteTool& favorite, ToolPreferences& tools, QColor& color, qreal& widthPt);
 QString favoriteToolName(InkCanvas::Tool tool);
