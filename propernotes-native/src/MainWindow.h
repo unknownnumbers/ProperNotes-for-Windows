@@ -106,6 +106,7 @@ private:
     void activateTab(int index, bool load = true);
     void closeTab(int index);
     void closeAllTabs();
+    void finishWindowClose();
     void refreshTabs();
     void clearActiveDocument();
     void cancelActiveRenders();

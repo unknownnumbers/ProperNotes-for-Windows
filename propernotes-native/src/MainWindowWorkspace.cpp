@@ -95,12 +95,12 @@ void MainWindow::buildWorkspaceUi() {
     m_favoritesBar=new FavoritesBar(this);
     addDockWidget(Qt::LeftDockWidgetArea,m_favoritesBar);
     auto* view=menuBar()->addMenu(QStringLiteral("视图"));
-    view->addAction(m_favoritesBar->toggleViewAction());view->addAction(m_sidebarAction);view->addAction(m_overviewAction);
+    view->addAction(m_favoritesBar->visibilityAction());view->addAction(m_sidebarAction);view->addAction(m_overviewAction);
     connect(m_favoritesBar,&FavoritesBar::activated,this,&MainWindow::applyFavorite);
     connect(m_favoritesBar,&FavoritesBar::addCurrentRequested,this,&MainWindow::addCurrentFavorite);
     connect(m_favoritesBar,&FavoritesBar::favoritesEdited,this,[this](const QVector<FavoriteTool>& favorites){auto values=m_preferences;values.favorites=favorites;persistPreferences(values);});
     connect(m_favoritesBar,&FavoritesBar::barPreferencesEdited,this,[this](const FavoritesBarPreferences& bar){
-        if(!m_preferencesWritable)return;
+        if(!m_preferencesWritable||m_closingAll)return;
         if(m_preferencesBusy||m_backupBusy||m_fileBusy){m_liveFavorite->queuedBar=bar;return;}
         auto values=m_preferences;values.favoritesBar=bar;persistPreferences(values);
     });
@@ -218,7 +218,19 @@ void MainWindow::closeAllTabs() {
         m_closingAll=false;updateUi();return;
     }
     for(int i=0;i<m_tabs.size();++i)if(m_tabs[i]->id==m_closeOriginalTabId){activateTab(i,false);break;}
-    stashActiveTab();saveWorkspace(true);
+    stashActiveTab();
+    if (m_review->cancelSearch) m_review->cancelSearch->store(true);
+    cancelActiveRenders();
+    saveWorkspace(true);
+}
+
+void MainWindow::finishWindowClose()
+{
+    if (m_allowClose) return;
+    m_allowClose = true;
+    // A read-only or unavailable workspace can finish inside the first
+    // closeEvent. Retry after that ignored event has unwound.
+    QTimer::singleShot(0, this, [this] { close(); });
 }
 
 void MainWindow::loadWorkspace() {
@@ -263,7 +275,7 @@ void MainWindow::saveWorkspace(bool exiting) {
     m_workspaceExitPending|=exiting;m_workspaceTimer->stop();
     if(m_workspaceBusy){m_workspacePending=true;return;}
     if(!m_workspaceWritable){
-        if(m_workspaceExitPending){m_allowClose=true;close();}
+        if(m_workspaceExitPending) finishWindowClose();
         return;
     }
     if(!exiting&&(m_fileBusy||m_preferencesBusy||m_backupBusy||m_view->hasActiveGesture()||m_view->isTextEditing()||m_settingsDialog||m_thumbnailBrowser)){
@@ -287,7 +299,7 @@ void MainWindow::saveWorkspace(bool exiting) {
     if(error.isEmpty())WorkspaceStore::setSession(values,paths,m_activeTab>=0?m_tabs[m_activeTab]->path:QString(),&error);
     if(!error.isEmpty()){
         m_workspaceWarning=error;updateUi();
-        if(m_workspaceExitPending){showError(error+QStringLiteral("\n阅读记录未保存；PDF 的保存结果不受影响。"));m_allowClose=true;close();}
+        if(m_workspaceExitPending){showError(error+QStringLiteral("\n阅读记录未保存；PDF 的保存结果不受影响。"));finishWindowClose();}
         return;
     }
     m_workspace->values=values;m_workspacePending=false;m_workspaceBusy=true;
@@ -300,7 +312,7 @@ void MainWindow::saveWorkspace(bool exiting) {
             window->m_workspaceBusy=false;window->m_workspaceWritable=writable;window->m_workspaceWarning=ok?QString():error;window->updateUi();
             if(window->m_workspaceExitPending){
                 if(window->m_workspacePending&&ok)window->saveWorkspace(true);
-                else {if(!ok)window->showError(error+QStringLiteral("\n阅读记录未保存；PDF 的保存结果不受影响。"));window->m_allowClose=true;window->close();}
+                else {if(!ok)window->showError(error+QStringLiteral("\n阅读记录未保存；PDF 的保存结果不受影响。"));window->finishWindowClose();}
             }else if(window->m_workspacePending)window->m_workspaceTimer->start();
         },Qt::QueuedConnection);
     },Qt::QueuedConnection);

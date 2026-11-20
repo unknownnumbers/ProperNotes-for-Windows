@@ -1068,7 +1068,12 @@ void MainWindow::performSave(const QString& path, const QByteArray& expectedTarg
 void MainWindow::closeEvent(QCloseEvent* event)
 {
     if (m_allowClose) {
+        m_favoritesBar->prepareForHostClose();
         event->accept();
+        return;
+    }
+    if (m_closingAll) {
+        event->ignore();
         return;
     }
     if (m_fileBusy || m_rendering || m_backupBusy || m_preferencesBusy || m_workspaceLoading || m_settingsDialog || m_thumbnailBrowser) {

@@ -9,7 +9,8 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 ## English (en)
 
 In 0.3.4, mixed text selections can mark supported glyphs and report skipped
-glyphs. Copy retains the whole selection. A mark uses one undo step.
+glyphs. Copy retains the whole selection. A mark uses one undo step. The favorites
+bar has a close button and follows the main window when minimized or closed.
 
 The 0.3.3 source improves visible-page raster resolution on high-DPI displays.
 It also accepts review geometry for more horizontal text, including synthetic
@@ -84,6 +85,7 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 ## Traditional Chinese (zh-TC)
 
 0.3.4 在混合選區中為有可靠座標的正文加標記，並顯示略過數量。複製保留整段選字，一次標記可一併撤銷。
+收藏欄有獨立關閉按鈕，主視窗最小化或關閉時，浮動收藏欄也會隱藏。
 
 0.3.3 依螢幕像素密度改善可見頁面的渲染清晰度。審閱支援更多橫排文字，包含模擬斜體、
 頁邊裁切字形和具有可靠字寬的 Type 3 字型。選字工具列顯示四種標記及套用結果。
@@ -130,6 +132,7 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 ## Simplified Chinese (zh-SC)
 
 0.3.4 在混合选区中为有可靠坐标的正文添加标记，并显示跳过数量。复制保留整段选字，一次标记可一并撤销。
+收藏栏有独立关闭按钮，主窗口最小化或关闭时，浮动收藏栏也会隐藏。
 
 0.3.3 按屏幕像素密度改善可见页面的渲染清晰度。审阅支持更多横排文字，包括模拟斜体、
 页边裁切字形和具有可靠字宽的 Type 3 字体。选字工具栏显示四种标记及应用结果。

@@ -16,6 +16,8 @@ Ctrl + wheel zooms the document or resizes previews in the full-screen page grid
 In 0.3.4, a selection that mixes supported and unsupported glyph geometry can
 mark the supported text. The strip reports how many glyphs were skipped. Copy
 uses the full selected text. An oversized mark is refused as a whole.
+Close the favorites bar with its × button and reopen it from View. A floating
+favorites bar hides when the main window is minimized or closes.
 
 The `0.3.1-native-preview.1` source integrates the workspace features below. See each
 artifact's provenance for compilation status; application startup, tests and runtime
@@ -94,6 +96,7 @@ Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結�
 正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。全螢幕縮圖的 Ctrl + 滾輪調整預覽尺寸。
 0.3.4 可針對混合選區中有可靠座標的正文加標記，並顯示略過的字形數。複製保留整段文字。
 若標記超過上限，請縮短選區。
+點收藏欄右上角 × 可關閉，從「檢視」重新顯示。主視窗最小化或關閉時，浮動收藏欄也會隱藏。
 
 `0.3.1-native-preview.1` 工作區源碼已接入. 編譯狀態見各構件 provenance,
 應用尚未啟動、測試或實際驗收. 開啟文件新增
@@ -137,6 +140,7 @@ Ctrl+F 搜索已有文字层，Enter 开始，可选大小写、停止，点结�
 正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。全屏缩略图的 Ctrl + 滚轮调整预览尺寸。
 0.3.4 可对混合选区中有可靠坐标的正文添加标记，并提示跳过的字形数。复制保留整段文字。
 如果标记超过上限，请缩短选区。
+点收藏栏右上角 × 可关闭，从「视图」重新显示。主窗口最小化或关闭时，浮动收藏栏也会隐藏。
 
 `0.3.1-native-preview.1` 工作区源码已接入. 编译状态见各构件 provenance,
 应用尚未启动、测试或实际验收. 打开文档新增

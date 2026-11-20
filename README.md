@@ -27,6 +27,8 @@ The 0.3.3 revision prioritizes visible-page raster quality on high-DPI displays 
 
 The 0.3.4 revision applies text review to supported glyphs within a mixed selection and reports skipped glyphs. Copy retains the full text. 原生 0.3.4 支援混合選區中的可用文字標記。原生 0.3.4 支持混合选区中的可用文字标记。
 
+The floating favorites bar now has a close button and hides with the main window. 收藏欄可直接關閉，浮動時會隨主視窗隱藏。收藏栏可直接关闭，浮动时会随主窗口隐藏。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.
