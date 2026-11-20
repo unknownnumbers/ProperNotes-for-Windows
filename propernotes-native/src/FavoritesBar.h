@@ -46,7 +46,7 @@ private:
     void editFavorite(const QUuid& id);
     void proposeLayout(FavoritesBarPreferences preferences);
     void recordLayout();
-    FavoritesBarPreferences currentLayout() const;
+    FavoritesBarPreferences currentLayout();
     bool requestedVisible() const;
     void setUserVisible(bool visible);
     void syncVisibility();

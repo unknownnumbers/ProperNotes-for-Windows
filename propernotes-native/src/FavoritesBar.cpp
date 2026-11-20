@@ -350,7 +350,7 @@ void FavoritesBar::proposeLayout(FavoritesBarPreferences preferences)
     preferences.visible = requestedVisible();
     Q_EMIT barPreferencesEdited(preferences);
 }
-FavoritesBarPreferences FavoritesBar::currentLayout() const
+FavoritesBarPreferences FavoritesBar::currentLayout()
 {
     auto p = m_preferences;
     p.visible = requestedVisible();
