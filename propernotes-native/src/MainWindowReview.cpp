@@ -245,6 +245,9 @@ void MainWindow::updateTextReviewUi()
     else if (!hasSelection) hint = QStringLiteral("拖选本页正文，再点一种标记。");
     else if (!selection.reviewSupported) hint = selection.reviewIssue.isEmpty()
         ? QStringLiteral("此选区可复制，几何不适合标记。") : selection.reviewIssue;
+    else if (selection.skippedReviewGlyphs > 0)
+        hint = QStringLiteral("可标记部分正文，将跳过 %1 个字形。按 Ctrl+C 可复制整个选区。")
+                   .arg(selection.skippedReviewGlyphs);
     else hint = QStringLiteral("已选中正文。点标记，或按 Ctrl+C 复制。");
     review.selectionStatus->setText(hint);
     review.selectionStatus->setToolTip(hint.toHtmlEscaped());
@@ -418,7 +421,7 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
         m_view->setFocus();
         return;
     }
-    if (!selection.reviewSupported || selection.quads.isEmpty() || selection.quads.size() > MaxTextMarkupQuads) {
+    if (!selection.reviewSupported || selection.reviewQuads.isEmpty() || selection.reviewQuads.size() > MaxTextMarkupQuads) {
         m_review->reviewFeedback = selection.reviewIssue.isEmpty()
             ? QStringLiteral("此选区没有可写入的完整坐标。可复制正文，或尝试缩小选区。")
             : selection.reviewIssue;
@@ -428,7 +431,7 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
     TextMarkup markup;
     markup.kind = kind;
     markup.color = reviewColor(kind);
-    markup.quads = selection.quads;
+    markup.quads = selection.reviewQuads;
     const auto before = m_pageAnnotations.value(page);
     auto after = before;
     after.textMarkups.append(markup);
@@ -440,7 +443,10 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
     }
     m_view->updatePageAnnotations(page, m_pageAnnotations.value(page));
     m_view->clearTextSelection();
-    m_review->reviewFeedback = QStringLiteral("已添加%1。按 Ctrl+S 保存到 PDF。").arg(textMarkupKindName(kind));
+    m_review->reviewFeedback = selection.skippedReviewGlyphs > 0
+        ? QStringLiteral("已对可用正文添加%1，跳过 %2 个字形。按 Ctrl+S 保存。")
+              .arg(textMarkupKindName(kind)).arg(selection.skippedReviewGlyphs)
+        : QStringLiteral("已添加%1。按 Ctrl+S 保存到 PDF。").arg(textMarkupKindName(kind));
     updateTextReviewUi();
     m_view->setFocus();
 }

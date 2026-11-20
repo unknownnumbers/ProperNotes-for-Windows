@@ -25,6 +25,8 @@ The 0.3.2 native source adds text selection and copy, cancellable search of the 
 
 The 0.3.3 revision prioritizes visible-page raster quality on high-DPI displays and makes review actions and their outcomes visible in text selection mode. It accepts additional reliable text geometry for review marks. 原生 0.3.3 改善高 DPI 可見頁清晰度及正文審閱操作。原生 0.3.3 改善高 DPI 可见页清晰度及正文审阅操作。
 
+The 0.3.4 revision applies text review to supported glyphs within a mixed selection and reports skipped glyphs. Copy retains the full text. 原生 0.3.4 支援混合選區中的可用文字標記。原生 0.3.4 支持混合选区中的可用文字标记。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

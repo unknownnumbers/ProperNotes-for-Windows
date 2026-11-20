@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory = $true)][string]$QtRoot,
     [Parameter(Mandatory = $true)][string]$QtSourceDirectory,
     [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
-    [string]$PackageName = 'ProperNotes-for-Windows-0.3.3-native-preview.1-win-x64'
+    [string]$PackageName = 'ProperNotes-for-Windows-0.3.4-native-preview.1-win-x64'
 )
 
 Set-StrictMode -Version Latest

@@ -41,7 +41,7 @@ qreal distanceToQuadSquared(const QPointF& point, const TextMarkupQuad& quad)
 
 // Merge adjacent glyph boxes along the same typographic line. Keep the four
 // named corners in their original orientation for the PDF markup writer.
-bool mergeQuad(TextMarkupQuad& left, const TextMarkupQuad& right)
+bool mergeQuad(TextMarkupQuad& left, const TextMarkupQuad& right, qreal gapInGlyphHeights = 0.7)
 {
     const QPointF baseline = left.topRight - left.topLeft;
     const QPointF rightBaseline = right.topRight - right.topLeft;
@@ -61,7 +61,7 @@ bool mergeQuad(TextMarkupQuad& left, const TextMarkupQuad& right)
         return false;
     const qreal start = QPointF::dotProduct(right.topLeft - left.topLeft, along);
     const qreal end = QPointF::dotProduct(right.topRight - left.topLeft, along);
-    const qreal allowance = std::max(height, nextHeight) * 0.7;
+    const qreal allowance = std::max(height, nextHeight) * gapInGlyphHeights;
     if (start > width + allowance || end < -allowance)
         return false;
 
@@ -90,32 +90,60 @@ bool mergeQuad(TextMarkupQuad& left, const TextMarkupQuad& right)
     return true;
 }
 
-QVector<TextMarkupQuad> quadsForGlyphs(const QVector<PdfTextGlyph>& glyphs, int first, int pastLast,
-                                      bool* reviewSupported = nullptr, QString* reviewIssue = nullptr)
+QVector<TextMarkupQuad> quadsForGlyphs(const QVector<PdfTextGlyph>& glyphs, int first, int pastLast)
 {
     QVector<TextMarkupQuad> result;
     int previousLine = -1;
-    bool review = true;
-    bool tooLarge = false;
     for (int i = first; i < pastLast; ++i) {
         const PdfTextGlyph& glyph = glyphs[i];
-        review &= glyph.reviewSupported;
         if (!result.isEmpty() && glyph.line == previousLine && mergeQuad(result.back(), glyph.quad))
             continue;
-        if (result.size() == MaxTextMarkupQuads) {
-            tooLarge = true;
+        if (result.size() == MaxTextMarkupQuads)
             break;
-        }
         result.append(glyph.quad);
         previousLine = glyph.line;
     }
-    if (reviewSupported)
-        *reviewSupported = review && !tooLarge && !result.isEmpty();
-    if (reviewIssue && tooLarge)
-        *reviewIssue = QStringLiteral("选区包含的文字区域过多，请缩小选区后再标记。");
-    else if (reviewIssue && !review)
-        *reviewIssue = QStringLiteral("选区包含无法生成审阅标记的字形或文字方向，可复制选区或选取较短的横排文字。");
     return result;
+}
+
+void populateReviewSelection(PdfTextSelection& selection, const QVector<PdfTextGlyph>& glyphs,
+                             int first, int pastLast)
+{
+    int previousLine = -1;
+    bool overBudget = false;
+    for (int i = first; i < pastLast; ++i) {
+        const auto& glyph = glyphs[i];
+        if (!glyph.reviewSupported || !validTextMarkupQuad(glyph.quad)) {
+            ++selection.skippedReviewGlyphs;
+            previousLine = -1;
+            continue;
+        }
+        if (overBudget)
+            continue;
+        if (!selection.reviewQuads.isEmpty() && previousLine == glyph.line) {
+            auto merged = selection.reviewQuads.constLast();
+            // Keep physical gaps in the page clear, even when two adjacent
+            // glyphs in the text order belong to the same typographic line.
+            if (mergeQuad(merged, glyph.quad, 0) && validTextMarkupQuad(merged)) {
+                selection.reviewQuads.last() = merged;
+                continue;
+            }
+        }
+        if (selection.reviewQuads.size() == MaxTextMarkupQuads) {
+            overBudget = true;
+            selection.reviewQuads.clear();
+            continue;
+        }
+        selection.reviewQuads.append(glyph.quad);
+        previousLine = glyph.line;
+    }
+    selection.reviewSupported = !selection.reviewQuads.isEmpty();
+    if (overBudget)
+        selection.reviewIssue = QStringLiteral("选区包含的可标记区域过多，请缩小选区后再标记。");
+    else if (!selection.reviewSupported)
+        selection.reviewIssue = QStringLiteral("选区中没有可标记的字形，仍可复制文字。");
+    else if (selection.skippedReviewGlyphs > 0)
+        selection.reviewIssue = QStringLiteral("应用时将跳过 %1 个无法标记的字形。").arg(selection.skippedReviewGlyphs);
 }
 
 } // namespace
@@ -162,7 +190,8 @@ PdfTextSelection PdfTextPage::select(int firstGlyph, int lastGlyph) const
     const int start = glyphs[firstGlyph].offset;
     const int end = glyphs[lastGlyph].offset + glyphs[lastGlyph].length;
     result.text = text.mid(start, end - start);
-    result.quads = quadsForGlyphs(glyphs, firstGlyph, lastGlyph + 1, &result.reviewSupported, &result.reviewIssue);
+    result.quads = quadsForGlyphs(glyphs, firstGlyph, lastGlyph + 1);
+    populateReviewSelection(result, glyphs, firstGlyph, lastGlyph + 1);
     return result;
 }
 

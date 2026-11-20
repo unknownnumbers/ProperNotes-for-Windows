@@ -17,7 +17,11 @@ struct PdfTextGlyph {
 
 struct PdfTextSelection {
     QString text;
+    // The copy/selection preview includes the whole range. Review quads are
+    // the supported subset and never join across a skipped glyph.
     QVector<TextMarkupQuad> quads;
+    QVector<TextMarkupQuad> reviewQuads;
+    int skippedReviewGlyphs = 0;
     bool reviewSupported = false;
     QString reviewIssue;
 };
