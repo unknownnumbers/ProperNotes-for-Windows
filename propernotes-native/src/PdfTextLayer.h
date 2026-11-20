@@ -19,6 +19,7 @@ struct PdfTextSelection {
     QString text;
     QVector<TextMarkupQuad> quads;
     bool reviewSupported = false;
+    QString reviewIssue;
 };
 
 struct PdfTextMatch {

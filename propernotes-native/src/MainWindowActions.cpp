@@ -255,6 +255,7 @@ void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
 {
     ++m_toolSerial;
     m_view->finishGesture();
+    if (m_review && m_tool != tool) m_review->reviewFeedback.clear();
     if(userChoice&&m_liveFavorite->active){clearFavoriteSelection();applyPreferences(m_preferences);}
     m_tool = tool;
     m_view->setTool(tool);

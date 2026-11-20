@@ -23,6 +23,8 @@ The 0.3.1 native source adds horizontal document tabs with independent edit/view
 
 The 0.3.2 native source adds text selection and copy, cancellable search of the existing PDF text layer, and Highlight, Underline, Squiggly and StrikeOut review marks. Review styles can be saved as favorites. Shift + wheel pans the document horizontally and Ctrl + wheel zooms. Files containing new review marks use native format v3. 原生 0.3.2 加入既有文字的選取、搜尋及四種審閱標記，Shift + 滾輪左右平移。原生 0.3.2 加入已有文字的选择、搜索及四种审阅标记，Shift + 滚轮左右平移。
 
+The 0.3.3 revision prioritizes visible-page raster quality on high-DPI displays and makes review actions and their outcomes visible in text selection mode. It accepts additional reliable text geometry for review marks. 原生 0.3.3 改善高 DPI 可見頁清晰度及正文審閱操作。原生 0.3.3 改善高 DPI 可见页清晰度及正文审阅操作。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

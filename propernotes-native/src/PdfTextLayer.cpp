@@ -91,25 +91,30 @@ bool mergeQuad(TextMarkupQuad& left, const TextMarkupQuad& right)
 }
 
 QVector<TextMarkupQuad> quadsForGlyphs(const QVector<PdfTextGlyph>& glyphs, int first, int pastLast,
-                                      bool* reviewSupported = nullptr)
+                                      bool* reviewSupported = nullptr, QString* reviewIssue = nullptr)
 {
     QVector<TextMarkupQuad> result;
     int previousLine = -1;
     bool review = true;
+    bool tooLarge = false;
     for (int i = first; i < pastLast; ++i) {
         const PdfTextGlyph& glyph = glyphs[i];
         review &= glyph.reviewSupported;
         if (!result.isEmpty() && glyph.line == previousLine && mergeQuad(result.back(), glyph.quad))
             continue;
         if (result.size() == MaxTextMarkupQuads) {
-            review = false;
+            tooLarge = true;
             break;
         }
         result.append(glyph.quad);
         previousLine = glyph.line;
     }
     if (reviewSupported)
-        *reviewSupported = review && !result.isEmpty();
+        *reviewSupported = review && !tooLarge && !result.isEmpty();
+    if (reviewIssue && tooLarge)
+        *reviewIssue = QStringLiteral("选区包含的文字区域过多，请缩小选区后再标记。");
+    else if (reviewIssue && !review)
+        *reviewIssue = QStringLiteral("选区包含无法生成审阅标记的字形或文字方向，可复制选区或选取较短的横排文字。");
     return result;
 }
 
@@ -157,7 +162,7 @@ PdfTextSelection PdfTextPage::select(int firstGlyph, int lastGlyph) const
     const int start = glyphs[firstGlyph].offset;
     const int end = glyphs[lastGlyph].offset + glyphs[lastGlyph].length;
     result.text = text.mid(start, end - start);
-    result.quads = quadsForGlyphs(glyphs, firstGlyph, lastGlyph + 1, &result.reviewSupported);
+    result.quads = quadsForGlyphs(glyphs, firstGlyph, lastGlyph + 1, &result.reviewSupported, &result.reviewIssue);
     return result;
 }
 

@@ -319,7 +319,9 @@ void InkCanvas::setZoom(qreal zoom)
 
 QSizeF InkCanvas::imageSize() const
 {
-    return m_background.isNull() ? m_pdfToImage.mapRect(m_pageRect).size() : QSizeF(m_background.size());
+    // PDF geometry gives the page extent. The last row or column of the
+    // backing QImage may exist only because allocation rounds up to pixels.
+    return m_pdfToImage.mapRect(m_pageRect).size();
 }
 
 void InkCanvas::updateExtent()
@@ -410,7 +412,8 @@ void InkCanvas::paintEvent(QPaintEvent*)
         painter.drawText(paper, Qt::AlignCenter, QStringLiteral("正在显示页面…"));
     } else {
         painter.setRenderHint(QPainter::SmoothPixmapTransform);
-        painter.drawImage(paper, m_inkCache.isNull() ? m_background : m_inkCache);
+        const QImage& image = m_inkCache.isNull() ? m_background : m_inkCache;
+        painter.drawImage(paper, image, QRectF(QPointF(), imageSize()));
     }
     painter.save();
     painter.setClipRect(paper);

@@ -94,6 +94,7 @@ signals:
     void activity(const QString& message);
 
 protected:
+    bool event(QEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
     void paintEvent(QPaintEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
@@ -106,6 +107,7 @@ private:
     struct Row { int first = 0; int last = 0; qreal top = 0; qreal bottom = 0; };
     void rebuildLayout();
     void refreshVisible();
+    void planRasterScales();
     void requestNext();
     void applyImage(int page);
     void configureCanvas(InkCanvas* canvas);
@@ -134,6 +136,7 @@ private:
     QHash<int, CachedPage> m_cache;
     QHash<int, QString> m_errors;
     QSet<int> m_wanted;
+    QHash<int, qreal> m_rasterScales;
     QSet<int> m_pendingTextPages;
     QHash<int, CachedTextPage> m_textPages;
     PdfTextSelection m_textSelection;
@@ -143,6 +146,7 @@ private:
     Request m_request;
     QSizeF m_contentSize;
     QTimer m_refreshTimer;
+    QTimer m_rasterRefreshTimer;
     quint64 m_nextRequest = 0;
     quint64 m_clock = 0;
     qreal m_horizontalUnit = 1;

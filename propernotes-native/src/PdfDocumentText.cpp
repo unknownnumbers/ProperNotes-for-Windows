@@ -61,6 +61,24 @@ QRectF bounds(const TextMarkupQuad& quad)
     return QRectF(QPointF(left, bottom), QPointF(right, top));
 }
 
+// The corners follow the text baseline and its ascender direction, which are
+// distinct from QRectF's numeric top/bottom in PDF user space.
+TextMarkupQuad cardinalQuad(const QRectF& rect, const QPointF& right, const QPointF& up)
+{
+    if (std::abs(right.x()) >= std::abs(right.y())) {
+        const qreal start = right.x() >= 0 ? rect.left() : rect.right();
+        const qreal end = right.x() >= 0 ? rect.right() : rect.left();
+        const qreal top = up.y() >= 0 ? rect.bottom() : rect.top();
+        const qreal bottom = up.y() >= 0 ? rect.top() : rect.bottom();
+        return {{start, top}, {end, top}, {start, bottom}, {end, bottom}};
+    }
+    const qreal start = right.y() >= 0 ? rect.top() : rect.bottom();
+    const qreal end = right.y() >= 0 ? rect.bottom() : rect.top();
+    const qreal top = up.x() >= 0 ? rect.right() : rect.left();
+    const qreal bottom = up.x() >= 0 ? rect.left() : rect.right();
+    return {{top, start}, {top, end}, {bottom, start}, {bottom, end}};
+}
+
 class PageTextCollector final : public pdf::PDFPageContentProcessor {
 public:
     PageTextCollector(const pdf::PDFPage* page, const pdf::PDFDocument* document, const pdf::PDFFontCache* fonts,
@@ -119,23 +137,24 @@ private:
             return;
         }
 
-        const qreal em = info.outline ? std::abs(info.fontSize) : 1000;
+        const qreal type3Em = info.outline ? 0 : type3EmHeight(info.advance);
+        const qreal em = info.outline ? std::abs(info.fontSize) : (type3Em > 0 ? type3Em : 1000);
         if (em <= 0)
             return;
         const QRectF ink = info.outline ? info.outline->getBoundingRect() : QRectF();
         const qreal localAdvance = std::abs(info.advance);
         // Horizontal rows use advance for selection through narrow glyphs, plus
-        // the actual outline for overhangs and accent marks. For Type 3 and
-        // vertical text this is selection/search geometry only.
+        // the actual outline for overhangs and accent marks. Type 3 uses
+        // nominal bounds because its glyphs are PDF content streams.
         const qreal leftEdge = ink.isValid() ? std::min(qreal(0), ink.left()) : 0;
         const qreal rightEdge = std::max({em * 0.12, vertical ? em * 0.65 : localAdvance,
                                            ink.isValid() ? ink.right() : qreal(0)});
         const qreal lowEdge = std::min(-em * 0.20, ink.isValid() ? ink.top() : qreal(0));
         const qreal highEdge = std::max(em * 0.80, ink.isValid() ? ink.bottom() : qreal(0));
-        const TextMarkupQuad quad{transform.map(QPointF(leftEdge, highEdge)),
-                                  transform.map(QPointF(rightEdge, highEdge)),
-                                  transform.map(QPointF(leftEdge, lowEdge)),
-                                  transform.map(QPointF(rightEdge, lowEdge))};
+        TextMarkupQuad quad{transform.map(QPointF(leftEdge, highEdge)),
+                            transform.map(QPointF(rightEdge, highEdge)),
+                            transform.map(QPointF(leftEdge, lowEdge)),
+                            transform.map(QPointF(rightEdge, lowEdge))};
         if (!validTextMarkupQuad(quad)) {
             m_result.truncated = true;
             return;
@@ -149,10 +168,46 @@ private:
         const QPointF axis = vertical ? upAxis : rightAxis;
         const qreal height = em * (vertical ? rightScale : upScale);
         const qreal advance = localAdvance * (vertical ? upScale : rightScale);
-        appendCharacter(info.character, origin, axis, height, advance, quad,
-                         !vertical && info.outline && nearlyAxisAligned(rightAxis)
-                         && nearlyAxisAligned(upAxis) && std::abs(QPointF::dotProduct(rightAxis, upAxis)) < 0.0175
-                         && m_crop.contains(glyphBounds));
+        bool canReview = false;
+        // Slanted ascenders, such as synthetic italics, don't rotate the
+        // baseline. Use the visible bounds in the baseline's direction when
+        // the original quad is sheared or only partially inside CropBox.
+        const qreal cross = rightAxis.x() * upAxis.y() - rightAxis.y() * upAxis.x();
+        if (!vertical && (info.outline || type3Em > 0) && nearlyAxisAligned(rightAxis) && std::abs(cross) >= 0.8) {
+            const bool inside = m_crop.contains(glyphBounds);
+            if (inside && nearlyAxisAligned(upAxis) && std::abs(QPointF::dotProduct(rightAxis, upAxis)) < 0.0175) {
+                canReview = true;
+            } else {
+                QRectF visible = glyphBounds;
+                if (!inside) {
+                    QPolygonF polygon;
+                    polygon << quad.topLeft << quad.topRight << quad.bottomRight << quad.bottomLeft;
+                    visible = polygon.intersected(QPolygonF(m_crop)).boundingRect().intersected(m_crop);
+                }
+                const TextMarkupQuad bounded = cardinalQuad(visible, rightAxis, upAxis);
+                if (validTextMarkupQuad(bounded)) {
+                    quad = bounded;
+                    canReview = true;
+                }
+            }
+        }
+        appendCharacter(info.character, origin, axis, height, advance, quad, canReview);
+    }
+
+    qreal type3EmHeight(qreal advance) const
+    {
+        if (advance <= 0)
+            return 0;
+        const auto* type3 = dynamic_cast<const pdf::PDFType3Font*>(getGraphicState()->getTextFont().get());
+        if (!type3)
+            return 0;
+        const QTransform& fontMatrix = type3->getFontMatrix();
+        const qreal x = fontMatrix.m11();
+        const qreal y = fontMatrix.m22();
+        if (x <= 0 || y <= 0 || std::abs(fontMatrix.m12()) > x * 0.001 || std::abs(fontMatrix.m21()) > y * 0.001)
+            return 0;
+        const qreal em = 1 / y;
+        return std::isfinite(em) ? em : 0;
     }
 
     static bool nearlyAxisAligned(const QPointF& unit)
@@ -187,12 +242,9 @@ private:
             m_lineAxis = axis;
         }
 
-        // The pinned glyph callback carries a single QChar. Don't put an
-        // isolated UTF-16 surrogate into a copied selection or search excerpt.
-        if (character.isSurrogate()) {
-            character = QChar(QChar::ReplacementCharacter);
-            canReview = false;
-        }
+        // The pinned callback carries one QChar. A replacement character keeps
+        // copying valid UTF-16; the separately verified quad can still be marked.
+        if (character.isSurrogate()) character = QChar(QChar::ReplacementCharacter);
         const int offset = int(m_result.text.size());
         m_result.text.append(character);
         m_result.glyphs.append({offset, 1, quad, canReview, m_line});

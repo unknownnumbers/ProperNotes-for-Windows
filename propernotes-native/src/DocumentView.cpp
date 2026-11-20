@@ -2,6 +2,7 @@
 #include "DocumentView.h"
 
 #include <QApplication>
+#include <QEvent>
 #include <QPainter>
 #include <QResizeEvent>
 #include <QScrollBar>
@@ -21,12 +22,25 @@ constexpr qint64 TextCacheBytes = 24LL * 1024 * 1024;
 constexpr int MaximumCanvases = 24;
 constexpr int MaximumCachedTextPages = 8;
 constexpr int MaximumPendingTextPages = 2;
-constexpr qreal MaximumPagePixels = 6'000'000;
+constexpr qreal MaximumVisiblePagePixels = 16'000'000;
+constexpr qreal MaximumNeighborPagePixels = 1'000'000;
+constexpr qreal MaximumRasterEdge = 16'000;
 constexpr int MaximumScroll = 1'000'000'000;
 qreal boundedZoom(qreal value) { return std::clamp(value, qreal(0.25), qreal(4)); }
 // Fitting a physically large page must not inherit the manual zoom minimum.
 qreal boundedFitZoom(qreal value) { return std::clamp(value, qreal(0.000001), qreal(4)); }
-bool closeScale(qreal a, qreal b) { return a >= b * 0.90 && a <= b * 1.6; }
+bool rasterMeetsTarget(qreal available, qreal target) { return available >= target * 0.999; }
+
+qreal rasterScale(const QSizeF& points, qreal target, qreal pixelBudget)
+{
+    return std::min({target, std::sqrt(pixelBudget / (points.width() * points.height())),
+                     MaximumRasterEdge / points.width(), MaximumRasterEdge / points.height()});
+}
+
+qint64 rasterBytes(const QSizeF& points, qreal scale)
+{
+    return qint64(std::ceil(points.width() * scale)) * qint64(std::ceil(points.height() * scale)) * 4;
+}
 }
 
 DocumentView::DocumentView(QWidget* parent) : QAbstractScrollArea(parent)
@@ -39,6 +53,9 @@ DocumentView::DocumentView(QWidget* parent) : QAbstractScrollArea(parent)
     m_refreshTimer.setSingleShot(true);
     m_refreshTimer.setInterval(30);
     connect(&m_refreshTimer, &QTimer::timeout, this, &DocumentView::refreshVisible);
+    m_rasterRefreshTimer.setSingleShot(true);
+    m_rasterRefreshTimer.setInterval(85);
+    connect(&m_rasterRefreshTimer, &QTimer::timeout, this, &DocumentView::refreshVisible);
 }
 
 bool DocumentView::isFacing() const
@@ -67,6 +84,7 @@ void DocumentView::clearDocument()
     finishGesture();
     invalidateRequest();
     m_refreshTimer.stop();
+    m_rasterRefreshTimer.stop();
     const auto canvases = m_canvases;
     m_canvases.clear();
     for (auto* canvas : canvases) {
@@ -81,6 +99,7 @@ void DocumentView::clearDocument()
     m_cache.clear();
     m_errors.clear();
     m_wanted.clear();
+    m_rasterScales.clear();
     m_pendingTextPages.clear();
     m_textPages.clear();
     m_currentPage = -1;
@@ -424,6 +443,9 @@ void DocumentView::setZoom(qreal zoom, const QPointF& viewportAnchor)
     m_zoom = boundedZoom(zoom);
     m_zoomMode = ZoomMode::Free;
     m_errors.clear();
+    // Continue displaying the last raster during a run of wheel/pinch events.
+    // Once the scale settles, refine it to the window's physical pixel density.
+    m_rasterRefreshTimer.start();
     rebuildLayout();
     restoreAnchor(anchor);
     refreshVisible();
@@ -499,7 +521,8 @@ void DocumentView::refreshVisible()
     }
     for (; row != m_rows.cend() && row->top <= viewportRect.bottom(); ++row) {
         for (int page = row->first; page <= row->last; ++page) {
-            if (m_pagePositions[page].intersects(viewportRect))
+            constexpr int margin = InkCanvas::PageMargin;
+            if (m_pagePositions[page].adjusted(margin, margin, -margin, -margin).intersects(viewportRect))
                 m_visible.append(page);
             desired.insert(page);
         }
@@ -595,8 +618,9 @@ void DocumentView::refreshVisible()
         m_currentPage = page;
         Q_EMIT currentPageChanged(page);
     }
+    planRasterScales();
     if (m_request.id && (!m_wanted.contains(m_request.page)
-        || !closeScale(m_request.scale, rasterScaleFor(m_request.page))))
+        || !rasterMeetsTarget(m_request.scale, rasterScaleFor(m_request.page))))
         invalidateRequest();
     trimCache();
     requestNext();
@@ -604,36 +628,75 @@ void DocumentView::refreshVisible()
     viewport()->update();
 }
 
+void DocumentView::planRasterScales()
+{
+    m_rasterScales.clear();
+    const qreal target = m_zoom * viewport()->devicePixelRatioF();
+    // Reserve space for pixel rounding. A few nearby preview images may use a
+    // small share, while pages with paper in view get the remaining capacity.
+    const qreal plannedPixels = qreal(CacheBytes) * 0.90 / 4;
+    qsizetype neighborCount = 0;
+    qreal visibleBytes = 0;
+    for (int page : std::as_const(m_wanted)) {
+        if (!m_visible.contains(page)) {
+            ++neighborCount;
+            continue;
+        }
+        const auto points = m_pages[page].displaySize;
+        const qreal scale = rasterScale(points, target, MaximumVisiblePagePixels);
+        m_rasterScales.insert(page, scale);
+        visibleBytes += qreal(rasterBytes(points, scale));
+    }
+    const qreal neighborPixels = std::min(plannedPixels * 0.12, MaximumNeighborPagePixels * qreal(neighborCount));
+    const qreal visibleBudget = (plannedPixels - neighborPixels) * 4;
+    if (visibleBytes > visibleBudget) {
+        const qreal reduction = std::sqrt(visibleBudget / visibleBytes);
+        for (auto it = m_rasterScales.begin(); it != m_rasterScales.end(); ++it) it.value() *= reduction;
+    }
+    if (neighborCount > 0) {
+        const qreal pixelsPerNeighbor = neighborPixels / qreal(neighborCount);
+        for (int page : std::as_const(m_wanted)) {
+            if (!m_rasterScales.contains(page))
+                m_rasterScales.insert(page, rasterScale(m_pages[page].displaySize, target * 0.65, pixelsPerNeighbor));
+        }
+    }
+}
+
 qreal DocumentView::rasterScaleFor(int page) const
 {
-    const QSizeF points = m_pages[page].displaySize;
-    if (points.width() <= 0 || points.height() <= 0)
-        return 1;
-    // Leave space for image stride and ceil-to-pixel rounding across live pages.
-    const qreal pixels = std::min(MaximumPagePixels, qreal(CacheBytes) * 0.90 / (4 * std::max(1, int(m_wanted.size()))));
-    const qreal scale = std::min({m_zoom * devicePixelRatioF(),
-        std::sqrt(pixels / (points.width() * points.height())),
-        16000.0 / points.width(), 16000.0 / points.height()});
-    return std::max(qreal(0.00001), std::floor(scale * 65536) / 65536);
+    return m_rasterScales.value(page);
 }
 
 void DocumentView::requestNext()
 {
-    if (m_suspended || m_request.id || m_wanted.isEmpty())
+    if (m_suspended || m_request.id || m_wanted.isEmpty() || m_rasterRefreshTimer.isActive())
         return;
     int next = -1;
+    bool nextVisible = false;
     qreal nearest = std::numeric_limits<qreal>::max();
     const QPointF center = offset() + QPointF(viewport()->width() / 2.0, viewport()->height() / 2.0);
+    qint64 wantedBytes = 0;
+    for (int page : std::as_const(m_wanted)) {
+        const auto existing = m_cache.constFind(page);
+        if (existing != m_cache.cend()) wantedBytes += existing->page.image.sizeInBytes();
+    }
     for (int page : m_wanted) {
         const qreal scale = rasterScaleFor(page);
         const auto cached = m_cache.constFind(page);
-        if (m_errors.contains(page) || (cached != m_cache.cend() && closeScale(cached->scale, scale)))
+        if (scale <= 0 || m_errors.contains(page) || (cached != m_cache.cend() && rasterMeetsTarget(cached->scale, scale)))
+            continue;
+        const bool visible = m_visible.contains(page);
+        const qint64 replacement = cached == m_cache.cend() ? 0 : cached->page.image.sizeInBytes();
+        // Skip prefetch when keeping sharper live images takes its free space.
+        // This avoids repeatedly building and immediately evicting a neighbor.
+        if (!visible && wantedBytes - replacement + rasterBytes(m_pages[page].displaySize, scale) > CacheBytes)
             continue;
         const QPointF delta = m_pagePositions[page].center() - center;
         const qreal distance = QPointF::dotProduct(delta, delta);
-        if (distance < nearest) {
+        if (next < 0 || (visible && !nextVisible) || (visible == nextVisible && distance < nearest)) {
             nearest = distance;
             next = page;
+            nextVisible = visible;
         }
     }
     if (next >= 0) {
@@ -665,7 +728,9 @@ void DocumentView::deliverRenderedPage(int page, qreal scale, quint64 requestId,
     m_errors.remove(page);
     applyImage(page);
     trimCache();
-    requestNext();
+    // An in-use older page can temporarily pin the available cache. Its
+    // operation-finished signal will reschedule a raster that did not fit.
+    if (m_cache.contains(page) || !hasActiveGesture()) requestNext();
     viewport()->update();
 }
 
@@ -703,16 +768,25 @@ void DocumentView::trimCache()
         bytes += entry.page.image.sizeInBytes();
     while (bytes > CacheBytes) {
         int victim = -1;
-        bool victimWanted = true;
+        int victimPriority = std::numeric_limits<int>::max();
         quint64 oldest = std::numeric_limits<quint64>::max();
         for (auto it = m_cache.cbegin(); it != m_cache.cend(); ++it) {
             const auto* canvas = m_canvases.value(it.key(), nullptr);
             if (canvas && (canvas->hasPointerContact() || canvas->hasActiveGesture() || canvas->isTextEditing()))
                 continue;
-            const bool wanted = m_wanted.contains(it.key());
-            if (victim < 0 || (victimWanted && !wanted) || (victimWanted == wanted && it->used < oldest)) {
+            int priority = 0;
+            if (m_wanted.contains(it.key())) {
+                priority = 1;
+                if (m_visible.contains(it.key())) {
+                    const qreal target = rasterScaleFor(it.key());
+                    // When sharper cached images would crowd out the current
+                    // plan, downsize those before evicting other visible images.
+                    priority = target > 0 && it->scale > target * 1.01 ? 2 : 3;
+                }
+            }
+            if (priority < victimPriority || (priority == victimPriority && it->used < oldest)) {
                 victim = it.key();
-                victimWanted = wanted;
+                victimPriority = priority;
                 oldest = it->used;
             }
         }
@@ -742,6 +816,17 @@ void DocumentView::publishState(const QString& reason)
 {
     if (!m_rebuilding && !m_pages.isEmpty() && !(m_adjusting && reason == QStringLiteral("scroll")))
         Q_EMIT viewStateChanged(captureViewState(), reason);
+}
+
+bool DocumentView::event(QEvent* event)
+{
+    const auto type = event->type();
+    const bool handled = QAbstractScrollArea::event(event);
+    if (type == QEvent::DevicePixelRatioChange) {
+        m_errors.clear();
+        m_rasterRefreshTimer.start();
+    }
+    return handled;
 }
 
 void DocumentView::resizeEvent(QResizeEvent* event)

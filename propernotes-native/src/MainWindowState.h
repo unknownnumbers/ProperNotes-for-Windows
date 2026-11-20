@@ -36,6 +36,9 @@ struct MainWindow::ReviewState {
     QAction* favorite = nullptr;
     std::array<QAction*, 4> kinds{};
     QToolButton* menuButton = nullptr;
+    QWidget* selectionBar = nullptr;
+    QLabel* selectionStatus = nullptr;
+    QString reviewFeedback;
     QWidget* searchPanel = nullptr;
     QLineEdit* query = nullptr;
     QCheckBox* matchCase = nullptr;

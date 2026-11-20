@@ -15,6 +15,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
@@ -101,6 +102,28 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     review.menuButton->setMenu(menu);
     toolbar->addWidget(review.menuButton);
 
+    // Keep direct review actions available even when a narrow window moves
+    // the reading toolbar's buttons into its overflow menu.
+    review.selectionBar = new QWidget(central);
+    auto* controls = new QHBoxLayout(review.selectionBar);
+    controls->setContentsMargins(8, 2, 8, 2);
+    controls->setSpacing(4);
+    for (auto* action : review.kinds) {
+        auto* button = new QToolButton;
+        const auto label = action->text();
+        action->setToolTip(QStringLiteral("对选区应用%1").arg(label));
+        button->setToolButtonStyle(Qt::ToolButtonTextOnly);
+        button->setDefaultAction(action);
+        controls->addWidget(button);
+    }
+    review.selectionStatus = new QLabel;
+    review.selectionStatus->setTextFormat(Qt::PlainText);
+    review.selectionStatus->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    controls->addWidget(review.selectionStatus, 1);
+    auto* layout = static_cast<QVBoxLayout*>(central->layout());
+    layout->insertWidget(layout->indexOf(m_splitter), review.selectionBar);
+    review.selectionBar->hide();
+
     review.copyShortcut = new QAction(m_view);
     review.copyShortcut->setShortcut(QKeySequence::Copy);
     review.copyShortcut->setShortcutContext(Qt::WidgetWithChildrenShortcut);
@@ -143,7 +166,6 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     review.results->setUniformItemSizes(true);
     review.results->setAccessibleName(QStringLiteral("正文搜索结果"));
     panelLayout->addWidget(review.results);
-    auto* layout = static_cast<QVBoxLayout*>(central->layout());
     layout->insertWidget(layout->indexOf(m_splitter), review.searchPanel);
     review.searchPanel->hide();
 
@@ -185,7 +207,10 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     connect(review.previous, &QPushButton::clicked, this, [moveResult] { moveResult(-1); });
     connect(review.next, &QPushButton::clicked, this, [moveResult] { moveResult(1); });
     connect(m_view, &DocumentView::textPageRequested, this, &MainWindow::requestTextPage);
-    connect(m_view, &DocumentView::textSelectionChanged, this, &MainWindow::updateTextReviewUi);
+    connect(m_view, &DocumentView::textSelectionChanged, this, [this] {
+        m_review->reviewFeedback.clear();
+        updateTextReviewUi();
+    });
     updateTextReviewUi();
 }
 
@@ -194,7 +219,8 @@ void MainWindow::updateTextReviewUi()
     if (!m_review) return;
     auto& review = *m_review;
     const bool readable = m_pageCount > 0 && !m_fileBusy && !m_closingAll && !m_thumbnailBrowser;
-    const bool hasSelection = readable && !m_view->textSelection().text.isEmpty();
+    const auto selection = m_view->textSelection();
+    const bool hasSelection = readable && !selection.text.isEmpty();
     const bool editable = readable && !m_readOnly;
     review.select->setEnabled(readable);
     review.select->setChecked(m_tool == InkCanvas::Tool::TextSelect);
@@ -202,13 +228,26 @@ void MainWindow::updateTextReviewUi()
     review.copy->setEnabled(hasSelection);
     review.copyShortcut->setEnabled(hasSelection && !m_view->isTextEditing());
     review.clearShortcut->setEnabled(hasSelection && m_tool == InkCanvas::Tool::TextSelect && !m_view->isTextEditing());
-    review.apply->setText(textMarkupKindName(review.kind));
+    review.apply->setText(QStringLiteral("应用%1").arg(textMarkupKindName(review.kind)));
     review.apply->setToolTip(QStringLiteral("对所选正文应用%1").arg(textMarkupKindName(review.kind)));
     review.apply->setEnabled(editable);
     review.menuButton->setEnabled(readable);
     for (auto* action : review.kinds) action->setEnabled(editable);
     review.style->setEnabled(editable);
     review.favorite->setEnabled(editable && m_preferencesWritable && !m_preferencesBusy && !m_backupBusy);
+    // Visibility follows the tool, not individual input updates. In particular,
+    // clearing an old selection must not resize the viewport midway through a drag.
+    review.selectionBar->setVisible(m_pageCount > 0 && m_tool == InkCanvas::Tool::TextSelect);
+    QString hint;
+    if (!readable) hint = QStringLiteral("正在处理文档…");
+    else if (!review.reviewFeedback.isEmpty()) hint = review.reviewFeedback;
+    else if (!editable) hint = QStringLiteral("此 PDF 只读，可选字和复制。");
+    else if (!hasSelection) hint = QStringLiteral("拖选本页正文，再点一种标记。");
+    else if (!selection.reviewSupported) hint = selection.reviewIssue.isEmpty()
+        ? QStringLiteral("此选区可复制，几何不适合标记。") : selection.reviewIssue;
+    else hint = QStringLiteral("已选中正文。点标记，或按 Ctrl+C 复制。");
+    review.selectionStatus->setText(hint);
+    review.selectionStatus->setToolTip(hint.toHtmlEscaped());
     review.runSearch->setEnabled(readable && !review.query->text().trimmed().isEmpty());
     review.stopSearch->setEnabled(review.running);
     review.previous->setEnabled(readable && !review.hits.isEmpty());
@@ -248,6 +287,7 @@ void MainWindow::resetTextSearch(bool hidePanel)
     if (hidePanel) {
         review.searchPanel->hide();
         review.query->clear();
+        review.reviewFeedback.clear();
     }
     updateTextReviewUi();
 }
@@ -379,7 +419,10 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
         return;
     }
     if (!selection.reviewSupported || selection.quads.isEmpty() || selection.quads.size() > MaxTextMarkupQuads) {
-        statusBar()->showMessage(QStringLiteral("这个选区可复制，但无法添加审阅标记。请尝试较短的横排或直角旋转选区。"), 7000);
+        m_review->reviewFeedback = selection.reviewIssue.isEmpty()
+            ? QStringLiteral("此选区没有可写入的完整坐标。可复制正文，或尝试缩小选区。")
+            : selection.reviewIssue;
+        updateTextReviewUi();
         return;
     }
     TextMarkup markup;
@@ -390,9 +433,15 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
     auto after = before;
     after.textMarkups.append(markup);
     commitAnnotations(page, before, after, QStringLiteral("text-review"), markup.id);
-    if (!m_lastCommitAccepted) return;
+    if (!std::exchange(m_lastCommitAccepted, false)) {
+        m_review->reviewFeedback = QStringLiteral("标记未应用，选区仍保留。");
+        updateTextReviewUi();
+        return;
+    }
     m_view->updatePageAnnotations(page, m_pageAnnotations.value(page));
     m_view->clearTextSelection();
+    m_review->reviewFeedback = QStringLiteral("已添加%1。按 Ctrl+S 保存到 PDF。").arg(textMarkupKindName(kind));
+    updateTextReviewUi();
     m_view->setFocus();
 }
 
