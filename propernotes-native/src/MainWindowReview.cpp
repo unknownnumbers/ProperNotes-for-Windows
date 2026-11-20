@@ -15,6 +15,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPushButton>
+#include <QSplitter>
 #include <QStatusBar>
 #include <QToolBar>
 #include <QToolButton>
