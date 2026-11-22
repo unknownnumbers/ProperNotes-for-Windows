@@ -26,6 +26,7 @@ QString kind(InkCanvas::Tool tool)
 {
     switch (tool) {
     case InkCanvas::Tool::Pen: return QStringLiteral("pen");
+    case InkCanvas::Tool::Highlighter: return QStringLiteral("freehand-highlighter");
     case InkCanvas::Tool::ObjectEraser: return QStringLiteral("eraser");
     case InkCanvas::Tool::TextBox: return QStringLiteral("text-box");
     case InkCanvas::Tool::Select: return QStringLiteral("select");
@@ -65,6 +66,9 @@ QJsonObject styleJson(const FavoriteTool& favorite)
         return {{"color",favorite.color.name(QColor::HexRgb)},{"widthPt",favorite.widthPt},
                 {"opacity",t.opacity},{"pressureEnabled",t.pressureEnabled},
                 {"pressureSensitivity",t.pressureSensitivity},{"singleUse",t.penSingleUse}};
+    if (favorite.tool == InkCanvas::Tool::Highlighter)
+        return {{"color", favorite.color.name(QColor::HexRgb)}, {"widthPt", favorite.widthPt},
+                {"opacityPercent", t.highlighterOpacity}, {"singleUse", t.highlighterSingleUse}};
     if (favorite.tool == InkCanvas::Tool::ObjectEraser)
         return {{"mode",t.eraserMode},{"radiusPt",t.eraserRadiusPt},{"singleUse",t.eraserSingleUse}};
     if (favorite.tool == InkCanvas::Tool::TextBox)
@@ -122,6 +126,14 @@ FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& source
         result.tools.pressureEnabled = source.pressureEnabled;
         result.tools.pressureSensitivity = source.pressureSensitivity;
         result.tools.penSingleUse = source.penSingleUse;
+    } else if (tool == InkCanvas::Tool::Highlighter) {
+        result.color = source.highlighterColor;
+        result.color.setAlpha(255);
+        result.widthPt = source.highlighterWidthPt;
+        result.tools.highlighterColor = result.color;
+        result.tools.highlighterWidthPt = result.widthPt;
+        result.tools.highlighterOpacity = source.highlighterOpacity;
+        result.tools.highlighterSingleUse = source.highlighterSingleUse;
     } else if (tool == InkCanvas::Tool::ObjectEraser) {
         result.tools.eraserMode = source.eraserMode;
         result.tools.eraserRadiusPt = source.eraserRadiusPt;
@@ -142,6 +154,11 @@ void applyFavorite(const FavoriteTool& favorite, ToolPreferences& tools, QColor&
         tools.pressureEnabled = favorite.tools.pressureEnabled;
         tools.pressureSensitivity = favorite.tools.pressureSensitivity;
         tools.penSingleUse = favorite.tools.penSingleUse;
+    } else if (favorite.tool == InkCanvas::Tool::Highlighter) {
+        tools.highlighterColor = favorite.color;
+        tools.highlighterWidthPt = favorite.widthPt;
+        tools.highlighterOpacity = favorite.tools.highlighterOpacity;
+        tools.highlighterSingleUse = favorite.tools.highlighterSingleUse;
     } else if (favorite.tool == InkCanvas::Tool::ObjectEraser) {
         tools.eraserMode = favorite.tools.eraserMode;
         tools.eraserRadiusPt = favorite.tools.eraserRadiusPt;
@@ -158,6 +175,7 @@ QString favoriteToolName(InkCanvas::Tool tool)
 {
     switch (tool) {
     case InkCanvas::Tool::Pen: return QStringLiteral("笔");
+    case InkCanvas::Tool::Highlighter: return QStringLiteral("自由荧光笔");
     case InkCanvas::Tool::ObjectEraser: return QStringLiteral("橡皮");
     case InkCanvas::Tool::TextBox: return QStringLiteral("文字框");
     case InkCanvas::Tool::Select: return QStringLiteral("框选 / 移动");
@@ -176,16 +194,24 @@ QString favoriteDescription(const FavoriteTool& favorite)
     if (favorite.tool == InkCanvas::Tool::Pen)
         detail += QStringLiteral(" · %1 pt · %2% 不透明度 · %3").arg(favorite.widthPt).arg(qRound(favorite.tools.opacity*100))
             .arg(favorite.tools.pressureEnabled ? QStringLiteral("压感 %1").arg(favorite.tools.pressureSensitivity) : QStringLiteral("固定线宽"));
+    else if (favorite.tool == InkCanvas::Tool::Highlighter)
+        detail += QStringLiteral(" · %1 pt · %2% 不透明度 · 固定线宽")
+            .arg(favorite.widthPt).arg(favorite.tools.highlighterOpacity);
     else if (favorite.tool == InkCanvas::Tool::ObjectEraser)
         detail += QStringLiteral(" · %1 · 半径 %2 pt").arg(favorite.tools.eraserMode == QStringLiteral("partial") ? QStringLiteral("局部") : QStringLiteral("整笔"))
             .arg(favorite.tools.eraserRadiusPt);
     else if (favorite.tool == InkCanvas::Tool::TextBox)
         detail += QStringLiteral(" · %1 %2 pt · %3% 不透明度").arg(favorite.tools.textFamily).arg(favorite.tools.textSizePt).arg(qRound(favorite.tools.opacity*100));
-    if (favorite.tool == InkCanvas::Tool::Pen || favorite.tool == InkCanvas::Tool::ObjectEraser || favorite.tool == InkCanvas::Tool::TextBox) {
-        const bool single = favorite.tool == InkCanvas::Tool::Pen ? favorite.tools.penSingleUse :
-            favorite.tool == InkCanvas::Tool::ObjectEraser ? favorite.tools.eraserSingleUse : favorite.tools.textSingleUse;
-        detail += single ? QStringLiteral(" · 单次") : QStringLiteral(" · 持续");
+    std::optional<bool> single;
+    switch (favorite.tool) {
+    case InkCanvas::Tool::Pen: single = favorite.tools.penSingleUse; break;
+    case InkCanvas::Tool::Highlighter: single = favorite.tools.highlighterSingleUse; break;
+    case InkCanvas::Tool::ObjectEraser: single = favorite.tools.eraserSingleUse; break;
+    case InkCanvas::Tool::TextBox: single = favorite.tools.textSingleUse; break;
+    default: break;
     }
+    if (single)
+        detail += *single ? QStringLiteral(" · 单次") : QStringLiteral(" · 持续");
     return favorite.name + QLatin1Char('\n') + detail;
 }
 
@@ -222,6 +248,10 @@ bool validFavoriteTools(const QVector<FavoriteTool>& favorites, QString* error)
         }
         if (f.tool == InkCanvas::Tool::Pen && (!std::isfinite(f.widthPt) || f.widthPt<0.5 || f.widthPt>24 ||
             f.tools.pressureSensitivity<0 || f.tools.pressureSensitivity>100)) return fail();
+        if (f.tool == InkCanvas::Tool::Highlighter
+            && (!validHighlighterStyle(f.color, f.widthPt, f.tools.highlighterOpacity)
+                || f.tools.highlighterColor != f.color || f.tools.highlighterWidthPt != f.widthPt))
+            return fail();
         if (f.tool == InkCanvas::Tool::ObjectEraser &&
             ((f.tools.eraserMode!=QStringLiteral("whole") && f.tools.eraserMode!=QStringLiteral("partial")) ||
              !std::isfinite(f.tools.eraserRadiusPt) || f.tools.eraserRadiusPt<1 || f.tools.eraserRadiusPt>100)) return fail();
@@ -239,7 +269,7 @@ QJsonArray favoriteToolsJson(const QVector<FavoriteTool>& favorites)
     return result;
 }
 
-bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites)
+bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, bool allowHighlighter)
 {
     if (array.size()>MaximumFavorites) return false;
     QVector<FavoriteTool> result;
@@ -252,6 +282,7 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
         if (f.id.toString(QUuid::WithoutBraces).compare(object.value("id").toString(),Qt::CaseInsensitive)!=0) return false;
         const QString tool=object.value("tool").toString();
         if(tool=="pen")f.tool=InkCanvas::Tool::Pen;else if(tool=="eraser")f.tool=InkCanvas::Tool::ObjectEraser;
+        else if (tool == "freehand-highlighter" && allowHighlighter) f.tool = InkCanvas::Tool::Highlighter;
         else if(tool=="text-box")f.tool=InkCanvas::Tool::TextBox;else if(tool=="select")f.tool=InkCanvas::Tool::Select;
         else if(tool=="pan")f.tool=InkCanvas::Tool::Pan;
         else if(tool=="text-review")f.tool=InkCanvas::Tool::TextSelect;else return false;
@@ -270,6 +301,17 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
             f.widthPt=style.value("widthPt").toDouble();f.tools.opacity=style.value("opacity").toDouble();
             f.tools.pressureEnabled=style.value("pressureEnabled").toBool();f.tools.pressureSensitivity=style.value("pressureSensitivity").toInt();
             f.tools.penSingleUse=style.value("singleUse").toBool();
+        } else if (f.tool == InkCanvas::Tool::Highlighter) {
+            if (!exactKeys(style, {"color", "widthPt", "opacityPercent", "singleUse"}) || !readColor(style, f.color)
+                || !number(style, "widthPt", MinHighlighterWidthPt, MaxHighlighterWidthPt)
+                || !number(style, "opacityPercent", MinHighlighterOpacity, MaxHighlighterOpacity, true)
+                || !style.value("singleUse").isBool())
+                return false;
+            f.widthPt = style.value("widthPt").toDouble();
+            f.tools.highlighterColor = f.color;
+            f.tools.highlighterWidthPt = f.widthPt;
+            f.tools.highlighterOpacity = style.value("opacityPercent").toInt();
+            f.tools.highlighterSingleUse = style.value("singleUse").toBool();
         }else if(f.tool==InkCanvas::Tool::ObjectEraser){
             if(!exactKeys(style,{"mode","radiusPt","singleUse"})||!style.value("mode").isString()||
                 !number(style,"radiusPt",1,100)||!style.value("singleUse").isBool())return false;

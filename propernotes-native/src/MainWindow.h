@@ -92,6 +92,7 @@ private:
     void finishFileOperation();
     void loadPreferences(bool reopenSettings = false);
     void applyPreferences(const AppPreferenceValues& values);
+    void syncStrokeStyleControls(const ToolPreferences& tools, qreal penWidth);
     void applyTheme();
     void persistPreferences(AppPreferenceValues values, bool migrate = false);
     void openSettings(bool backupManager = false);
@@ -159,6 +160,7 @@ private:
     QAction* m_fitPageAction = nullptr;
     QAction* m_fitHeightAction = nullptr;
     QAction* m_penAction = nullptr;
+    QAction* m_highlighterAction = nullptr;
     QAction* m_eraserAction = nullptr;
     QAction* m_panAction = nullptr;
     QAction* m_previousAction = nullptr;
@@ -167,6 +169,8 @@ private:
     QAction* m_zoomOutAction = nullptr;
     QAction* m_fitAction = nullptr;
     QAction* m_colorAction = nullptr;
+    QAction* m_pressureField = nullptr;
+    QAction* m_sensitivityField = nullptr;
     QAction* m_settingsAction = nullptr;
     QAction* m_backupsAction = nullptr;
     QAction* m_sidebarAction = nullptr;

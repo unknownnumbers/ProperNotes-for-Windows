@@ -273,6 +273,13 @@ void InkCanvas::setTool(Tool tool)
 void InkCanvas::setPenColor(const QColor& color) { if (color.isValid()) m_penColor = color; }
 void InkCanvas::setPenWidth(qreal width) { if (std::isfinite(width)) m_penWidthPt = std::clamp(width, 0.5, 24.0); }
 void InkCanvas::setPenOpacity(qreal opacity) { if (std::isfinite(opacity)) m_penOpacity = std::clamp(opacity, 0.0, 1.0); }
+void InkCanvas::setHighlighterStyle(const QColor& color, qreal widthPt)
+{
+    if (!color.isValid() || color.alpha() == 0 || !std::isfinite(widthPt))
+        return;
+    m_highlighterColor = color;
+    m_highlighterWidthPt = std::clamp(widthPt, qreal(2), qreal(48));
+}
 void InkCanvas::setPressureSensitivity(qreal sensitivity) { if (std::isfinite(sensitivity)) m_pressureSensitivity = std::clamp(sensitivity, 0.0, 100.0); }
 void InkCanvas::setEraserRadius(qreal radius) { if (std::isfinite(radius)) m_eraserRadiusPt = std::clamp(radius, 1.0, 100.0); }
 void InkCanvas::setTouchAndMouseAnnotate(bool enabled) { if (m_touchAndMouseAnnotate != enabled) finishActiveOperation(); m_touchAndMouseAnnotate = enabled; }
@@ -386,7 +393,7 @@ void InkCanvas::rebuildInkCache()
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setWorldTransform(m_pdfToImage);
     for (const auto& markup : m_annotations.textMarkups) paintTextMarkup(painter, markup);
-    for (const auto& stroke : m_annotations.strokes) painter.fillPath(inkStrokeOutline(stroke), stroke.color);
+    for (const auto& stroke : m_annotations.strokes) paintInkStroke(painter, stroke);
     for (const auto& text : m_annotations.textBoxes) {
         if (!m_editor || text.id != m_editTextId) paintTextBox(painter, text);
     }
@@ -418,10 +425,15 @@ void InkCanvas::paintEvent(QPaintEvent*)
     painter.save();
     painter.setClipRect(paper);
     painter.setWorldTransform(pdfToWidget());
+    // Paint one fresh preview over the page on each repaint. Never stamp
+    // individual translucent segments into a persistent stroke buffer.
+    const bool drawing = m_gesture == Gesture::Ink;
+    const bool highlighting = drawing && m_pendingStroke.kind == InkStrokeKind::Highlighter;
+    if (highlighting) paintInkStroke(painter, m_pendingStroke);
     paintTextQuads(painter, m_searchQuads, QColor(255, 169, 17, 105));
     const auto& selection = m_gesture == Gesture::TextSelection ? m_textPreview.quads : m_selectedTextQuads;
     paintTextQuads(painter, selection, QColor(48, 128, 237, 105));
-    if (m_gesture == Gesture::Ink) painter.fillPath(inkStrokeOutline(m_pendingStroke), m_pendingStroke.color);
+    if (drawing && !highlighting) paintInkStroke(painter, m_pendingStroke);
     painter.restore();
     painter.setBrush(Qt::NoBrush);
     painter.setPen(QPen(QColor("#2674d9"), 1.3, Qt::DashLine));
@@ -537,14 +549,21 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
         m_activeEraserRadiusPt = m_eraserRadiusPt;
         m_previousErasePoint = m_gestureStart;
         eraseBetween(m_gestureStart, m_gestureStart);
-    } else if (m_tool == Tool::Pen) {
+    } else if (m_tool == Tool::Pen || m_tool == Tool::Highlighter) {
         m_gesture = Gesture::Ink;
-        m_inkPressureEnabled = m_pressureEnabled;
+        const bool highlighting = m_tool == Tool::Highlighter;
+        m_inkPressureEnabled = !highlighting && m_pressureEnabled;
         m_inkSensitivity = m_pressureSensitivity;
         m_pendingStroke = {};
-        m_pendingStroke.color = m_penColor;
-        m_pendingStroke.color.setAlphaF(m_penColor.alphaF() * m_penOpacity);
-        m_pendingStroke.widthPt = m_penWidthPt / m_pageUserUnit;
+        if (highlighting) {
+            m_pendingStroke.kind = InkStrokeKind::Highlighter;
+            m_pendingStroke.color = m_highlighterColor;
+            m_pendingStroke.widthPt = m_highlighterWidthPt / m_pageUserUnit;
+        } else {
+            m_pendingStroke.color = m_penColor;
+            m_pendingStroke.color.setAlphaF(m_penColor.alphaF() * m_penOpacity);
+            m_pendingStroke.widthPt = m_penWidthPt / m_pageUserUnit;
+        }
         m_focusId = m_pendingStroke.id;
         addPoint(position, pressure);
     } else if (m_tool == Tool::Select) {
@@ -632,7 +651,9 @@ void InkCanvas::updateTextSelection(const QPointF& position)
 void InkCanvas::addPoint(const QPointF& position, qreal pressure)
 {
     if (m_pendingStroke.points.size() >= MaximumStrokePoints) return;
-    const InkPoint point{clampedPdfPoint(position), std::clamp(pressure, 0.0, 1.0)};
+    const qreal samplePressure = m_pendingStroke.kind == InkStrokeKind::Highlighter
+        ? qreal(0.6) : std::clamp(pressure, qreal(0), qreal(1));
+    const InkPoint point{clampedPdfPoint(position), samplePressure};
     if (!m_pendingStroke.points.isEmpty()) {
         const auto& previous = m_pendingStroke.points.back();
         if (QLineF(previous.position, point.position).length() < 0.20 / m_pageUserUnit &&
@@ -787,6 +808,7 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
     const auto before = m_beforeGesture;
     const QUuid focusId = m_focusId;
     const bool completed = finishReason == FinishReason::NormalRelease && !m_tailEraser;
+    const bool highlighting = gesture == Gesture::Ink && m_pendingStroke.kind == InkStrokeKind::Highlighter;
     const QRectF frame = QRectF(m_gestureStart, m_gestureEnd).normalized();
     if (gesture == Gesture::Ink && !m_pendingStroke.points.isEmpty()) m_annotations.strokes.append(m_pendingStroke);
     if (gesture == Gesture::Marquee && finishReason == FinishReason::NormalRelease) {
@@ -800,8 +822,10 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
         beginTextEdit({}, frame);
         return;
     }
-    if (gesture == Gesture::Ink) commit(before, QStringLiteral("ink"), focusId, completed, Tool::Pen);
-    else if (gesture == Gesture::Erase) commit(before, QStringLiteral("erase"), {}, completed, Tool::ObjectEraser);
+    if (gesture == Gesture::Ink) {
+        commit(before, highlighting ? QStringLiteral("highlighter") : QStringLiteral("ink"),
+            focusId, completed, highlighting ? Tool::Highlighter : Tool::Pen);
+    } else if (gesture == Gesture::Erase) commit(before, QStringLiteral("erase"), {}, completed, Tool::ObjectEraser);
     else if (gesture == Gesture::Move) commit(before, QStringLiteral("move"), focusId, false, Tool::Select);
     else if (gesture == Gesture::TextResize) commit(before, QStringLiteral("text-resize"), focusId, false, Tool::Select);
     else { Q_EMIT operationFinished(); update(); }

@@ -394,7 +394,7 @@ void MainWindow::addCurrentFavorite() {
     m_view->finishGesture();
     bool ok=false;const QString name=QInputDialog::getText(this,QStringLiteral("收藏当前工具"),QStringLiteral("预设名称"),QLineEdit::Normal,favoriteToolName(m_tool),&ok);
     if(!ok||name.trimmed().isEmpty())return;
-    auto values=m_preferences;values.favorites.append(captureFavorite(m_tool,effectiveToolPreferences(),m_color,m_width->value(),name.trimmed()));
+    auto values=m_preferences;values.favorites.append(captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),name.trimmed()));
     persistPreferences(values);
 }
 } // namespace propernotes

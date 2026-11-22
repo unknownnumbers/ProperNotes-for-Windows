@@ -28,11 +28,14 @@ struct InkPoint {
     qreal pressure = 0.6;
 };
 
+enum class InkStrokeKind { Pen, Highlighter };
+
 struct InkStroke {
     QUuid id = QUuid::createUuid();
     QColor color = QColor(25, 55, 95);
     qreal widthPt = 2.0;
     QVector<InkPoint> points;
+    InkStrokeKind kind = InkStrokeKind::Pen;
 };
 
 // Rect uses canonical PDF coordinates (Y increases upwards). Text starts at
@@ -83,7 +86,10 @@ struct PageAnnotations {
 inline bool operator==(const InkPoint& a, const InkPoint& b)
 { return a.position == b.position && a.pressure == b.pressure; }
 inline bool operator==(const InkStroke& a, const InkStroke& b)
-{ return a.id == b.id && a.color == b.color && a.widthPt == b.widthPt && a.points == b.points; }
+{
+    return a.id == b.id && a.color == b.color && a.widthPt == b.widthPt
+        && a.points == b.points && a.kind == b.kind;
+}
 inline bool operator==(const TextBox& a, const TextBox& b)
 {
     return a.id == b.id && a.rect == b.rect && a.text == b.text
@@ -304,6 +310,8 @@ struct RenderedPage {
 
 inline qreal strokeSampleWidth(const InkStroke& stroke, const InkPoint& point)
 {
+    if (stroke.kind == InkStrokeKind::Highlighter)
+        return stroke.widthPt;
     const qreal pressure = std::isfinite(point.pressure)
         ? qBound(qreal(0), point.pressure, qreal(1)) : qreal(0.6);
     return stroke.widthPt * (qreal(0.25) + qreal(1.25) * pressure);
@@ -339,9 +347,19 @@ inline QPainterPath inkStrokeOutline(const InkStroke& stroke)
     return outline;
 }
 
+inline void paintInkStroke(QPainter& painter, const InkStroke& stroke)
+{
+    painter.save();
+    painter.setCompositionMode(stroke.kind == InkStrokeKind::Highlighter
+        ? QPainter::CompositionMode_Multiply : QPainter::CompositionMode_SourceOver);
+    painter.fillPath(inkStrokeOutline(stroke), stroke.color);
+    painter.restore();
+}
+
 } // namespace propernotes
 
 Q_DECLARE_METATYPE(propernotes::InkPoint)
+Q_DECLARE_METATYPE(propernotes::InkStrokeKind)
 Q_DECLARE_METATYPE(propernotes::InkStroke)
 Q_DECLARE_METATYPE(propernotes::TextBox)
 Q_DECLARE_METATYPE(propernotes::TextMarkupQuad)

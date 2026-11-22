@@ -4,6 +4,13 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+Select **Freehand Highlighter** (自由荧光笔) and draw directly on the PDF page.
+Image-only scans work too. Turn on **Mouse & Touch Follow Tool** to draw with
+the left mouse button or one finger. Adjust color, width and opacity in the
+style row, then use **Favorite Current Tool** to save the settings as a preset.
+Use Ctrl+Z or Ctrl+Y to undo or redo. Save the PDF, then reopen it in this version
+to select, move or erase the highlighter strokes.
+
 Click **Select Text** (选文字), then drag over the PDF text on one page. In 0.3.3,
 the strip above the page shows the four review buttons and what happened to the selection.
 Use Ctrl+C to copy or click a review button to mark the selection. The review
@@ -94,6 +101,8 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 波浪線及刪除線按鈕，也顯示套用結果。可從審閱選單設定顏色與不透明度並收藏。
 Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結果跳轉，上限 1,000 筆。
 正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。全螢幕縮圖的 Ctrl + 滾輪調整預覽尺寸。
+選「自由荧光笔」可直接在 PDF 頁面上劃線，掃描頁也能使用。要用滑鼠左鍵或單指劃線，先開啟「鼠标与手跟随工具」。在屬性列調整顏色、粗細和不透明度，再用「收藏当前工具」存成預設。Ctrl+Z/Ctrl+Y 復原或重做。儲存 PDF 後用本版重開，可選取、移動或擦除螢光筆跡。
+
 0.3.4 可針對混合選區中有可靠座標的正文加標記，並顯示略過的字形數。複製保留整段文字。
 若標記超過上限，請縮短選區。
 點收藏欄右上角 × 可關閉，從「檢視」重新顯示。主視窗最小化或關閉時，浮動收藏欄也會隱藏。
@@ -138,6 +147,8 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 波浪线及删除线按钮，也显示应用结果。可从审阅菜单设置颜色与不透明度并收藏。
 Ctrl+F 搜索已有文字层，Enter 开始，可选大小写、停止，点结果跳转，上限 1,000 条。
 正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。全屏缩略图的 Ctrl + 滚轮调整预览尺寸。
+选「自由荧光笔」可直接在 PDF 页面上划线，扫描页也能使用。要用鼠标左键或单指划线，先打开「鼠标与手跟随工具」。在属性栏调颜色、粗细和不透明度，再用「收藏当前工具」存成预设。Ctrl+Z/Ctrl+Y 撤销或重做。保存 PDF 后用本版重开，可选取、移动或擦除荧光笔迹。
+
 0.3.4 可对混合选区中有可靠坐标的正文添加标记，并提示跳过的字形数。复制保留整段文字。
 如果标记超过上限，请缩短选区。
 点收藏栏右上角 × 可关闭，从「视图」重新显示。主窗口最小化或关闭时，浮动收藏栏也会隐藏。

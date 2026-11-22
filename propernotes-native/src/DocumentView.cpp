@@ -479,6 +479,7 @@ void DocumentView::configureCanvas(InkCanvas* canvas)
     canvas->setPenColor(m_penColor);
     canvas->setPenWidth(m_penWidth);
     canvas->setPenOpacity(m_penOpacity);
+    canvas->setHighlighterStyle(m_highlighterColor, m_highlighterWidthPt);
     canvas->setPressureEnabled(m_pressure);
     canvas->setPressureSensitivity(m_sensitivity);
     canvas->setEraserMode(m_eraserMode);
@@ -962,6 +963,16 @@ PROPERNOTES_CANVAS_OPTION(setEraserMode, m_eraserMode, InkCanvas::EraseMode, set
 PROPERNOTES_CANVAS_OPTION(setEraserRadius, m_eraserRadius, qreal, setEraserRadius)
 PROPERNOTES_CANVAS_OPTION(setInputFollowsTool, m_inputFollowsTool, bool, setTouchAndMouseAnnotate)
 #undef PROPERNOTES_CANVAS_OPTION
+
+void DocumentView::setHighlighterStyle(const QColor& color, qreal widthPt)
+{
+    if (!color.isValid() || color.alpha() == 0 || !std::isfinite(widthPt))
+        return;
+    m_highlighterColor = color;
+    m_highlighterWidthPt = widthPt;
+    for (auto* canvas : std::as_const(m_canvases))
+        canvas->setHighlighterStyle(color, widthPt);
+}
 
 void DocumentView::setDarkTheme(bool dark)
 {

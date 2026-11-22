@@ -199,13 +199,16 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     m_color = effective.penColor;
     const bool wasUpdating = m_updatingUi;
     m_updatingUi = true;
-    m_width->setValue(effective.penWidthPt);
+    syncStrokeStyleControls(effective.tools, effective.penWidthPt);
     m_sidebarAction->setChecked(values.sidebarVisible);
     m_navigation->setVisible(values.sidebarVisible);
     m_splitter->setSizes({values.sidebarWidth, std::max(1, m_splitter->width() - values.sidebarWidth)});
     m_view->setPenColor(effective.penColor);
     m_view->setPenWidth(effective.penWidthPt);
     m_view->setPenOpacity(effective.tools.opacity);
+    QColor highlighterColor = effective.tools.highlighterColor;
+    highlighterColor.setAlphaF(effective.tools.highlighterOpacity / 100.0);
+    m_view->setHighlighterStyle(highlighterColor, effective.tools.highlighterWidthPt);
     m_view->setPressureEnabled(effective.tools.pressureEnabled);
     m_view->setPressureSensitivity(effective.tools.pressureSensitivity);
     m_view->setEraserMode(effective.tools.eraserMode == QStringLiteral("partial")
@@ -215,7 +218,6 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     QColor textColor = effective.penColor;
     textColor.setAlphaF(effective.tools.opacity);
     m_view->setTextStyle(effective.tools.textFamily, effective.tools.textSizePt, textColor);
-    m_opacity->setValue(effective.tools.opacity * 100);
     m_pressure->setChecked(effective.tools.pressureEnabled);
     m_sensitivity->setValue(effective.tools.pressureSensitivity);
     m_eraseMode->setCurrentIndex(m_eraseMode->findData(effective.tools.eraserMode));
@@ -681,7 +683,7 @@ void MainWindow::updateUi()
     m_sidebarAction->setEnabled(preferencesReady);
     m_splitter->handle(1)->setEnabled(preferencesReady && !m_settingsDialog);
     m_colorAction->setEnabled(preferencesReady);
-    for (auto* action : {m_penAction,m_eraserAction,m_selectAction,m_textAction}) action->setEnabled(editable);
+    for (auto* action : {m_penAction,m_highlighterAction,m_eraserAction,m_selectAction,m_textAction}) action->setEnabled(editable);
     m_panAction->setEnabled(ready);
     for (auto* widget : QVector<QWidget*>{m_width,m_opacity,m_eraserSize,m_textSize,
                                         m_pressure,m_sensitivity,m_eraseMode,m_textFamily})

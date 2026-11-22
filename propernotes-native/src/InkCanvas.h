@@ -21,7 +21,7 @@ namespace propernotes {
 class InkCanvas final : public QWidget {
     Q_OBJECT
 public:
-    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox, TextSelect };
+    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox, TextSelect, Highlighter };
     enum class EraseMode { WholeStroke, PartialStroke };
     enum class FinishReason { ForcedCommit, NormalRelease };
     Q_ENUM(Tool)
@@ -39,6 +39,7 @@ public:
     void setPenColor(const QColor& color);
     void setPenWidth(qreal widthPt);
     void setPenOpacity(qreal opacity);
+    void setHighlighterStyle(const QColor& color, qreal widthPt);
     void setPressureEnabled(bool enabled) { m_pressureEnabled = enabled; }
     void setPressureSensitivity(qreal sensitivity);
     void setEraserMode(EraseMode mode) { m_eraseMode = mode; }
@@ -137,6 +138,8 @@ private:
     QColor m_penColor = QColor("#202833");
     qreal m_penWidthPt = 2.5;
     qreal m_penOpacity = 1.0;
+    QColor m_highlighterColor = QColor(255, 221, 67, 82);
+    qreal m_highlighterWidthPt = 14.0;
     qreal m_eraserRadiusPt = 8.0;
     bool m_pressureEnabled = true;
     qreal m_pressureSensitivity = 50;

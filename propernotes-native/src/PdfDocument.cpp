@@ -53,6 +53,7 @@ constexpr auto MarkupIdPrefix = "ProperNotes.NativeMarkup/";
 constexpr int InkFormatVersion = 1; // Its pressure/outline interpretation never changes.
 constexpr int TextFormatVersion = 2;
 constexpr int MarkupFormatVersion = 3;
+constexpr int HighlighterFormatVersion = 4;
 constexpr qint64 MaxFileBytes = 512LL * 1024 * 1024;
 constexpr qsizetype MaxMetadataBytes = 64 * 1024 * 1024;
 constexpr qsizetype MaxTotalPoints = 2'000'000;
@@ -188,9 +189,21 @@ bool finiteCoordinate(double value)
     return std::isfinite(value) && std::abs(value) <= 1e8;
 }
 
+bool supportedEditVersion(double version)
+{
+    return version == InkFormatVersion || version == TextFormatVersion
+        || version == MarkupFormatVersion || version == HighlighterFormatVersion;
+}
+
+int strokeFormatVersion(const InkStroke& stroke)
+{
+    return stroke.kind == InkStrokeKind::Highlighter ? HighlighterFormatVersion : InkFormatVersion;
+}
+
 void validateStroke(const InkStroke& stroke)
 {
     if (stroke.id.isNull() || !stroke.color.isValid()
+        || (stroke.kind != InkStrokeKind::Pen && stroke.kind != InkStrokeKind::Highlighter)
         || !std::isfinite(stroke.widthPt) || stroke.widthPt < 0.05 || stroke.widthPt > 1000
         || stroke.points.isEmpty() || stroke.points.size() > MaxStrokePoints)
         fail(QStringLiteral("笔迹包含无效 ID, 颜色, 笔宽或采样数量."));
@@ -206,9 +219,14 @@ QJsonObject strokeJson(const InkStroke& stroke)
     QJsonArray points;
     for (const auto& point : stroke.points)
         points.append(QJsonArray { point.position.x(), point.position.y(), point.pressure });
-    return QJsonObject { { "id", stroke.id.toString(QUuid::WithoutBraces) },
-                         { "color", stroke.color.name(QColor::HexArgb) },
-                         { "widthPt", stroke.widthPt }, { "points", points } };
+    QJsonObject result { { "id", stroke.id.toString(QUuid::WithoutBraces) },
+        { "color", stroke.color.name(QColor::HexArgb) },
+        { "widthPt", stroke.widthPt }, { "points", points } };
+    // Keep ordinary pen JSON (and therefore its existing ownership digest)
+    // identical for documents from all previous native versions.
+    if (stroke.kind == InkStrokeKind::Highlighter)
+        result.insert("kind", QStringLiteral("highlighter"));
+    return result;
 }
 
 QByteArray strokeDigest(const InkStroke& stroke)
@@ -358,9 +376,14 @@ TextMarkup parseTextMarkup(const QJsonValue& value)
 
 int formatVersionFor(const QVector<PageAnnotations>& pages)
 {
-    const bool hasMarkup = std::any_of(pages.cbegin(), pages.cend(), [](const PageAnnotations& page) {
-        return !page.textMarkups.isEmpty();
-    });
+    bool hasMarkup = false;
+    for (const auto& page : pages) {
+        if (std::any_of(page.strokes.cbegin(), page.strokes.cend(), [](const InkStroke& stroke) {
+                return stroke.kind == InkStrokeKind::Highlighter;
+            }))
+            return HighlighterFormatVersion;
+        hasMarkup |= !page.textMarkups.isEmpty();
+    }
     return hasMarkup ? MarkupFormatVersion : TextFormatVersion;
 }
 
@@ -373,7 +396,7 @@ QJsonObject pageJson(const PageAnnotations& page, int version)
     for (const auto& box : page.textBoxes)
         textBoxes.append(textBoxJson(box));
     QJsonObject result { { "strokes", strokes }, { "textBoxes", textBoxes } };
-    if (version == MarkupFormatVersion) {
+    if (version >= MarkupFormatVersion) {
         QJsonArray textMarkups;
         for (const auto& markup : page.textMarkups)
             textMarkups.append(textMarkupJson(markup));
@@ -411,7 +434,7 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
     if (error.error != QJsonParseError::NoError || !json.isObject()
         || root.value("application").toString() != QStringLiteral("ProperNotes.Native")
         || root.value("version").toDouble(-1) != version
-        || (version != InkFormatVersion && version != TextFormatVersion && version != MarkupFormatVersion)
+        || !supportedEditVersion(version)
         || !root.value("pages").isArray()
         || root.value("pages").toArray().size() != pageCount)
         fail(QStringLiteral("原生编辑数据损坏或版本不支持, 不允许覆盖保存."));
@@ -423,6 +446,7 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
     qsizetype textLength = 0;
     QSet<QUuid> textIds;
     MarkupBudget markupBudget;
+    bool hasHighlighter = false;
     const QJsonArray pages = root.value("pages").toArray();
     for (int p = 0; p < pageCount; ++p) {
         QJsonArray strokes;
@@ -436,7 +460,7 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
             if (!pages[p].isObject())
                 fail(QStringLiteral("原生页面对象无效."));
             const auto page = pages[p].toObject();
-            const bool hasMarkupField = version == MarkupFormatVersion;
+            const bool hasMarkupField = version >= MarkupFormatVersion;
             if (page.size() != (hasMarkupField ? 3 : 2) || !page.value("strokes").isArray()
                 || (hasMarkupField && !page.value("textMarkups").isArray())
                 || !page.value("textBoxes").isArray())
@@ -450,9 +474,15 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
             if (!value.isObject())
                 fail(QStringLiteral("原生笔迹记录无效."));
             const QJsonObject object = value.toObject();
-            if (object.size() != 4)
+            const bool highlighted = version == HighlighterFormatVersion
+                && object.value("kind").toString() == QStringLiteral("highlighter");
+            if (object.size() != (highlighted ? 5 : 4) || (!highlighted && object.contains("kind")))
                 fail(QStringLiteral("原生笔迹含未知字段, 不允许丢弃未知编辑数据."));
             InkStroke stroke;
+            if (highlighted) {
+                stroke.kind = InkStrokeKind::Highlighter;
+                hasHighlighter = true;
+            }
             stroke.id = QUuid(object.value("id").toString());
             stroke.color = QColor(object.value("color").toString());
             stroke.widthPt = object.value("widthPt").toDouble(-1);
@@ -508,6 +538,8 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
             result[p].textMarkups.append(std::move(markup));
         }
     }
+    if (version == HighlighterFormatVersion && !hasHighlighter)
+        fail(QStringLiteral("原生荧光笔数据不完整，不允许丢弃未知批注。"));
     if (version != InkFormatVersion) {
         if (root.size() != 4 || !root.value("textAppearances").isObject())
             fail(QStringLiteral("原生外观索引缺失或含未知数据."));
@@ -540,6 +572,7 @@ struct LoadedState {
 };
 
 QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box);
+QByteArray pdfPathNumber(double value);
 bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                            const TextBox& box, const QByteArray& expectedAppearanceHash,
                            QVector<Reference>& ownedResources);
@@ -547,13 +580,24 @@ bool markupAnnotationMatches(const pdf::PDFDocument& document, const Dictionary&
                              const TextMarkup& markup, Reference pageReference);
 
 bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
-                       const InkStroke& stroke)
+                       const InkStroke& stroke, Reference pageReference)
 {
+    const bool highlighted = stroke.kind == InkStrokeKind::Highlighter;
     if (stringValue(document, annotation.get("Subtype")) != "Ink"
-        || numberValue(document, annotation.get("PNVersion")) != InkFormatVersion
+        || numberValue(document, annotation.get("PNVersion")) != strokeFormatVersion(stroke)
         || stringValue(document, annotation.get("NM")) != QByteArray(IdPrefix) + stroke.id.toByteArray(QUuid::WithoutBraces)
         || stringValue(document, annotation.get("PNStrokeSHA256")) != strokeDigest(stroke))
         return false;
+    if (highlighted) {
+        const auto& page = annotation.get("P");
+        const double opacity = numberValue(document, annotation.get("CA"));
+        if (stringValue(document, annotation.get("Type")) != "Annot"
+            || !page.isReference() || page.getReference() != pageReference
+            || numberValue(document, annotation.get("F")) != 4
+            || !std::isfinite(opacity) || std::abs(opacity - stroke.color.alphaF()) > PdfRealWriteTolerance
+            || !annotation.get("AS").isNull() || !annotation.get("OC").isNull() || !annotation.get("IRT").isNull())
+            return false;
+    }
     const auto& inkList = document.getObject(annotation.get("InkList"));
     if (!inkList.isArray() || inkList.getArray()->getCount() != 1)
         return false;
@@ -581,6 +625,8 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
     const auto* appearances = document.getDictionaryFromObject(annotation.get("AP"));
     if (!appearances)
         return false;
+    if (highlighted && (!hasOnlyKeys(*appearances, { "N" }) || !appearances->get("N").isReference()))
+        return false;
     const auto& appearance = document.getObject(appearances->get("N"));
     if (!appearance.isStream())
         return false;
@@ -606,11 +652,25 @@ bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annot
     const auto* alpha = states ? document.getDictionaryFromObject(states->get("PNAlpha")) : nullptr;
     if (!alpha)
         return false;
+    if (highlighted) {
+        if (!hasOnlyKeys(*form, { "Type", "Subtype", "FormType", "BBox", "Matrix", "Resources", "Length" })
+            || stringValue(document, form->get("Type")) != "XObject"
+            || stringValue(document, form->get("Subtype")) != "Form"
+            || numberValue(document, form->get("FormType")) != 1
+            || !hasOnlyKeys(*resources, { "ExtGState" }) || !hasOnlyKeys(*states, { "PNAlpha" })
+            || !hasOnlyKeys(*alpha, { "Type", "ca", "CA", "BM" })
+            || stringValue(document, alpha->get("Type")) != "ExtGState"
+            || stringValue(document, alpha->get("BM")) != "Multiply"
+            || !matchesArray(annotation.get("Border"), { 0, 0, stroke.widthPt }))
+            return false;
+    }
     for (const char* key : { "ca", "CA" }) {
         const double actual = numberValue(document, alpha->get(key));
         if (!std::isfinite(actual) || std::abs(actual - stroke.color.alphaF()) > PdfRealWriteTolerance)
             return false;
     }
+    if (highlighted)
+        return *appearance.getStream()->getContent() == appearanceContent(stroke, box);
     return document.getDecodedStream(appearance.getStream()) == appearanceContent(stroke, box);
 }
 
@@ -672,8 +732,7 @@ LoadedState loadState(const QByteArray& bytes)
             || !hasOnlyKeys(*native.getDictionary(), { "Type", "Version", "Data", "SHA256" }))
             fail(QStringLiteral("原生编辑数据版本未知, 仅可阅读."));
         const double versionValue = numberValue(state.base, native.getDictionary()->get("Version"));
-        if (versionValue != InkFormatVersion && versionValue != TextFormatVersion
-            && versionValue != MarkupFormatVersion)
+        if (!supportedEditVersion(versionValue))
             fail(QStringLiteral("原生编辑数据版本未知, 仅可阅读."));
         const int version = int(versionValue);
         const auto& data = state.base.getObject(native.getDictionary()->get("Data"));
@@ -730,7 +789,8 @@ LoadedState loadState(const QByteArray& bytes)
                         matches = expectedText.contains(id) && textAnnotationMatches(state.base, *annotation,
                             expectedText.value(id), textAppearanceHashes.value(id), resources);
                     } else {
-                        matches = expected.contains(id) && annotationMatches(state.base, *annotation, expected.value(id));
+                        matches = expected.contains(id) && annotationMatches(state.base, *annotation,
+                            expected.value(id), page->getPageReference());
                     }
                 }
                 if (!matches)
@@ -819,7 +879,8 @@ QByteArray pathAppearanceContent(const QPainterPath& path, const QRectF& box, co
 
 QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box)
 {
-    return pathAppearanceContent(inkStrokeOutline(stroke), box, stroke.color, real);
+    return pathAppearanceContent(inkStrokeOutline(stroke), box, stroke.color,
+        stroke.kind == InkStrokeKind::Highlighter ? pdfPathNumber : real);
 }
 
 Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray bytes, bool multiply)
@@ -846,7 +907,8 @@ Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray
 
 Object createAppearance(const InkStroke& stroke, const QRectF& box)
 {
-    return createVectorAppearance(box, stroke.color, appearanceContent(stroke, box), false);
+    return createVectorAppearance(box, stroke.color, appearanceContent(stroke, box),
+        stroke.kind == InkStrokeKind::Highlighter);
 }
 
 QByteArray pdfPathNumber(double value)
@@ -1145,8 +1207,8 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
 {
     const int dataVersion = formatVersionFor(state.pages);
     auto pdfVersion = state.base.getInfo()->version;
-    // The new squiggly/multiply/opacity appearances require PDF 1.4.
-    if (dataVersion == MarkupFormatVersion && (pdfVersion.major < 1 || (pdfVersion.major == 1 && pdfVersion.minor < 4)))
+    // Squiggly and the new Multiply/opacity appearances require PDF 1.4.
+    if (dataVersion >= MarkupFormatVersion && (pdfVersion.major < 1 || (pdfVersion.major == 1 && pdfVersion.minor < 4)))
         pdfVersion = pdf::PDFVersion(1, 4);
     pdf::PDFDocumentBuilder builder(state.base.getStorage(), pdfVersion);
     const auto* catalog = catalogDictionary(state.base);
@@ -1242,7 +1304,7 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
             put(annotation, "AP", Object::createDictionary(std::move(ap)));
             put(annotation, "NM", Object::createString(QByteArray(IdPrefix) + stroke.id.toByteArray(QUuid::WithoutBraces)));
             put(annotation, "PNOwner", Object::createName(QByteArray(OwnerName)));
-            put(annotation, "PNVersion", Object::createInteger(InkFormatVersion));
+            put(annotation, "PNVersion", Object::createInteger(strokeFormatVersion(stroke)));
             put(annotation, "PNStrokeID", Object::createString(stroke.id.toByteArray(QUuid::WithoutBraces)));
             put(annotation, "PNStrokeSHA256", Object::createString(strokeDigest(stroke)));
             Reference reference;

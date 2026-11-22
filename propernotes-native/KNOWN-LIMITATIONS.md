@@ -6,8 +6,15 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+Freehand highlighter uses fixed-width strokes. The presence of freehand strokes
+requires native format v4. The editor also reads v1–v3, and v4 is overwrite-protected in older native builds.
+
+自由螢光筆採固定粗細。含自由螢光筆跡的 PDF 使用原生 v4，本版也可讀 v1–v3，舊版開啟 v4 時有覆寫保護。
+
+自由荧光笔采用固定粗细。含自由荧光笔迹的 PDF 使用原生 v4，本版也可读 v1–v3，旧版打开 v4 时有覆写保护。
+
 Text features in 0.3.2 use the PDF's existing text layer. Scan-only pages need
-an existing OCR text layer from another tool to participate. Search is literal
+an existing OCR text layer from another tool for text selection and search. Search is literal
 and page-local, with up to 1,000 results. Reading order and geometry depend on
 the PDF's text encoding and layout. Review marks require a same-page selection
 with supported orthogonal glyph geometry. Native v3 PDFs with review marks open

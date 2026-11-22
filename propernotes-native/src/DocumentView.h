@@ -57,6 +57,7 @@ public:
     void setPenColor(const QColor& color);
     void setPenWidth(qreal width);
     void setPenOpacity(qreal opacity);
+    void setHighlighterStyle(const QColor& color, qreal widthPt);
     void setPressureEnabled(bool enabled);
     void setPressureSensitivity(qreal sensitivity);
     void setEraserMode(InkCanvas::EraseMode mode);
@@ -161,6 +162,8 @@ private:
     QColor m_penColor = QColor("#202833");
     qreal m_penWidth = 2.5;
     qreal m_penOpacity = 1;
+    QColor m_highlighterColor = QColor(255, 221, 67, 82);
+    qreal m_highlighterWidthPt = 14;
     bool m_pressure = true;
     qreal m_sensitivity = 50;
     qreal m_eraserRadius = 8;

@@ -40,7 +40,7 @@ QString favoriteDescription(const FavoriteTool& favorite);
 QVector<FavoriteTool> defaultFavoriteTools();
 bool validFavoriteTools(const QVector<FavoriteTool>& favorites, QString* error = nullptr);
 QJsonArray favoriteToolsJson(const QVector<FavoriteTool>& favorites);
-bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites);
+bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, bool allowHighlighter = true);
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& preferences);
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& preferences);
 bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& preferences);

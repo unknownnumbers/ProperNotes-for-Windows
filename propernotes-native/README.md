@@ -8,6 +8,10 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+0.3.5 adds Freehand Highlighter, a separate tool for drawing directly on PDF pages,
+including scans. Save color, width and opacity as a favorite. Strokes support
+undo, redo and editing after saving and reopening the PDF. See PORTABLE.md for the controls.
+
 In 0.3.4, mixed text selections can mark supported glyphs and report skipped
 glyphs. Copy retains the whole selection. A mark uses one undo step. The favorites
 bar has a close button and follows the main window when minimized or closed.
@@ -84,6 +88,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.5 新增獨立的自由螢光筆，可直接在 PDF 頁面上劃線，掃描頁也能使用。顏色、粗細和不透明度可收藏。筆跡可復原、重做，儲存後重新開啟 PDF 仍可編輯。操作見 PORTABLE.md。
+
 0.3.4 在混合選區中為有可靠座標的正文加標記，並顯示略過數量。複製保留整段選字，一次標記可一併撤銷。
 收藏欄有獨立關閉按鈕，主視窗最小化或關閉時，浮動收藏欄也會隱藏。
 
@@ -130,6 +136,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.5 新增独立的自由荧光笔，可直接在 PDF 页面上划线，扫描页也能使用。颜色、粗细和不透明度可收藏。笔迹可撤销、重做，保存后重新打开 PDF 仍可编辑。操作见 PORTABLE.md。
 
 0.3.4 在混合选区中为有可靠坐标的正文添加标记，并显示跳过数量。复制保留整段选字，一次标记可一并撤销。
 收藏栏有独立关闭按钮，主窗口最小化或关闭时，浮动收藏栏也会隐藏。

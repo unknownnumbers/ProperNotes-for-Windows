@@ -29,6 +29,8 @@ The 0.3.4 revision applies text review to supported glyphs within a mixed select
 
 The floating favorites bar now has a close button and hides with the main window. 收藏欄可直接關閉，浮動時會隨主視窗隱藏。收藏栏可直接关闭，浮动时会随主窗口隐藏。
 
+The 0.3.5 revision adds Freehand Highlighter to draw directly on PDF pages, including scans. Favorite presets store color, width and opacity. Freehand strokes support undo and redo and stay editable when saved to PDF and reopened in this version. 原生 0.3.5 新增自由螢光筆，可直接在掃描頁上劃線，收藏樣式，儲存重開後繼續編輯。原生 0.3.5 新增自由荧光笔，可直接在扫描页上划线，收藏样式，保存重开后继续编辑。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

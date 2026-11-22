@@ -209,6 +209,7 @@ bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
 {
     const auto preferences=effectiveToolPreferences();
     if (tool == InkCanvas::Tool::Pen) return preferences.penSingleUse;
+    if (tool == InkCanvas::Tool::Highlighter) return preferences.highlighterSingleUse;
     if (tool == InkCanvas::Tool::ObjectEraser) return preferences.eraserSingleUse;
     if (tool == InkCanvas::Tool::TextBox) return preferences.textSingleUse;
     return false;
@@ -258,6 +259,7 @@ void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
     if (m_review && m_tool != tool) m_review->reviewFeedback.clear();
     if(userChoice&&m_liveFavorite->active){clearFavoriteSelection();applyPreferences(m_preferences);}
     m_tool = tool;
+    syncStrokeStyleControls(effectiveToolPreferences(), effectivePenWidth());
     m_view->setTool(tool);
     if(userChoice)rememberPersistentTool();
     updateToolUi();
@@ -291,6 +293,7 @@ void MainWindow::updateToolUi()
     if (!m_lockAction) return;
     const bool wasUpdating = m_updatingUi; m_updatingUi = true;
     m_penAction->setChecked(m_tool == InkCanvas::Tool::Pen);
+    m_highlighterAction->setChecked(m_tool == InkCanvas::Tool::Highlighter);
     m_eraserAction->setChecked(m_tool == InkCanvas::Tool::ObjectEraser);
     m_selectAction->setChecked(m_tool == InkCanvas::Tool::Select);
     m_textAction->setChecked(m_tool == InkCanvas::Tool::TextBox);
@@ -298,7 +301,8 @@ void MainWindow::updateToolUi()
     m_followAction->setChecked(m_preferences.tools.inputFollowsTool);
     m_lockAction->setChecked(!isSingleUse(m_tool));
     m_lockAction->setEnabled(!m_preferencesBusy && !m_backupBusy && !m_fileBusy && m_preferencesWritable &&
-        (m_tool == InkCanvas::Tool::Pen || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox));
+        (m_tool == InkCanvas::Tool::Pen || m_tool == InkCanvas::Tool::Highlighter ||
+         m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox));
     m_updatingUi = wasUpdating;
     if(m_favoritesBar){
         if (m_tool == InkCanvas::Tool::TextSelect && m_liveFavorite->active && m_liveFavorite->active->markupKind)
@@ -384,7 +388,7 @@ void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
                     QPainter painter(&image); painter.setWorldTransform(result.pdfToImage);
                     const auto annotations = window->m_pageAnnotations.value(page);
                     for (const auto& markup : annotations.textMarkups) paintTextMarkup(painter, markup);
-                    for (const auto& stroke : annotations.strokes) painter.fillPath(inkStrokeOutline(stroke), stroke.color);
+                    for (const auto& stroke : annotations.strokes) paintInkStroke(painter, stroke);
                     for (const auto& text : annotations.textBoxes) paintTextBox(painter, text);
                     painter.end();
                     if (auto* item = window->m_pages->item(page)) item->setIcon(QIcon(QPixmap::fromImage(image)));
