@@ -39,6 +39,8 @@ The 0.3.8 revision adds scaling and rotation for pen and freehand highlighter se
 
 The 0.3.9 revision adds editable line, arrow, rectangle and ellipse annotations. Shapes and ink can scale and rotate together. Text boxes and shapes support clipboard operations within the same PDF. A setting controls whether Select and Erase include editable text review marks. 原生 0.3.9 新增可編輯的直線、箭頭、矩形和橢圓，支援文字方塊及圖形剪貼，以及審閱標記選取和擦除設定。原生 0.3.9 新增可编辑的直线、箭头、矩形和椭圆，支持文字框及形状剪贴，以及审阅标记选择和擦除设置。
 
+The 0.3.10 revision adds the native annotation list with page/type filters and click-to-locate. The Select and Erase toolbar exposes the saved text-review inclusion switch. Sidebar previews reuse suitable rendered pages and schedule visible rows with no fixed per-image pause. 原生 0.3.10 增加批注列表、頁面及類型篩選和點選定位，工具列增加正文標記開關並改善側欄縮圖排程。原生 0.3.10 增加批注列表、页面和类型筛选及点击定位，工具栏增加正文标记开关并改善侧栏缩略图排队。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

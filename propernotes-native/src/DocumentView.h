@@ -56,6 +56,7 @@ public:
     ViewState captureViewState() const;
     void restoreViewState(const ViewState& state);
     void setRenderingSuspended(bool suspended);
+    RenderedPage cachedPageRaster(int page) const;
     void deliverRenderedPage(int page, qreal scale, quint64 requestId, const RenderedPage& result);
     void deliverRenderFailure(int page, quint64 requestId, const QString& error);
 
@@ -84,6 +85,7 @@ public:
     ObjectSelection selectedObjects() const;
     QPointF visiblePageCenterPdf(int page) const;
     void selectPageObjects(int page, const QSet<QUuid>& ids);
+    void locateAnnotation(int page, const QUuid& id);
     void deliverTextPage(int page, const std::shared_ptr<const PdfTextPage>& text);
     PdfTextSelection textSelection() const { return m_textSelection; }
     int textSelectionPage() const { return m_textSelectionPage; }
@@ -156,6 +158,7 @@ private:
     int m_objectActionPage = -1;
     int m_pendingObjectPage = -1;
     QSet<QUuid> m_pendingObjectIds;
+    bool m_pendingObjectIncludesMarkup = false;
     QHash<int, CachedPage> m_cache;
     QHash<int, QString> m_errors;
     QSet<int> m_wanted;

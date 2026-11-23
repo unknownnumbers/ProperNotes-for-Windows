@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindow.h"
+#include "AnnotationListPane.h"
 #include "MainWindowState.h"
 #include "FavoritesBar.h"
 #include "DocumentSession.h"
 #include "SettingsDialog.h"
 #include "ThumbnailBrowser.h"
+#include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -143,6 +145,7 @@ void MainWindow::commitAnnotations(int page, const PageAnnotations& before, cons
         return;
     }
     m_pageAnnotations = std::move(candidate);
+    m_annotationList->updatePageAnnotations(page, after);
     m_lastCommitAccepted = true;
     for (const auto& record : std::as_const(m_editRedo)) m_historyBytes -= record.bytes;
     m_editRedo.clear();
@@ -157,7 +160,7 @@ void MainWindow::commitAnnotations(int page, const PageAnnotations& before, cons
     m_dirty = m_pageAnnotations != m_savedAnnotations;
     ++m_contentRevision;
     m_sidebarReady.remove(page);
-    if (auto* item = m_pages->item(page)) item->setIcon(QIcon());
+    if (auto* item = m_pages->item(page)) item->setIcon(m_sidebarPlaceholder);
     m_sidebarPreviewTimer->start();
     updateUi();
     scheduleWorkspaceSave();
@@ -173,12 +176,13 @@ void MainWindow::editHistory(bool redo)
     const auto record = source.takeLast();
     const auto value = redo ? record.after : record.before;
     m_pageAnnotations.insert(record.page, value);
+    m_annotationList->updatePageAnnotations(record.page, value);
     destination.append(record);
     m_view->updatePageAnnotations(record.page, value);
     ++m_contentRevision;
     m_dirty = m_pageAnnotations != m_savedAnnotations;
     m_sidebarReady.remove(record.page);
-    if (auto* item = m_pages->item(record.page)) item->setIcon(QIcon());
+    if (auto* item = m_pages->item(record.page)) item->setIcon(m_sidebarPlaceholder);
     m_sidebarPreviewTimer->start();
     auto state = m_view->captureViewState();
     state.page = record.page;
@@ -514,6 +518,8 @@ void MainWindow::updateToolUi()
     m_shapeToolButton->setText(shape ? favoriteToolName(m_tool) : QStringLiteral("形状"));
     for (auto* action : m_shapeToolButton->menu()->actions()) action->setChecked(action->data().toInt() == int(m_tool));
     m_followAction->setChecked(m_preferences.tools.inputFollowsTool);
+    m_editTextMarkupsAction->setVisible(m_tool == InkCanvas::Tool::Select || m_tool == InkCanvas::Tool::ObjectEraser);
+    m_editTextMarkupsAction->setChecked(m_preferences.editTextMarkups);
     m_lockAction->setChecked(!isSingleUse(m_tool));
     const auto* review = activeReviewTool();
     m_view->setTextReviewActive(review != nullptr);
@@ -576,17 +582,38 @@ void MainWindow::fitWidth() { if (!m_fileBusy) m_view->setZoomMode(DocumentView:
 void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
 {
     if (m_fileBusy || page < 0 || page >= m_pageCount) return;
+    RenderedPage cachedRaster;
+    QSize previewSize;
+    if (route == 2) {
+        const QSize maximumSize = m_pages->iconSize();
+        const QSizeF display = m_geometry.at(page).displaySize;
+        previewSize = QSize(qCeil(display.width() * scale), qCeil(display.height() * scale)).boundedTo(maximumSize);
+        cachedRaster = m_view->cachedPageRaster(page);
+        if (cachedRaster.image.width() < previewSize.width() || cachedRaster.image.height() < previewSize.height())
+            cachedRaster = {};
+    }
     const QString key = QString::number(route) + QLatin1Char(':') + QString::number(id);
     auto ticket = std::make_shared<std::atomic_bool>(false);
     m_renderTickets.insert(key, ticket);
     const auto epoch = m_renderEpoch; const quint64 generation = epoch->load();
     const auto session = m_session; const QPointer<MainWindow> window(this);
-    QMetaObject::invokeMethod(m_workerContext, [session, window, ticket, epoch, generation, page, scale, id, route, key] {
+    QMetaObject::invokeMethod(m_workerContext, [session, window, ticket, epoch, generation, page, scale, id, route, key,
+                                              cachedRaster = std::move(cachedRaster), previewSize] {
         if (ticket->load() || epoch->load() != generation) return;
         RenderedPage result;
         try {
-            if (session->document) result = session->document->renderPage(page, scale);
-            else result.error = QStringLiteral("文档不可用。");
+            if (cachedRaster && previewSize.isValid()) {
+                result.image = cachedRaster.image.scaled(previewSize, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+                if (result) {
+                    result.pdfToImage = cachedRaster.pdfToImage * QTransform::fromScale(
+                        qreal(previewSize.width()) / cachedRaster.image.width(),
+                        qreal(previewSize.height()) / cachedRaster.image.height());
+                }
+            }
+            if (!result) {
+                if (session->document) result = session->document->renderPage(page, scale);
+                else result.error = QStringLiteral("文档不可用。");
+            }
         } catch (...) { result.error = workerError(); }
         if (!window || ticket->load() || epoch->load() != generation) return;
         QMetaObject::invokeMethod(window.data(), [window, ticket, epoch, generation, page, scale, id, route, key, result = std::move(result)] {
@@ -601,6 +628,7 @@ void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
                 else window->m_thumbnailBrowser->deliverRenderFailure(page, id, result.error);
             } else if (id == window->m_sidebarRequest && page == window->m_sidebarPendingPage) {
                 window->m_sidebarRequestBusy = false;
+                window->m_sidebarPendingPage = -1;
                 window->m_sidebarReady.insert(page);
                 if (result) {
                     QImage image = result.image.convertToFormat(QImage::Format_ARGB32_Premultiplied);
@@ -611,16 +639,26 @@ void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
                     for (const auto& shape : annotations.shapes) paintShape(painter, shape);
                     for (const auto& text : annotations.textBoxes) paintTextBox(painter, text);
                     painter.end();
-                    if (auto* item = window->m_pages->item(page)) item->setIcon(QIcon(QPixmap::fromImage(image)));
+                    if (auto* item = window->m_pages->item(page)) {
+                        QPixmap icon(window->m_pages->iconSize());
+                        icon.fill(Qt::transparent);
+                        QPainter iconPainter(&icon);
+                        iconPainter.drawImage(QPoint((icon.width() - image.width()) / 2, (icon.height() - image.height()) / 2), image);
+                        iconPainter.end();
+                        item->setToolTip({});
+                        item->setIcon(QIcon(icon));
+                    }
                     window->m_sidebarIcons.removeAll(page);
                     window->m_sidebarIcons.append(page);
                     while (window->m_sidebarIcons.size() > 128) {
                         const int victim = window->m_sidebarIcons.takeFirst();
-                        if (auto* item = window->m_pages->item(victim)) item->setIcon(QIcon());
+                        if (auto* item = window->m_pages->item(victim)) item->setIcon(window->m_sidebarPlaceholder);
                         window->m_sidebarReady.remove(victim);
                     }
                 } else if (auto* item = window->m_pages->item(page)) item->setToolTip(result.error);
-                window->m_sidebarPreviewTimer->start();
+                QTimer::singleShot(0, window.data(), [window] {
+                    if (window && !window->m_sidebarPreviewTimer->isActive()) window->refreshSidebarPreview();
+                });
             }
         }, Qt::QueuedConnection);
     }, Qt::QueuedConnection);
@@ -633,18 +671,46 @@ void MainWindow::cancelPageRender(quint64 id, int route)
     if (ticket) ticket->store(true);
 }
 
+void MainWindow::cancelSidebarPreviewRequest()
+{
+    if (m_sidebarRequestBusy) cancelPageRender(m_sidebarRequest, 2);
+    m_sidebarRequestBusy = false;
+    m_sidebarPendingPage = -1;
+}
+
 void MainWindow::refreshSidebarPreview()
 {
-    if (m_fileBusy || m_sidebarRequestBusy || !m_navigation->isVisible() || m_pageCount < 1 || m_thumbnailBrowser) return;
-    for (int page = 0; page < m_pages->count(); ++page) {
+    if (m_fileBusy || !m_pages->isVisible() || m_pageCount < 1 || m_thumbnailBrowser) return;
+    const QRect viewport = m_pages->viewport()->rect();
+    if (viewport.isEmpty()) return;
+    const auto rowRect = [this](int page) { return m_pages->visualRect(m_pages->model()->index(page, 0)); };
+    if (m_sidebarRequestBusy) {
+        if (rowRect(m_sidebarPendingPage).intersects(viewport)) return;
+        cancelSidebarPreviewRequest();
+    }
+
+    // Row geometry is ordered because this is a flat list with a fixed icon size.
+    int first = 0;
+    int end = m_pages->count();
+    while (first < end) {
+        const int middle = first + (end - first) / 2;
+        if (rowRect(middle).bottom() < viewport.top()) first = middle + 1;
+        else end = middle;
+    }
+
+    const QSize maximumSize = m_pages->iconSize();
+    for (int page = first; page < m_pages->count(); ++page) {
+        const QRect row = rowRect(page);
+        if (row.top() > viewport.bottom()) break;
         if (m_sidebarReady.contains(page)) continue;
-        const auto* item = m_pages->item(page);
-        if (!m_pages->visualItemRect(item).intersects(m_pages->viewport()->rect())) continue;
-        const QSizeF display = m_geometry[page].displaySize;
+        if (!row.intersects(viewport)) continue;
+        const QSizeF display = m_geometry.at(page).displaySize;
         if (display.width() <= 0 || display.height() <= 0) continue;
-        m_sidebarPendingPage = page; m_sidebarRequestBusy = true; ++m_sidebarRequest;
-        requestPageRender(page, std::min(120 / display.width(), 170 / display.height()), m_sidebarRequest, 2);
-        break;
+        m_sidebarPendingPage = page;
+        m_sidebarRequestBusy = true;
+        const qreal scale = std::min(maximumSize.width() / display.width(), maximumSize.height() / display.height());
+        requestPageRender(page, std::nextafter(scale, qreal(0)), ++m_sidebarRequest, 2);
+        return;
     }
 }
 
@@ -655,8 +721,7 @@ void MainWindow::openPageOverview()
     const auto reading = m_view->captureViewState();
     m_view->setRenderingSuspended(true);
     m_backupTimer->stop(); m_sidebarPreviewTimer->stop();
-    if (m_sidebarRequestBusy) cancelPageRender(m_sidebarRequest, 2);
-    m_sidebarRequestBusy = false;
+    cancelSidebarPreviewRequest();
     ThumbnailBrowser browser(this); m_thumbnailBrowser = &browser;
     browser.setDocument(m_geometry, m_pageAnnotations, m_currentPage);
     browser.setThumbnailWidth(m_preferences.tools.thumbnailSize);

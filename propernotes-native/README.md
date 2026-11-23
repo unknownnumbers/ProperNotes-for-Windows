@@ -8,6 +8,11 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+0.3.10 adds a native annotation sidebar with page and kind filters and navigation
+to an annotation. Select and Erase expose the text-review inclusion setting in
+their toolbar. Page previews reuse suitable reading images and schedule visible
+thumbnails without a fixed wait after each result.
+
 0.3.9 adds editable lines, arrows, rectangles and ellipses with outline styles,
 optional fills for rectangles and ellipses, and favorites. Shapes and ink can
 move, scale and rotate together. Text boxes and shapes can be cut, copied and
@@ -109,6 +114,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.10 新增批注側欄，可按頁面範圍及類型篩選，點選批注可定位。框選和橡皮的工具列加入「包含正文標記」設定。頁面預覽會重用適用的閱讀圖像，依可見範圍排程，完成一張後接續處理。
+
 0.3.9 新增可編輯的直線、箭頭、矩形和橢圓，支援線條樣式、矩形及橢圓填充與收藏。圖形和筆跡可一起移動、縮放及旋轉，圖形和文字方塊可在同一份 PDF 內跨頁剪貼。設定可控制框選和橡皮是否作用於正文審閱標記。含 ProperNotes 圖形的 PDF 使用原生編輯格式 v5。
 
 0.3.8 可等比縮放及旋轉選取的普通筆跡和自由螢光筆跡。按鈕及快捷鍵可在同一份開啟的 PDF 內跨頁剪貼。浮動收藏欄可以固定，重新開啟程式後會恢復位置和固定狀態。
@@ -165,6 +172,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.10 新增批注侧栏，可按页面范围和类型筛选，点击批注可定位。框选和橡皮的工具栏加入「包含正文标记」设置。页面预览会复用适用的阅读图像，按可见范围排队，完成一张后接着处理。
 
 0.3.9 新增可编辑的直线、箭头、矩形和椭圆，支持线条样式、矩形及椭圆填充和收藏。形状和笔迹可一起移动、缩放和旋转，形状和文字框可在同一份 PDF 内跨页剪贴。设置可控制框选和橡皮是否作用于正文审阅标记。含 ProperNotes 形状的 PDF 使用原生编辑格式 v5。
 

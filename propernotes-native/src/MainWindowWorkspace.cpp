@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindowState.h"
+#include "AnnotationListPane.h"
 #include "DocumentSession.h"
 #include "FavoritesBar.h"
 #include <QAction>
@@ -138,6 +139,7 @@ void MainWindow::clearActiveDocument() {
     m_pageCount=0;m_currentPage=-1;m_targetPage=-1;m_dirty=false;m_readOnly=false;
     m_contentRevision=0;m_backedUpRevision=0;m_sidebarReady.clear();m_sidebarIcons.clear();
     {const QSignalBlocker block(m_pages);m_pages->clear();}
+    m_annotationList->clearDocument();
 }
 void MainWindow::activateTab(int index,bool load) {
     if(index<0||index>=m_tabs.size())return;
@@ -155,10 +157,11 @@ void MainWindow::activateTab(int index,bool load) {
         m_dirty=tab->dirty;m_readOnly=tab->readOnly;m_backupWarning=tab->backupWarning;
         m_contentRevision=tab->contentRevision;m_backedUpRevision=tab->backedUpRevision;
         m_pageCount=int(m_geometry.size());m_restoringView=true;
-        {const QSignalBlocker block(m_pages);for(int page=0;page<m_pageCount;++page)m_pages->addItem(QStringLiteral("第 %1 页").arg(page+1));}
+        populateSidebarPages();
         m_view->setDocument(m_geometry,m_pageAnnotations);
         if(tab->viewState.valid)m_view->restoreViewState(tab->viewState);
         m_currentPage=m_view->currentPage();m_targetPage=m_currentPage;m_restoringView=false;
+        m_annotationList->setDocument(m_pageAnnotations, m_currentPage);
         m_view->setRenderingSuspended(false);m_sidebarPreviewTimer->start();
     }
     refreshTabs();updateUi();scheduleBackup();scheduleWorkspaceSave();

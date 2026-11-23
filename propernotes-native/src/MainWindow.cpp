@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindow.h"
+#include "AnnotationListPane.h"
 #include "InkCanvas.h"
 #include "PdfDocument.h"
 #include "SettingsDialog.h"
@@ -200,9 +201,16 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     const bool wasUpdating = m_updatingUi;
     m_updatingUi = true;
     syncStrokeStyleControls(effective.tools, effective.penWidthPt);
+    const bool sidebarWasHidden = m_navigation->isHidden();
     m_sidebarAction->setChecked(values.sidebarVisible);
     m_navigation->setVisible(values.sidebarVisible);
     m_splitter->setSizes({values.sidebarWidth, std::max(1, m_splitter->width() - values.sidebarWidth)});
+    if (!values.sidebarVisible) {
+        m_sidebarPreviewTimer->stop();
+        cancelSidebarPreviewRequest();
+    } else if (sidebarWasHidden) {
+        m_sidebarPreviewTimer->start();
+    }
     m_view->setPenColor(effective.penColor);
     m_view->setPenWidth(effective.penWidthPt);
     m_view->setPenOpacity(effective.tools.opacity);
@@ -692,6 +700,7 @@ void MainWindow::updateUi()
                                         m_pressure,m_sensitivity,m_eraseMode,m_textFamily})
         widget->setEnabled(preferencesReady);
     m_followAction->setEnabled(preferencesReady);
+    m_editTextMarkupsAction->setEnabled(preferencesReady);
     m_layout->setEnabled(preferencesReady && ready);
     m_undoAction->setEnabled(editable && !textEditing && !m_editUndo.isEmpty());
     m_redoAction->setEnabled(editable && !textEditing && !m_editRedo.isEmpty());
@@ -700,6 +709,7 @@ void MainWindow::updateUi()
     m_previousAction->setEnabled(ready && m_currentPage > 0);
     m_nextAction->setEnabled(ready && m_currentPage + 1 < m_pageCount);
     m_pageNumber->setEnabled(ready); m_pages->setEnabled(ready);
+    m_annotationList->setEnabled(ready && !m_thumbnailBrowser && !m_settingsDialog);
     for (auto* action : {m_zoomInAction,m_zoomOutAction,m_fitAction,m_fitPageAction,m_fitHeightAction}) action->setEnabled(ready);
     m_view->setEnabled(!m_fileBusy&&!m_closingAll);
     m_view->setEditingEnabled(editable);
@@ -881,9 +891,7 @@ void MainWindow::beginOpen(const QString& path)
             window->m_editUndo.clear();window->m_editRedo.clear();window->m_historyBytes=0;
             window->m_viewHistory.clear();window->m_viewHistoryIndex=-1;window->m_lastViewReason.clear();
             window->m_sidebarReady.clear();window->m_sidebarIcons.clear();window->m_sidebarPendingPage=-1;
-            window->m_updatingUi=true;window->m_pages->clear();
-            for(int page=0;page<result.pageCount;++page)window->m_pages->addItem(QStringLiteral("第 %1 页").arg(page+1));
-            window->m_updatingUi=false;
+            window->populateSidebarPages();
             const QString layout=window->m_preferences.tools.layout;
             window->m_view->setLayoutMode(layout==QStringLiteral("single")?DocumentView::LayoutMode::SinglePage:
                 layout==QStringLiteral("facing")?DocumentView::LayoutMode::FacingPages:
@@ -892,6 +900,7 @@ void MainWindow::beginOpen(const QString& path)
             if(tab->viewState.valid){auto view=tab->viewState;view.page=std::clamp(view.page,0,result.pageCount-1);window->m_view->restoreViewState(view);}
             else window->m_view->setZoomMode(DocumentView::ZoomMode::FitWidth);
             window->m_currentPage=window->m_view->currentPage();window->m_targetPage=window->m_currentPage;
+            window->m_annotationList->setDocument(window->m_pageAnnotations, window->m_currentPage);
             window->m_restoringView=false;
             window->viewChanged(window->m_view->captureViewState(),QStringLiteral("document"));
             ReadingEntry entry;entry.path=result.path;entry.fileSize=result.fileSize;entry.modifiedUtc=result.modifiedUtc;

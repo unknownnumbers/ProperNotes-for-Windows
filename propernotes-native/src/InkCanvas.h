@@ -70,7 +70,7 @@ public:
     QSet<QUuid> selectionIds() const { return m_selection; }
     bool hasObjectSelection() const;
     PageAnnotations selectedObjects() const;
-    void selectObjects(const QSet<QUuid>& ids);
+    void selectObjects(const QSet<QUuid>& ids, bool includeTextMarkups = false);
     void clearSelection();
     void setTextPage(const std::shared_ptr<const PdfTextPage>& text);
     void setTextSelection(const QVector<TextMarkupQuad>& quads);

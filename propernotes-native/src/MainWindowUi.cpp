@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindow.h"
+#include "AnnotationListPane.h"
 #include <QAction>
 #include <QActionGroup>
 #include <QCheckBox>
@@ -14,17 +15,27 @@
 #include <QPixmap>
 #include <QScopedValueRollback>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QSpinBox>
 #include <QSplitter>
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
 
 namespace propernotes {
+void MainWindow::populateSidebarPages()
+{
+    const QSignalBlocker blocked(m_pages);
+    m_pages->clear();
+    for (int page = 0; page < m_pageCount; ++page)
+        m_pages->addItem(new QListWidgetItem(m_sidebarPlaceholder, QStringLiteral("第 %1 页").arg(page + 1)));
+}
+
 void MainWindow::syncStrokeStyleControls(const ToolPreferences& tools, qreal penWidth)
 {
     const QScopedValueRollback<bool> updating(m_updatingUi, true);
@@ -157,6 +168,14 @@ void MainWindow::buildUi() {
         if (const auto shape = InkCanvas::shapeKind(m_tool)) p.tools.shapeToolPreference(*shape).singleUse = !locked;
         beginPendingDefaultChange();persistPreferences(p);});
     addToolBarBreak();auto* style=addToolBar(QStringLiteral("笔与对象属性"));style->setMovable(false);
+    m_editTextMarkupsAction = style->addAction(QStringLiteral("包含正文标记"));
+    m_editTextMarkupsAction->setCheckable(true);
+    m_editTextMarkupsAction->setToolTip(QStringLiteral("让框选和橡皮作用于可编辑的高亮、下划线、波浪线和删除线。"));
+    connect(m_editTextMarkupsAction, &QAction::triggered, this, [this](bool enabled) {
+        auto preferences = m_preferences;
+        preferences.editTextMarkups = enabled;
+        persistPreferences(preferences);
+    });
     m_colorAction=style->addAction(QStringLiteral("颜色"));
     m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSingleStep(0.5);m_width->setSuffix(QStringLiteral(" pt"));style->addWidget(m_width);
     m_opacity=new QDoubleSpinBox;m_opacity->setRange(0,100);m_opacity->setSuffix(QStringLiteral("% 不透明度"));style->addWidget(m_opacity);
@@ -265,7 +284,20 @@ void MainWindow::buildUi() {
     m_preferencesBanner=new QLabel;m_documentBanner=new QLabel;
     for(auto* banner:{m_preferencesBanner,m_documentBanner}){banner->setTextFormat(Qt::PlainText);banner->setWordWrap(true);banner->setStyleSheet(QStringLiteral("padding:8px;background:#fff5d8;color:#795700;"));banner->hide();box->addWidget(banner);}
     m_splitter=new QSplitter;m_splitter->setChildrenCollapsible(false);m_navigation=new QWidget;m_navigation->setMinimumWidth(112);m_navigation->setMaximumWidth(400);
-    auto* nav=new QVBoxLayout(m_navigation);nav->setContentsMargins(0,0,0,0);nav->addWidget(new QLabel(QStringLiteral(" 页面预览")));m_pages=new QListWidget;m_pages->setIconSize(QSize(120,170));m_pages->setUniformItemSizes(true);nav->addWidget(m_pages);m_splitter->addWidget(m_navigation);
+    auto* nav = new QVBoxLayout(m_navigation);
+    nav->setContentsMargins(0, 0, 0, 0);
+    m_navigationTabs = new QTabWidget;
+    m_pages = new QListWidget;
+    m_pages->setIconSize(QSize(120, 170));
+    m_pages->setUniformItemSizes(true);
+    m_annotationList = new AnnotationListPane;
+    m_navigationTabs->addTab(m_pages, QStringLiteral("页面"));
+    m_navigationTabs->addTab(m_annotationList, QStringLiteral("批注"));
+    nav->addWidget(m_navigationTabs);
+    m_splitter->addWidget(m_navigation);
+    QPixmap emptyPreview(m_pages->iconSize());
+    emptyPreview.fill(Qt::transparent);
+    m_sidebarPlaceholder = QIcon(emptyPreview);
     m_view=new DocumentView;m_splitter->addWidget(m_view);m_splitter->setStretchFactor(1,1);m_splitter->setSizes({160,1080});box->addWidget(m_splitter,1);setCentralWidget(central);
     buildTextReviewUi(read, central);
     m_pageLabel=new QLabel;statusBar()->addPermanentWidget(m_pageLabel);
@@ -275,11 +307,27 @@ void MainWindow::buildUi() {
     connect(m_sidebarTimer,&QTimer::timeout,this,[this]{if(m_preferencesBusy||!m_preferencesWritable||!m_navigation->isVisible())return;auto p=m_preferences;p.sidebarWidth=std::clamp(m_splitter->sizes().value(0,p.sidebarWidth),112,400);if(p.sidebarWidth!=m_preferences.sidebarWidth)persistPreferences(p);});
     m_backupTimer=new QTimer(this);m_backupTimer->setSingleShot(true);connect(m_backupTimer,&QTimer::timeout,this,[this]{createBackup(false);});
     m_sidebarPreviewTimer=new QTimer(this);m_sidebarPreviewTimer->setSingleShot(true);m_sidebarPreviewTimer->setInterval(80);connect(m_sidebarPreviewTimer,&QTimer::timeout,this,&MainWindow::refreshSidebarPreview);
-    connect(m_pages->verticalScrollBar(),&QScrollBar::valueChanged,this,[this]{m_sidebarPreviewTimer->start();});
+    const auto scheduleVisiblePreviews = [this] {
+        if (m_navigation->isVisible()) m_sidebarPreviewTimer->start();
+    };
+    connect(m_pages->verticalScrollBar(), &QScrollBar::valueChanged, this, scheduleVisiblePreviews);
+    connect(m_pages->verticalScrollBar(), &QScrollBar::rangeChanged, this, scheduleVisiblePreviews);
+    connect(m_navigationTabs, &QTabWidget::currentChanged, this, [this] {
+        if (m_pages->isVisible()) m_sidebarPreviewTimer->start();
+        else {
+            m_sidebarPreviewTimer->stop();
+            cancelSidebarPreviewRequest();
+        }
+    });
+    connect(m_annotationList, &AnnotationListPane::annotationActivated, this, [this](int page, const QUuid& id) {
+        if (m_fileBusy || m_closingAll || m_thumbnailBrowser || m_settingsDialog || page < 0 || page >= m_pageCount) return;
+        chooseTool(InkCanvas::Tool::Select);
+        m_view->locateAnnotation(page, id);
+    });
     connect(m_pages,&QListWidget::currentRowChanged,this,[this](int p){if(!m_updatingUi)goToPage(p);});
     connect(m_view,&DocumentView::renderRequested,this,[this](int p,qreal s,quint64 id){requestPageRender(p,s,id,0);});connect(m_view,&DocumentView::renderCancelled,this,[this](quint64 id){cancelPageRender(id,0);});
     connect(m_view,&DocumentView::annotationsCommitted,this,&MainWindow::commitAnnotations);connect(m_view,&DocumentView::normalToolCompleted,this,&MainWindow::toolCompleted);
-    connect(m_view,&DocumentView::currentPageChanged,this,[this](int p){m_currentPage=p;m_targetPage=p;updateUi();m_sidebarPreviewTimer->start();});
+    connect(m_view,&DocumentView::currentPageChanged,this,[this](int p){m_currentPage=p;m_targetPage=p;m_annotationList->setCurrentPage(p);updateUi();m_sidebarPreviewTimer->start();});
     connect(m_view,&DocumentView::viewStateChanged,this,&MainWindow::viewChanged);
     connect(m_view,&DocumentView::textEditingChanged,this,[this](bool){updateUi();});connect(m_view,&DocumentView::selectionChanged,this,[this]{updateUi();});
     connect(m_view, &DocumentView::objectCutRequested, this, [this] { copySelectedObjects(true); });

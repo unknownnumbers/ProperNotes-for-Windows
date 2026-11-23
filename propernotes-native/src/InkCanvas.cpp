@@ -671,7 +671,7 @@ PageAnnotations InkCanvas::selectedObjects() const
     return result;
 }
 
-void InkCanvas::selectObjects(const QSet<QUuid>& ids)
+void InkCanvas::selectObjects(const QSet<QUuid>& ids, bool includeTextMarkups)
 {
     if (!m_editingEnabled || m_pageIndex < 0 || m_background.isNull() || m_tool != Tool::Select || hasActiveGesture()) return;
     QSet<QUuid> valid;
@@ -683,6 +683,11 @@ void InkCanvas::selectObjects(const QSet<QUuid>& ids)
     }
     for (const auto& text : m_annotations.textBoxes) {
         if (ids.contains(text.id)) valid.insert(text.id);
+    }
+    if (includeTextMarkups && m_editTextMarkups) {
+        for (const auto& markup : m_annotations.textMarkups) {
+            if (ids.contains(markup.id)) valid.insert(markup.id);
+        }
     }
     if (valid == m_selection) return;
     m_selection = std::move(valid);

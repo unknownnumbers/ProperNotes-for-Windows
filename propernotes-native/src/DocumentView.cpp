@@ -126,6 +126,10 @@ void DocumentView::updatePageAnnotations(int page, const PageAnnotations& annota
             if (m_pendingObjectIds.contains(box.id)) surviving.insert(box.id);
         for (const auto& shape : annotations.shapes)
             if (m_pendingObjectIds.contains(shape.id)) surviving.insert(shape.id);
+        if (m_pendingObjectIncludesMarkup && m_editTextMarkups) {
+            for (const auto& markup : annotations.textMarkups)
+                if (m_pendingObjectIds.contains(markup.id)) surviving.insert(markup.id);
+        }
         m_pendingObjectIds = std::move(surviving);
         if (m_pendingObjectIds.isEmpty()) clearPendingObjectSelection();
     }
@@ -764,6 +768,12 @@ void DocumentView::invalidateRequest()
     }
 }
 
+RenderedPage DocumentView::cachedPageRaster(int page) const
+{
+    const auto cached = m_cache.constFind(page);
+    return cached == m_cache.cend() ? RenderedPage{} : cached->page;
+}
+
 void DocumentView::deliverRenderedPage(int page, qreal scale, quint64 requestId, const RenderedPage& result)
 {
     if (!requestId || m_request.id != requestId || m_request.page != page || page < 0 || page >= m_pages.size())
@@ -1028,6 +1038,7 @@ void DocumentView::clearPendingObjectSelection()
 {
     m_pendingObjectPage = -1;
     m_pendingObjectIds.clear();
+    m_pendingObjectIncludesMarkup = false;
 }
 
 void DocumentView::selectPageObjects(int page, const QSet<QUuid>& ids)
@@ -1040,6 +1051,45 @@ void DocumentView::selectPageObjects(int page, const QSet<QUuid>& ids)
     applyPendingObjectSelection(page);
 }
 
+void DocumentView::locateAnnotation(int page, const QUuid& id)
+{
+    if (page < 0 || page >= m_pages.size() || id.isNull()) return;
+    const auto annotations = m_annotations.constFind(page);
+    if (annotations == m_annotations.cend()) return;
+
+    QRectF bounds;
+    bool textMarkup = false;
+    for (const auto& stroke : annotations->strokes)
+        if (stroke.id == id) { bounds = inkStrokeBounds(stroke); break; }
+    for (const auto& shape : annotations->shapes)
+        if (shape.id == id) { bounds = shapeBounds(shape); break; }
+    for (const auto& text : annotations->textBoxes)
+        if (text.id == id) { bounds = text.rect; break; }
+    for (const auto& markup : annotations->textMarkups) {
+        if (markup.id != id) continue;
+        bounds = textMarkupBounds(markup);
+        textMarkup = true;
+        break;
+    }
+    if (!bounds.isValid()) return;
+
+    finishGesture();
+    clearSelection();
+    ViewState state;
+    state.page = page;
+    state.pdfAnchor = bounds.center();
+    state.zoom = m_zoom;
+    state.layout = m_layout;
+    state.zoomMode = m_zoomMode;
+    state.valid = true;
+    restoreViewState(state);
+    if (!m_editing || m_tool != InkCanvas::Tool::Select || (textMarkup && !m_editTextMarkups)) return;
+    m_pendingObjectPage = page;
+    m_pendingObjectIds.insert(id);
+    m_pendingObjectIncludesMarkup = textMarkup;
+    applyPendingObjectSelection(page);
+}
+
 void DocumentView::applyPendingObjectSelection(int page)
 {
     if (page != m_pendingObjectPage || !m_editing || m_tool != InkCanvas::Tool::Select
@@ -1047,11 +1097,12 @@ void DocumentView::applyPendingObjectSelection(int page)
     auto* canvas = m_canvases.value(page, nullptr);
     if (!canvas || canvas->pageIndex() != page || !canvas->property("propernotesRenderId").toULongLong()
         || canvas->hasPointerContact()) return;
-    const auto ids = std::exchange(m_pendingObjectIds, QSet<QUuid>{});
-    m_pendingObjectPage = -1;
+    const auto ids = m_pendingObjectIds;
+    const bool includeTextMarkups = m_pendingObjectIncludesMarkup;
+    clearPendingObjectSelection();
     const QWidget* focus = QApplication::focusWidget();
     if (focus && (focus == this || isAncestorOf(focus))) canvas->setFocus(Qt::OtherFocusReason);
-    canvas->selectObjects(ids);
+    canvas->selectObjects(ids, includeTextMarkups);
 }
 
 void DocumentView::setTool(InkCanvas::Tool tool)
@@ -1077,11 +1128,17 @@ PROPERNOTES_CANVAS_OPTION(setPressureEnabled, m_pressure, bool, setPressureEnabl
 PROPERNOTES_CANVAS_OPTION(setPressureSensitivity, m_sensitivity, qreal, setPressureSensitivity)
 PROPERNOTES_CANVAS_OPTION(setEraserMode, m_eraserMode, InkCanvas::EraseMode, setEraserMode)
 PROPERNOTES_CANVAS_OPTION(setEraserRadius, m_eraserRadius, qreal, setEraserRadius)
-PROPERNOTES_CANVAS_OPTION(setEditTextMarkups, m_editTextMarkups, bool, setEditTextMarkups)
 PROPERNOTES_CANVAS_OPTION(setShapeStyle, m_shapeStyle, const ShapeStyle&, setShapeStyle)
 PROPERNOTES_CANVAS_OPTION(setInputFollowsTool, m_inputFollowsTool, bool, setTouchAndMouseAnnotate)
 PROPERNOTES_CANVAS_OPTION(setTextReviewActive, m_textReviewActive, bool, setTextReviewActive)
 #undef PROPERNOTES_CANVAS_OPTION
+
+void DocumentView::setEditTextMarkups(bool enabled)
+{
+    m_editTextMarkups = enabled;
+    if (!enabled && m_pendingObjectIncludesMarkup) clearPendingObjectSelection();
+    for (auto* canvas : std::as_const(m_canvases)) canvas->setEditTextMarkups(enabled);
+}
 
 void DocumentView::setHighlighterStyle(const QColor& color, qreal widthPt)
 {
@@ -1109,6 +1166,7 @@ void DocumentView::setTextStyle(const QString& family, qreal size, const QColor&
 }
 void DocumentView::setEditingEnabled(bool enabled)
 {
+    if (!enabled) clearPendingObjectSelection();
     m_editing = enabled;
     for (auto it = m_canvases.cbegin(); it != m_canvases.cend(); ++it)
         it.value()->setEditingEnabled(enabled && m_cache.contains(it.key()));

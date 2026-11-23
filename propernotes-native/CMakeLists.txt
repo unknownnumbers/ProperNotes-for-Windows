@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.24)
-project(ProperNotesNative VERSION 0.3.9 LANGUAGES CXX)
+project(ProperNotesNative VERSION 0.3.10 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -46,6 +46,7 @@ qt_add_executable(ProperNotesNative WIN32
     src/BackupStore.h src/BackupStore.cpp
     src/DocumentView.h src/DocumentView.cpp
     src/ThumbnailBrowser.h src/ThumbnailBrowser.cpp
+    src/AnnotationListPane.h src/AnnotationListPane.cpp
     src/ToolPreferences.h
 )
 target_link_libraries(ProperNotesNative PRIVATE

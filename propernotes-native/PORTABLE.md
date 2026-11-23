@@ -4,6 +4,12 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+The left sidebar has **Pages** and **Annotations** tabs. Annotations lists this
+program's editable objects, with current-page or whole-document scope and a kind
+filter. Click an entry to navigate to it. Review marks are selected only when
+**Include text review marks** is on. Find that setting in the Select/Move or
+Eraser toolbar, or in Settings. The choice is saved.
+
 Choose Line, Arrow, Rectangle or Ellipse from **Shapes** (形状). Drag to preview
 and release to draw. Hold Shift to constrain lines and arrows to 45° increments,
 or rectangles and ellipses to squares and circles. Save the current shape as a
@@ -142,6 +148,8 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+左側欄的「页面／批注」可切換縮圖及本應用的批注列表。可按目前頁面或整份 PDF、批注類型篩選，點選條目即可定位。選取正文標記會遵循「包含正文标记」開關，該開關可從框選或橡皮的工具列及設定頁操作，選擇會儲存。
+
 從「形状」選擇直線、箭頭、矩形或橢圓，拖曳時預覽，放開後建立。按住 Shift 可將直線和箭頭約束為 45° 的倍數，將矩形和橢圓約束為正方形和正圓。線條、填充和持續或單次模式可收藏。整筆橡皮碰到邊線或可見填充即可移除整個圖形。
 
 在「框选 / 移动」中選取筆跡或圖形，拖曳角點可等比縮放並同步調整線寬，拖曳旋轉把手可繞選區中心旋轉，按住 Shift 可每 15° 吸附。可用手寫筆拖曳，滑鼠或單指拖曳需開啟「鼠标与手跟随工具」。
@@ -199,6 +207,8 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+左侧栏的「页面／批注」可切换缩略图和本应用的批注列表。可按当前页或整份 PDF、批注类型筛选，点击条目即可定位。选中正文标记会遵循「包含正文标记」开关，该开关可从框选或橡皮的工具栏及设置页操作，选择会保存。
 
 从「形状」选择直线、箭头、矩形或椭圆，拖动时预览，松开后创建。按住 Shift 可将直线和箭头约束为 45° 的倍数，将矩形和椭圆约束为正方形和正圆。线条、填充和持续或单次模式可收藏。整笔橡皮碰到边线或可见填充即可删除整个形状。
 

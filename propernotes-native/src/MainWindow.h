@@ -7,6 +7,7 @@
 #include "DocumentView.h"
 
 #include <QMainWindow>
+#include <QIcon>
 #include <QMap>
 #include <QByteArray>
 #include <QPointer>
@@ -30,6 +31,7 @@ class QThread;
 class QTimer;
 class QToolButton;
 class QTabBar;
+class QTabWidget;
 class QMenu;
 class QToolBar;
 
@@ -40,6 +42,7 @@ class ThumbnailBrowser;
 struct DocumentSession;
 class WorkspaceStore;
 class FavoritesBar;
+class AnnotationListPane;
 struct FavoriteTool;
 
 class MainWindow final : public QMainWindow
@@ -97,6 +100,8 @@ private:
     void openPageOverview();
     void requestPageRender(int page, qreal scale, quint64 id, int route);
     void cancelPageRender(quint64 id, int route);
+    void populateSidebarPages();
+    void cancelSidebarPreviewRequest();
     void refreshSidebarPreview();
     void finishFileOperation();
     void loadPreferences(bool reopenSettings = false);
@@ -137,6 +142,8 @@ private:
 
     DocumentView* m_view = nullptr;
     QListWidget* m_pages = nullptr;
+    QTabWidget* m_navigationTabs = nullptr;
+    AnnotationListPane* m_annotationList = nullptr;
     QSpinBox* m_pageNumber = nullptr;
     QDoubleSpinBox* m_width = nullptr;
     QDoubleSpinBox* m_opacity = nullptr;
@@ -168,6 +175,7 @@ private:
     QAction* m_pasteObjectsAction = nullptr;
     QAction* m_textAction = nullptr;
     QAction* m_followAction = nullptr;
+    QAction* m_editTextMarkupsAction = nullptr;
     QAction* m_lockAction = nullptr;
     QAction* m_fitPageAction = nullptr;
     QAction* m_fitHeightAction = nullptr;
@@ -274,6 +282,7 @@ private:
     QPointer<ThumbnailBrowser> m_thumbnailBrowser;
     quint64 m_sidebarRequest = 0;
     bool m_sidebarRequestBusy = false;
+    QIcon m_sidebarPlaceholder;
     QSet<int> m_sidebarReady;
     QVector<int> m_sidebarIcons;
     int m_sidebarPendingPage = -1;
