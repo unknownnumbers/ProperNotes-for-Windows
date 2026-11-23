@@ -6,6 +6,21 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.14 page-field display correction
+
+English (en): The page picker now uses a separate integer-validated text field,
+explicit digit sizing, centered text and an opaque theme-aware container. It
+avoids the styled NoButtons spin-box path in the pinned Qt source that can make
+the internal text area almost zero width. Display refresh and input drafts are
+handled separately. Cloud compilation and packaging are pending at source
+preparation time. No installation, application launch or test is performed on the
+user's PC. Actual display scaling, current-page updates and page entry still need
+user acceptance.
+
+Traditional Chinese (zh-TC): 此修訂以整數校驗的獨立文字框、明確字寬、居中對齊和不透明主題背景處理頁碼，避開目前 Qt 的 NoButtons 數字框樣式造成文字區近乎零寬的路徑。顯示刷新與輸入草稿分開處理。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。顯示縮放、目前頁更新和輸入跳頁仍待實際驗收。
+
+Simplified Chinese (zh-SC): 此修订以整数校验的独立文字框、明确字宽、居中对齐和不透明主题背景处理页码，避开当前 Qt 的 NoButtons 数字框样式造成文字区近乎零宽的路径。显示刷新与输入草稿分开处理。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试。显示缩放、当前页更新和输入跳页仍待实际验收。
+
 ## 0.3.13 palette edge resizing
 
 English (en): The large top and bottom resize icons are removed. Direct edge

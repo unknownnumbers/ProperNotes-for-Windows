@@ -26,6 +26,8 @@ class QListWidget;
 class QObject;
 class QScrollArea;
 class QSpinBox;
+class QLineEdit;
+class QIntValidator;
 class QSplitter;
 class QThread;
 class QTimer;
@@ -121,6 +123,7 @@ private:
     void buildWorkspaceUi();
     void buildReaderChrome();
     void refreshReaderChrome();
+    void commitChromePageNumber();
     void stashActiveTab();
     void activateTab(int index, bool load = true);
     void closeTab(int index);
@@ -218,7 +221,10 @@ private:
     QAction* m_fullScreenAction = nullptr;
     QToolButton* m_pagesRail = nullptr;
     QToolButton* m_annotationsRail = nullptr;
-    QSpinBox* m_chromePageNumber = nullptr;
+    QLineEdit* m_chromePageNumber = nullptr;
+    QIntValidator* m_chromePageValidator = nullptr;
+    bool m_chromePageDraft = false;
+    quint64 m_chromePageDraftGeneration = 0;
     QLabel* m_chromePageTotal = nullptr;
     QTimer* m_workspaceTimer = nullptr;
     QThread* m_workerThread = nullptr;

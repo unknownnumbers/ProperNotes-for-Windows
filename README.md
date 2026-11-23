@@ -47,6 +47,8 @@ The 0.3.12 revision replaces inconsistent rasterized UI drawings with a pinned L
 
 The 0.3.13 revision removes the large top and bottom palette resize buttons. Drag an unlocked floating palette's upper or lower border directly to change height; no icon rows are reserved for resizing. The bottom move handle, edge docking, saved geometry and locked-state rules are retained. The workflow compiles and packages only. 原生 0.3.13 移除上下調高圖示，解鎖懸浮時直接拖動上下邊緣拉伸。原生 0.3.13 移除上下调高图标，解锁悬浮时直接拖动上下边缘拉伸。沒有在使用者 PC 安裝、啟動或測試。没有在用户 PC 安装、启动或测试。
 
+The 0.3.14 revision fixes the blank current-page field in the upper-right picker. An independent numeric editor avoids the pinned Qt styled NoButtons spin-box path, with explicit digit width, readable centered text and an opaque group background. View refreshes preserve input drafts; Enter or leaving the editor commits a valid page, and Escape cancels. Cloud compilation and packaging do not start or test the application. 原生 0.3.14 修正右上頁碼白框，顯示目前頁並保留輸入跳頁。原生 0.3.14 修正右上页码白框，显示当前页并保留输入跳页。實際顯示與操作仍待用戶驗收。实际显示与操作仍待用户验收。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

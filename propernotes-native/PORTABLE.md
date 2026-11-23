@@ -4,6 +4,17 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.14 page-field display correction
+
+The upper-right page field uses integer-validated text input with an explicit
+digit width and centered text. Its page count and overview button share an opaque
+theme-aware group. This avoids the internal edit-area collapse of a styled
+NoButtons spin box in the pinned Qt version. An active input draft is kept during
+display refreshes and handled separately when submitted. Cloud compilation and
+packaging are pending at source preparation time. No installation, application
+launch or test is performed on the recipient's PC. Display scaling and actual
+input behavior still require user acceptance.
+
 ### 0.3.13 resize from the palette edges
 
 Unlock the floating palette with the left-rail pin button, then drag its top or
@@ -202,6 +213,10 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.14 頁碼框顯示修正
+
+右上頁碼改用整數校驗的文字輸入框，明確設定字寬和居中對齊；頁碼、總頁數及展開頁面入口共用不透明的主題背景。此做法避開目前 Qt 樣式與 NoButtons 數字框造成的內部文字區過窄問題。顯示刷新會保留輸入草稿，提交另行處理。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際顯示縮放和輸入仍待驗收。
+
 ### 0.3.13 直接拖動工具框邊緣
 
 先用左側圖釘解除固定，再直接拖動懸浮工具框的上、下邊緣調整高度。上下大型拉伸圖示已移除，底部移動把手仍用於移動及停靠。鎖定時不能拉伸，停靠時維持側欄整高，PDF 操作保留原有邏輯。源碼準備時仍待雲端編譯及打包，不在使用者 PC 安裝、啟動應用或執行測試。
@@ -281,6 +296,10 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.14 页码框显示修正
+
+右上页码改用整数校验的文字输入框，明确设置字宽和居中对齐；页码、总页数和展开页面入口共用不透明的主题背景。此做法避开当前 Qt 样式与 NoButtons 数字框造成的内部文字区过窄问题。显示刷新会保留输入草稿，提交另行处理。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际显示缩放和输入仍待验收。
 
 ### 0.3.13 直接拖动工具框边缘
 

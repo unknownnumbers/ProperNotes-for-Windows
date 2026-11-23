@@ -9,8 +9,13 @@
 #include <QComboBox>
 #include <QEvent>
 #include <QFrame>
+#include <QFontMetrics>
 #include <QHBoxLayout>
+#include <QIntValidator>
+#include <QKeyEvent>
 #include <QLabel>
+#include <QLineEdit>
+#include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
 #include <QSignalBlocker>
@@ -146,15 +151,42 @@ void MainWindow::buildReaderChrome()
     // Page selection stays available above the canvas, independent of the
     // transient zoom/history groups. It uses the same navigation command.
     auto* pages = new QFrame(m_view->viewport()); pages->setObjectName(QStringLiteral("readerPagePicker"));
+    pages->setAutoFillBackground(true);pages->setAttribute(Qt::WA_StyledBackground);
+    pages->setStyleSheet(QStringLiteral(
+        "QFrame#readerPagePicker{background:palette(window);border:1px solid palette(mid);border-radius:12px;}"
+        "QLineEdit#readerPageNumber{color:palette(text);background:transparent;border:0;padding:0 6px;margin:0;}"
+        "QLineEdit#readerPageNumber:focus{background:palette(base);border:1px solid palette(highlight);border-radius:5px;}"
+        "QLabel#readerPageTotal{color:palette(window-text);background:transparent;border:0;padding:0;}"));
     auto* pageRow = new QHBoxLayout(pages); pageRow->setContentsMargins(5,4,5,4); pageRow->setSpacing(4);
-    m_chromePageNumber = new QSpinBox; m_chromePageNumber->setMinimumHeight(44); m_chromePageNumber->setButtonSymbols(QAbstractSpinBox::NoButtons);
-    m_chromePageNumber->setKeyboardTracking(false); m_chromePageNumber->setAccessibleName(QStringLiteral("跳转页码"));
-    m_chromePageTotal = new QLabel;
+    // Styled QSpinBox::NoButtons can give its internal editor a near-zero
+    // width in Qt 6.11. Use one explicit editor with a numeric validator.
+    m_chromePageNumber = new QLineEdit;m_chromePageNumber->setObjectName(QStringLiteral("readerPageNumber"));
+    m_chromePageNumber->setMinimumHeight(44);m_chromePageNumber->setAlignment(Qt::AlignCenter);
+    m_chromePageNumber->setAccessibleName(QStringLiteral("跳转页码"));m_chromePageNumber->setInputMethodHints(Qt::ImhDigitsOnly);
+    m_chromePageNumber->setMaxLength(10);
+    m_chromePageValidator = new QIntValidator(1,1,m_chromePageNumber);m_chromePageNumber->setValidator(m_chromePageValidator);
+    m_chromePageNumber->installEventFilter(this);
+    m_chromePageTotal = new QLabel;m_chromePageTotal->setObjectName(QStringLiteral("readerPageTotal"));
     auto* overview = new QToolButton; overview->setDefaultAction(m_overviewAction);configureReaderIconButton(overview);
     pageRow->addWidget(m_chromePageNumber);pageRow->addWidget(m_chromePageTotal);pageRow->addWidget(overview);
-    connect(m_chromePageNumber,&QSpinBox::editingFinished,this,[this]{if(!m_updatingUi)goToPage(m_chromePageNumber->value()-1);});
+    connect(m_chromePageNumber,&QLineEdit::textEdited,this,[this]{
+        m_chromePageDraft=true;m_chromePageDraftGeneration=m_documentGeneration;
+    });
+    connect(m_chromePageNumber,&QLineEdit::editingFinished,this,&MainWindow::commitChromePageNumber);
     // A lightweight filter on the page picker tracks viewport resizing.
     pages->setProperty("readerPagePicker",true); m_view->viewport()->installEventFilter(this);
+    refreshReaderChrome();
+}
+void MainWindow::commitChromePageNumber()
+{
+    if(!m_chromePageNumber||!m_chromePageDraft)return;
+    const auto generation=m_chromePageDraftGeneration;
+    const bool acceptable=m_chromePageNumber->hasAcceptableInput();
+    bool converted=false;const int requested=m_chromePageValidator->locale().toInt(m_chromePageNumber->text(),&converted);
+    m_chromePageDraft=false;
+    if(generation==m_documentGeneration&&m_chromePageNumber->isEnabled()&&acceptable&&converted
+        &&requested>=1&&requested<=m_pageCount&&requested!=m_currentPage+1)
+        goToPage(requested-1);
     refreshReaderChrome();
 }
 void MainWindow::refreshReaderChrome()
@@ -179,15 +211,33 @@ void MainWindow::refreshReaderChrome()
     m_readingControls->setHideDelaySeconds(m_preferences.controlsHideDelaySeconds);
     m_readingControls->setZoom(m_view->zoom()); m_readingControls->refreshAppearance();
     if (m_chromePageNumber) {
+        const bool enabled=m_pageCount>0&&m_pageNumber->isEnabled();
+        const bool preserveDraft=m_chromePageDraft&&m_chromePageNumber->hasFocus()&&enabled
+            &&m_chromePageDraftGeneration==m_documentGeneration;
+        if(!preserveDraft)m_chromePageDraft=false;
         const QSignalBlocker block(m_chromePageNumber);
-        m_chromePageNumber->setRange(1,std::max(1,m_pageCount)); m_chromePageNumber->setValue(std::max(1,m_currentPage+1));
-        m_chromePageNumber->setEnabled(m_pageNumber->isEnabled());m_chromePageTotal->setText(QStringLiteral("/ %1").arg(m_pageCount));
+        m_chromePageValidator->setRange(1,std::max(1,m_pageCount));
+        if(!preserveDraft)m_chromePageNumber->setText(m_pageCount>0?QString::number(std::max(1,m_currentPage+1)):QStringLiteral("--"));
+        const int digits=int(QString::number(std::max(1,m_pageCount)).size());
+        m_chromePageNumber->setFixedWidth(std::max(44,m_chromePageNumber->fontMetrics().horizontalAdvance(QString(digits,QLatin1Char('8')))+24));
+        m_chromePageNumber->setEnabled(enabled);
+        m_chromePageNumber->setToolTip(m_pageCount>0?QStringLiteral("输入 1–%1，回车跳页，Esc 取消").arg(m_pageCount):QStringLiteral("未打开 PDF"));
+        m_chromePageTotal->setText(m_pageCount>0?QStringLiteral("/ %1").arg(m_pageCount):QStringLiteral("/ --"));
         auto* pages = m_chromePageNumber->parentWidget(); pages->adjustSize();
         pages->move(std::max(4,m_view->viewport()->width()-pages->width()-12),12);pages->raise();
     }
 }
 bool MainWindow::eventFilter(QObject* watched,QEvent* event)
 {
+    if(m_chromePageNumber&&watched==m_chromePageNumber){
+        if((event->type()==QEvent::ShortcutOverride||event->type()==QEvent::KeyPress)
+            &&static_cast<QKeyEvent*>(event)->key()==Qt::Key_Escape){
+            event->accept();
+            if(event->type()==QEvent::KeyPress){m_chromePageDraft=false;refreshReaderChrome();m_view->setFocus();}
+            return true;
+        }
+        if(event->type()==QEvent::FocusOut)commitChromePageNumber();
+    }
     if (m_view && watched==m_view->viewport() && event->type()==QEvent::Resize) refreshReaderChrome();
     return QMainWindow::eventFilter(watched,event);
 }
