@@ -50,10 +50,12 @@ constexpr auto OwnerName = "ProperNotesNative";
 constexpr auto IdPrefix = "ProperNotes.NativeInk/";
 constexpr auto TextIdPrefix = "ProperNotes.NativeText/";
 constexpr auto MarkupIdPrefix = "ProperNotes.NativeMarkup/";
+constexpr auto ShapeIdPrefix = "ProperNotes.NativeShape/";
 constexpr int InkFormatVersion = 1; // Its pressure/outline interpretation never changes.
 constexpr int TextFormatVersion = 2;
 constexpr int MarkupFormatVersion = 3;
 constexpr int HighlighterFormatVersion = 4;
+constexpr int ShapeFormatVersion = 5;
 constexpr qint64 MaxFileBytes = 512LL * 1024 * 1024;
 constexpr qsizetype MaxMetadataBytes = 64 * 1024 * 1024;
 constexpr qsizetype MaxTotalPoints = 2'000'000;
@@ -192,7 +194,7 @@ bool finiteCoordinate(double value)
 bool supportedEditVersion(double version)
 {
     return version == InkFormatVersion || version == TextFormatVersion
-        || version == MarkupFormatVersion || version == HighlighterFormatVersion;
+        || version == MarkupFormatVersion || version == HighlighterFormatVersion || version == ShapeFormatVersion;
 }
 
 int strokeFormatVersion(const InkStroke& stroke)
@@ -374,16 +376,94 @@ TextMarkup parseTextMarkup(const QJsonValue& value)
     return markup;
 }
 
+QByteArray shapeSubtype(ShapeKind kind)
+{
+    switch (kind) {
+    case ShapeKind::Line:
+    case ShapeKind::Arrow: return "Line";
+    case ShapeKind::Rectangle: return "Square";
+    case ShapeKind::Ellipse: return "Circle";
+    }
+    fail(QStringLiteral("形状类型无效。"));
+}
+
+QJsonObject shapeJson(const ShapeAnnotation& shape)
+{
+    QString kind;
+    switch (shape.kind) {
+    case ShapeKind::Line: kind = QStringLiteral("line"); break;
+    case ShapeKind::Arrow: kind = QStringLiteral("arrow"); break;
+    case ShapeKind::Rectangle: kind = QStringLiteral("rectangle"); break;
+    case ShapeKind::Ellipse: kind = QStringLiteral("ellipse"); break;
+    }
+    return { { "id", shape.id.toString(QUuid::WithoutBraces) }, { "kind", kind },
+        { "start", QJsonArray{shape.start.x(), shape.start.y()} },
+        { "end", QJsonArray{shape.end.x(), shape.end.y()} },
+        { "rotationDegrees", shape.rotationDegrees }, { "widthPt", shape.style.widthPt },
+        { "strokeColor", shape.style.strokeColor.name(QColor::HexArgb) },
+        { "fillColor", shape.style.fillColor.name(QColor::HexArgb) } };
+}
+
+QByteArray shapeDigest(const ShapeAnnotation& shape)
+{
+    return sha256(QJsonDocument(shapeJson(shape)).toJson(QJsonDocument::Compact)).toHex();
+}
+
+ShapeAnnotation parseShape(const QJsonValue& value)
+{
+    const auto object = value.toObject();
+    if (object.size() != 8 || !object.value("id").isString() || !object.value("kind").isString()
+        || !object.value("rotationDegrees").isDouble() || !object.value("widthPt").isDouble()
+        || !object.value("strokeColor").isString() || !object.value("fillColor").isString())
+        fail(QStringLiteral("原生形状字段未知或缺失。"));
+    const auto parsePoint = [&](const char* key) {
+        const auto point = object.value(QLatin1StringView(key)).toArray();
+        if (point.size() != 2 || !point[0].isDouble() || !point[1].isDouble())
+            fail(QStringLiteral("原生形状坐标无效。"));
+        return QPointF(point[0].toDouble(), point[1].toDouble());
+    };
+    ShapeAnnotation shape;
+    shape.id = QUuid(object.value("id").toString());
+    const QString kind = object.value("kind").toString();
+    if (kind == QStringLiteral("line")) shape.kind = ShapeKind::Line;
+    else if (kind == QStringLiteral("arrow")) shape.kind = ShapeKind::Arrow;
+    else if (kind == QStringLiteral("rectangle")) shape.kind = ShapeKind::Rectangle;
+    else if (kind == QStringLiteral("ellipse")) shape.kind = ShapeKind::Ellipse;
+    else fail(QStringLiteral("原生形状类型无效。"));
+    shape.start = parsePoint("start");
+    shape.end = parsePoint("end");
+    shape.rotationDegrees = object.value("rotationDegrees").toDouble();
+    shape.style.widthPt = object.value("widthPt").toDouble();
+    shape.style.strokeColor = QColor(object.value("strokeColor").toString());
+    shape.style.fillColor = QColor(object.value("fillColor").toString());
+    return shape;
+}
+
+struct ShapeBudget {
+    qsizetype count = 0;
+
+    void add(const ShapeAnnotation& shape, QSet<QUuid>& ids)
+    {
+        if (!validShape(shape))
+            fail(QStringLiteral("形状的坐标、颜色、旋转角度或线宽无效。"));
+        if (ids.contains(shape.id) || ++count > MaxDocumentShapes)
+            fail(QStringLiteral("形状 ID 重复或形状数量超出上限。"));
+        ids.insert(shape.id);
+    }
+};
+
 int formatVersionFor(const QVector<PageAnnotations>& pages)
 {
     bool hasMarkup = false;
+    bool hasHighlighter = false;
     for (const auto& page : pages) {
-        if (std::any_of(page.strokes.cbegin(), page.strokes.cend(), [](const InkStroke& stroke) {
-                return stroke.kind == InkStrokeKind::Highlighter;
-            }))
-            return HighlighterFormatVersion;
+        if (!page.shapes.isEmpty()) return ShapeFormatVersion;
+        hasHighlighter |= std::any_of(page.strokes.cbegin(), page.strokes.cend(), [](const InkStroke& stroke) {
+            return stroke.kind == InkStrokeKind::Highlighter;
+        });
         hasMarkup |= !page.textMarkups.isEmpty();
     }
+    if (hasHighlighter) return HighlighterFormatVersion;
     return hasMarkup ? MarkupFormatVersion : TextFormatVersion;
 }
 
@@ -401,6 +481,12 @@ QJsonObject pageJson(const PageAnnotations& page, int version)
         for (const auto& markup : page.textMarkups)
             textMarkups.append(textMarkupJson(markup));
         result.insert("textMarkups", textMarkups);
+    }
+    if (version >= ShapeFormatVersion) {
+        QJsonArray shapes;
+        for (const auto& shape : page.shapes)
+            shapes.append(shapeJson(shape));
+        result.insert("shapes", shapes);
     }
     return result;
 }
@@ -446,12 +532,14 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
     qsizetype textLength = 0;
     QSet<QUuid> textIds;
     MarkupBudget markupBudget;
+    ShapeBudget shapeBudget;
     bool hasHighlighter = false;
     const QJsonArray pages = root.value("pages").toArray();
     for (int p = 0; p < pageCount; ++p) {
         QJsonArray strokes;
         QJsonArray textBoxes;
         QJsonArray textMarkups;
+        QJsonArray shapes;
         if (version == InkFormatVersion) {
             if (!pages[p].isArray())
                 fail(QStringLiteral("原生 v1 页笔迹数据无效."));
@@ -461,20 +549,24 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
                 fail(QStringLiteral("原生页面对象无效."));
             const auto page = pages[p].toObject();
             const bool hasMarkupField = version >= MarkupFormatVersion;
-            if (page.size() != (hasMarkupField ? 3 : 2) || !page.value("strokes").isArray()
+            const bool hasShapeField = version >= ShapeFormatVersion;
+            if (page.size() != 2 + int(hasMarkupField) + int(hasShapeField) || !page.value("strokes").isArray()
                 || (hasMarkupField && !page.value("textMarkups").isArray())
+                || (hasShapeField && !page.value("shapes").isArray())
                 || !page.value("textBoxes").isArray())
                 fail(QStringLiteral("原生页面字段未知或缺失, 不允许丢弃未知对象."));
             strokes = page.value("strokes").toArray();
             textBoxes = page.value("textBoxes").toArray();
             if (hasMarkupField)
                 textMarkups = page.value("textMarkups").toArray();
+            if (hasShapeField)
+                shapes = page.value("shapes").toArray();
         }
         for (const auto& value : strokes) {
             if (!value.isObject())
                 fail(QStringLiteral("原生笔迹记录无效."));
             const QJsonObject object = value.toObject();
-            const bool highlighted = version == HighlighterFormatVersion
+            const bool highlighted = version >= HighlighterFormatVersion
                 && object.value("kind").toString() == QStringLiteral("highlighter");
             if (object.size() != (highlighted ? 5 : 4) || (!highlighted && object.contains("kind")))
                 fail(QStringLiteral("原生笔迹含未知字段, 不允许丢弃未知编辑数据."));
@@ -537,9 +629,16 @@ QVector<PageAnnotations> parseEditData(const QByteArray& bytes, int pageCount, i
             markupBudget.add(markup, ids);
             result[p].textMarkups.append(std::move(markup));
         }
+        for (const auto& value : shapes) {
+            auto shape = parseShape(value);
+            shapeBudget.add(shape, ids);
+            result[p].shapes.append(std::move(shape));
+        }
     }
     if (version == HighlighterFormatVersion && !hasHighlighter)
         fail(QStringLiteral("原生荧光笔数据不完整，不允许丢弃未知批注。"));
+    if (version == ShapeFormatVersion && shapeBudget.count == 0)
+        fail(QStringLiteral("原生形状数据不完整，不允许丢弃未知批注。"));
     if (version != InkFormatVersion) {
         if (root.size() != 4 || !root.value("textAppearances").isObject())
             fail(QStringLiteral("原生外观索引缺失或含未知数据."));
@@ -578,6 +677,8 @@ bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& a
                            QVector<Reference>& ownedResources);
 bool markupAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                              const TextMarkup& markup, Reference pageReference);
+bool shapeAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
+                            const ShapeAnnotation& shape, Reference pageReference);
 
 bool annotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                        const InkStroke& stroke, Reference pageReference)
@@ -715,7 +816,8 @@ LoadedState loadState(const QByteArray& bytes)
             if (stringValue(state.base, annotation->get("PNOwner")) == OwnerName
                 || stringValue(state.base, annotation->get("NM")).startsWith(IdPrefix)
                 || stringValue(state.base, annotation->get("NM")).startsWith(TextIdPrefix)
-                || stringValue(state.base, annotation->get("NM")).startsWith(MarkupIdPrefix))
+                || stringValue(state.base, annotation->get("NM")).startsWith(MarkupIdPrefix)
+                || stringValue(state.base, annotation->get("NM")).startsWith(ShapeIdPrefix))
                 reservedAnnotations = true;
         }
     }
@@ -753,6 +855,7 @@ LoadedState loadState(const QByteArray& bytes)
             QHash<QUuid, InkStroke> expected;
             QHash<QUuid, TextBox> expectedText;
             QHash<QUuid, const TextMarkup*> expectedMarkup;
+            QHash<QUuid, const ShapeAnnotation*> expectedShapes;
             for (const auto& stroke : pages[p].strokes) {
                 expected.insert(stroke.id, stroke);
                 expectedIds.insert(stroke.id);
@@ -765,6 +868,10 @@ LoadedState loadState(const QByteArray& bytes)
                 expectedMarkup.insert(markup.id, &markup);
                 expectedIds.insert(markup.id);
             }
+            for (const auto& shape : pages[p].shapes) {
+                expectedShapes.insert(shape.id, &shape);
+                expectedIds.insert(shape.id);
+            }
             const auto* page = state.base.getCatalog()->getPage(size_t(p));
             for (const auto& reference : page->getAnnotations()) {
                 const auto* annotation = state.base.getDictionaryFromObject(Object::createReference(reference));
@@ -773,16 +880,20 @@ LoadedState loadState(const QByteArray& bytes)
                 const bool owner = stringValue(state.base, annotation->get("PNOwner")) == OwnerName;
                 const QByteArray name = stringValue(state.base, annotation->get("NM"));
                 const bool isMarkup = name.startsWith(MarkupIdPrefix);
-                const bool reserved = name.startsWith(IdPrefix) || name.startsWith(TextIdPrefix) || isMarkup;
+                const bool isShape = name.startsWith(ShapeIdPrefix);
+                const bool reserved = name.startsWith(IdPrefix) || name.startsWith(TextIdPrefix) || isMarkup || isShape;
                 if (!owner && !reserved)
                     continue;
                 const bool isText = stringValue(state.base, annotation->get("Subtype")) == "FreeText";
-                const char* key = isMarkup ? "PNMarkupID" : isText ? "PNTextID" : "PNStrokeID";
+                const char* key = isShape ? "PNShapeID" : isMarkup ? "PNMarkupID" : isText ? "PNTextID" : "PNStrokeID";
                 const QUuid id(QString::fromUtf8(stringValue(state.base, annotation->get(key))));
                 QVector<Reference> resources;
                 bool matches = false;
                 if (owner && !id.isNull() && !found.contains(id)) {
-                    if (isMarkup) {
+                    if (isShape) {
+                        if (const auto* shape = expectedShapes.value(id, nullptr))
+                            matches = shapeAnnotationMatches(state.base, *annotation, *shape, page->getPageReference());
+                    } else if (isMarkup) {
                         if (const auto* markup = expectedMarkup.value(id, nullptr))
                             matches = markupAnnotationMatches(state.base, *annotation, *markup, page->getPageReference());
                     } else if (isText) {
@@ -851,9 +962,10 @@ QByteArray real(double value)
 }
 
 QByteArray pathAppearanceContent(const QPainterPath& path, const QRectF& box, const QColor& color,
-                                 QByteArray (*number)(double))
+                                 QByteArray (*number)(double), const char* alphaName = "PNAlpha",
+                                 bool evenOdd = false)
 {
-    QByteArray bytes = "q\n/PNAlpha gs\n";
+    QByteArray bytes = QByteArray("q\n/") + alphaName + " gs\n";
     bytes += number(color.redF()) + ' ' + number(color.greenF()) + ' '
              + number(color.blueF()) + " rg\n";
     auto appendPoint = [&](qreal x, qreal y) {
@@ -873,7 +985,7 @@ QByteArray pathAppearanceContent(const QPainterPath& path, const QRectF& box, co
             appendPoint(end.x, end.y); bytes += " c\n";
         }
     }
-    bytes += "f\nQ\n";
+    bytes += evenOdd ? "f*\nQ\n" : "f\nQ\n";
     return bytes;
 }
 
@@ -883,7 +995,7 @@ QByteArray appearanceContent(const InkStroke& stroke, const QRectF& box)
         stroke.kind == InkStrokeKind::Highlighter ? pdfPathNumber : real);
 }
 
-Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray bytes, bool multiply)
+Object vectorAlpha(const QColor& color, bool multiply = false)
 {
     DictBuilder alpha;
     put(alpha, "Type", Object::createName(QByteArray("ExtGState")));
@@ -891,8 +1003,16 @@ Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray
     put(alpha, "CA", Object::createReal(color.alphaF()));
     if (multiply)
         put(alpha, "BM", Object::createName(QByteArray("Multiply")));
+    return Object::createDictionary(std::move(alpha));
+}
+
+Object createVectorAppearance(const QRectF& box, const QColor& color, QByteArray bytes, bool multiply,
+                              const QColor& fill = QColor())
+{
     DictBuilder states;
-    put(states, "PNAlpha", Object::createDictionary(std::move(alpha)));
+    put(states, "PNAlpha", vectorAlpha(color, multiply));
+    if (fill.isValid())
+        put(states, "PNFillAlpha", vectorAlpha(fill));
     DictBuilder resources;
     put(resources, "ExtGState", Object::createDictionary(std::move(states)));
     DictBuilder form;
@@ -925,6 +1045,27 @@ QByteArray pdfPathNumber(double value)
 QByteArray markupAppearanceContent(const TextMarkup& markup, const QRectF& box)
 {
     return pathAppearanceContent(textMarkupPath(markup), box, markup.color, pdfPathNumber);
+}
+
+QByteArray shapeAppearanceContent(const ShapeAnnotation& shape, const QRectF& box)
+{
+    QByteArray bytes;
+    const auto fill = shapeFill(shape);
+    if (!fill.isEmpty())
+        bytes += pathAppearanceContent(fill, box, shape.style.fillColor, pdfPathNumber,
+            "PNFillAlpha", fill.fillRule() == Qt::OddEvenFill);
+    const auto outline = shapeOutline(shape);
+    if (!outline.isEmpty())
+        bytes += pathAppearanceContent(outline, box, shape.style.strokeColor, pdfPathNumber,
+            "PNAlpha", outline.fillRule() == Qt::OddEvenFill);
+    return bytes;
+}
+
+QColor shapeInteriorColor(const ShapeAnnotation& shape)
+{
+    if (shape.kind == ShapeKind::Arrow) return shape.style.strokeColor;
+    if (isAreaShape(shape.kind) && shape.style.fillColor.alpha() > 0) return shape.style.fillColor;
+    return {};
 }
 
 QByteArray pdfUnicodeString(const QString& text)
@@ -1129,6 +1270,91 @@ bool markupAnnotationMatches(const pdf::PDFDocument& document, const Dictionary&
     return *appearance.getStream()->getContent() == markupAppearanceContent(markup, box);
 }
 
+bool shapeAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
+                            const ShapeAnnotation& shape, Reference pageReference)
+{
+    const QByteArray id = shape.id.toByteArray(QUuid::WithoutBraces);
+    const auto& page = annotation.get("P");
+    const QRectF box = shapeBounds(shape);
+    const auto& stroke = shape.style.strokeColor;
+    if (stringValue(document, annotation.get("Type")) != "Annot"
+        || stringValue(document, annotation.get("Subtype")) != shapeSubtype(shape.kind)
+        || numberValue(document, annotation.get("PNVersion")) != ShapeFormatVersion
+        || stringValue(document, annotation.get("NM")) != QByteArray(ShapeIdPrefix) + id
+        || stringValue(document, annotation.get("PNShapeID")) != id
+        || stringValue(document, annotation.get("PNShapeSHA256")) != shapeDigest(shape)
+        || !page.isReference() || page.getReference() != pageReference
+        || numberValue(document, annotation.get("F")) != 4 || numberValue(document, annotation.get("CA")) != 1
+        || !matchesNumbers(document, annotation.get("Rect"), { box.left(), box.top(), box.right(), box.bottom() })
+        || !matchesNumbers(document, annotation.get("C"), { stroke.redF(), stroke.greenF(), stroke.blueF() })
+        || !matchesNumbers(document, annotation.get("Border"), { 0, 0, shape.style.widthPt }))
+        return false;
+    for (const char* key : { "AS", "OC", "IRT", "Rotate", "BS", "RD", "BE", "IT", "LL", "LLE", "LLO",
+                             "CP", "Measure", "Cap", "CO" }) {
+        if (!annotation.get(key).isNull()) return false;
+    }
+    const QColor interior = shapeInteriorColor(shape);
+    if (interior.isValid()) {
+        if (!matchesNumbers(document, annotation.get("IC"), { interior.redF(), interior.greenF(), interior.blueF() }))
+            return false;
+    } else if (!annotation.get("IC").isNull()) {
+        return false;
+    }
+    if (isAreaShape(shape.kind)) {
+        if (!annotation.get("L").isNull() || !annotation.get("LE").isNull())
+            return false;
+    } else {
+        const auto transform = shapeRotation(shape);
+        const QPointF start = transform.map(shape.start);
+        const QPointF end = transform.map(shape.end);
+        const auto& endings = document.getObject(annotation.get("LE"));
+        if (!matchesNumbers(document, annotation.get("L"), { start.x(), start.y(), end.x(), end.y() })
+            || !endings.isArray() || endings.getArray()->getCount() != 2
+            || stringValue(document, endings.getArray()->getItem(0)) != "None"
+            || stringValue(document, endings.getArray()->getItem(1)) != (shape.kind == ShapeKind::Arrow ? "ClosedArrow" : "None"))
+            return false;
+    }
+    const auto* ap = document.getDictionaryFromObject(annotation.get("AP"));
+    if (!ap || !hasOnlyKeys(*ap, { "N" }) || !ap->get("N").isReference())
+        return false;
+    const auto& appearance = document.getObject(ap->get("N"));
+    if (!appearance.isStream()) return false;
+    const auto* form = appearance.getStream()->getDictionary();
+    if (!hasOnlyKeys(*form, { "Type", "Subtype", "FormType", "BBox", "Matrix", "Resources", "Length" })
+        || stringValue(document, form->get("Type")) != "XObject"
+        || stringValue(document, form->get("Subtype")) != "Form"
+        || numberValue(document, form->get("FormType")) != 1
+        || !matchesNumbers(document, form->get("BBox"), { 0, 0, box.width(), box.height() })
+        || !matchesNumbers(document, form->get("Matrix"), { 1, 0, 0, 1, 0, 0 }))
+        return false;
+    const auto* resources = document.getDictionaryFromObject(form->get("Resources"));
+    const auto* states = resources ? document.getDictionaryFromObject(resources->get("ExtGState")) : nullptr;
+    if (!states || !hasOnlyKeys(*resources, { "ExtGState" }))
+        return false;
+    const auto matchesAlpha = [&](const char* key, const QColor& color) {
+        const auto* alpha = document.getDictionaryFromObject(states->get(key));
+        if (!alpha || !hasOnlyKeys(*alpha, { "Type", "ca", "CA" })
+            || stringValue(document, alpha->get("Type")) != "ExtGState")
+            return false;
+        for (const char* field : { "ca", "CA" }) {
+            const double opacity = numberValue(document, alpha->get(field));
+            if (!std::isfinite(opacity) || std::abs(opacity - color.alphaF()) > PdfRealWriteTolerance)
+                return false;
+        }
+        return true;
+    };
+    if (!matchesAlpha("PNAlpha", stroke))
+        return false;
+    const bool filled = isAreaShape(shape.kind) && shape.style.fillColor.alpha() > 0;
+    if (filled) {
+        if (!hasOnlyKeys(*states, { "PNAlpha", "PNFillAlpha" }) || !matchesAlpha("PNFillAlpha", shape.style.fillColor))
+            return false;
+    } else if (!hasOnlyKeys(*states, { "PNAlpha" })) {
+        return false;
+    }
+    return *appearance.getStream()->getContent() == shapeAppearanceContent(shape, box);
+}
+
 bool textAnnotationMatches(const pdf::PDFDocument& document, const Dictionary& annotation,
                            const TextBox& box, const QByteArray& expectedAppearanceHash,
                            QVector<Reference>& ownedResources)
@@ -1207,7 +1433,7 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
 {
     const int dataVersion = formatVersionFor(state.pages);
     auto pdfVersion = state.base.getInfo()->version;
-    // Squiggly and the new Multiply/opacity appearances require PDF 1.4.
+    // Squiggly, Multiply and translucent appearances require PDF 1.4.
     if (dataVersion >= MarkupFormatVersion && (pdfVersion.major < 1 || (pdfVersion.major == 1 && pdfVersion.minor < 4)))
         pdfVersion = pdf::PDFVersion(1, 4);
     pdf::PDFDocumentBuilder builder(state.base.getStorage(), pdfVersion);
@@ -1307,6 +1533,68 @@ pdf::PDFDocument withAnnotations(const LoadedState& state)
             put(annotation, "PNVersion", Object::createInteger(strokeFormatVersion(stroke)));
             put(annotation, "PNStrokeID", Object::createString(stroke.id.toByteArray(QUuid::WithoutBraces)));
             put(annotation, "PNStrokeSHA256", Object::createString(strokeDigest(stroke)));
+            Reference reference;
+            if (found != state.owned.cend()) {
+                reference = found.value().annotation;
+                builder.setObject(reference, Object::createDictionary(std::move(annotation)));
+            } else {
+                reference = builder.addObject(Object::createDictionary(std::move(annotation)));
+            }
+            annotations.appendItem(Object::createReference(reference));
+        }
+        for (const auto& shape : state.pages[p].shapes) {
+            if (!validShape(shape))
+                fail(QStringLiteral("形状无效，未写入文件。"));
+            const QRectF box = shapeBounds(shape);
+            const QByteArray id = shape.id.toByteArray(QUuid::WithoutBraces);
+            const QByteArray digest = shapeDigest(shape);
+            const auto found = state.owned.constFind(shape.id);
+            const auto* previous = found == state.owned.cend() ? nullptr
+                : state.base.getDictionaryFromObject(Object::createReference(found.value().annotation));
+            const bool unchanged = previous && found.value().appearance
+                && stringValue(state.base, previous->get("PNShapeSHA256")) == digest;
+            const auto& stroke = shape.style.strokeColor;
+            const bool filled = isAreaShape(shape.kind) && shape.style.fillColor.alpha() > 0;
+            const auto appearance = unchanged ? *found.value().appearance : builder.addObject(
+                createVectorAppearance(box, stroke, shapeAppearanceContent(shape, box), false,
+                    filled ? shape.style.fillColor : QColor()));
+            DictBuilder ap;
+            put(ap, "N", Object::createReference(appearance));
+            DictBuilder annotation = previous ? DictBuilder(*previous) : DictBuilder();
+            put(annotation, "Type", Object::createName(QByteArray("Annot")));
+            put(annotation, "Subtype", Object::createName(shapeSubtype(shape.kind)));
+            put(annotation, "Rect", arrayOf({ box.left(), box.top(), box.right(), box.bottom() }));
+            put(annotation, "P", Object::createReference(page->getPageReference()));
+            put(annotation, "F", Object::createInteger(4));
+            put(annotation, "C", arrayOf({ stroke.redF(), stroke.greenF(), stroke.blueF() }));
+            put(annotation, "CA", Object::createReal(1)); // Stroke and fill have independent alpha in the AP.
+            put(annotation, "Border", arrayOf({ 0, 0, shape.style.widthPt }));
+            const QColor interior = shapeInteriorColor(shape);
+            if (interior.isValid()) {
+                put(annotation, "IC", arrayOf({ interior.redF(), interior.greenF(), interior.blueF() }));
+            } else {
+                annotation.removeEntry("IC");
+            }
+            if (isAreaShape(shape.kind)) {
+                annotation.removeEntry("L");
+                annotation.removeEntry("LE");
+            } else {
+                const QTransform transform = shapeRotation(shape);
+                const QPointF start = transform.map(shape.start);
+                const QPointF end = transform.map(shape.end);
+                put(annotation, "L", arrayOf({ start.x(), start.y(), end.x(), end.y() }));
+                pdf::PDFArrayBuilder endings;
+                endings.appendItem(Object::createName(QByteArray("None")));
+                endings.appendItem(Object::createName(
+                    QByteArray(shape.kind == ShapeKind::Arrow ? "ClosedArrow" : "None")));
+                put(annotation, "LE", Object::createArray(std::move(endings)));
+            }
+            put(annotation, "AP", Object::createDictionary(std::move(ap)));
+            put(annotation, "NM", Object::createString(QByteArray(ShapeIdPrefix) + id));
+            put(annotation, "PNOwner", Object::createName(QByteArray(OwnerName)));
+            put(annotation, "PNVersion", Object::createInteger(ShapeFormatVersion));
+            put(annotation, "PNShapeID", Object::createString(id));
+            put(annotation, "PNShapeSHA256", Object::createString(digest));
             Reference reference;
             if (found != state.owned.cend()) {
                 reference = found.value().annotation;
@@ -1740,12 +2028,19 @@ bool PdfDocument::setAnnotations(int index, const PageAnnotations& annotations)
                 fail(QStringLiteral("正文标记颜色无效。"));
             markup.color = QColor(markup.color.name(QColor::HexArgb));
         }
+        for (auto& shape : normalized.shapes) {
+            if (!shape.style.strokeColor.isValid() || !shape.style.fillColor.isValid())
+                fail(QStringLiteral("形状颜色无效。"));
+            shape.style.strokeColor = QColor(shape.style.strokeColor.name(QColor::HexArgb));
+            shape.style.fillColor = QColor(shape.style.fillColor.name(QColor::HexArgb));
+        }
         QSet<QUuid> ids;
         qsizetype count = 0;
         qsizetype strokeCount = 0;
         qsizetype textCount = 0;
         qsizetype textLength = 0;
         MarkupBudget markupBudget;
+        ShapeBudget shapeBudget;
         for (int p = 0; p < pageCount(); ++p) {
             const auto& page = p == index ? normalized : d->state->pages[p];
             for (const auto& stroke : page.strokes) {
@@ -1766,6 +2061,8 @@ bool PdfDocument::setAnnotations(int index, const PageAnnotations& annotations)
             }
             for (const auto& markup : page.textMarkups)
                 markupBudget.add(markup, ids);
+            for (const auto& shape : page.shapes)
+                shapeBudget.add(shape, ids);
         }
         if (!(d->state->pages[index] == normalized)) {
             d->state->pages[index] = std::move(normalized);

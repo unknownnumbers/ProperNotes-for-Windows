@@ -101,6 +101,8 @@ public:
                     paintTextMarkup(*painter, markup);
                 for (const auto& stroke : annotations->strokes)
                     paintInkStroke(*painter, stroke);
+                for (const auto& shape : annotations->shapes)
+                    paintShape(*painter, shape);
                 for (const auto& text : annotations->textBoxes)
                     paintTextBox(*painter, text);
             }

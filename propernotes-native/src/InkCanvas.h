@@ -7,6 +7,7 @@
 #include <QSet>
 #include <QWidget>
 #include <memory>
+#include <optional>
 
 class QContextMenuEvent;
 class QDialog;
@@ -25,7 +26,7 @@ namespace propernotes {
 class InkCanvas final : public QWidget {
     Q_OBJECT
 public:
-    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox, TextSelect, Highlighter };
+    enum class Tool { Pen, ObjectEraser, Pan, Select, TextBox, TextSelect, Highlighter, Line, Arrow, Rectangle, Ellipse };
     enum class EraseMode { WholeStroke, PartialStroke };
     enum class FinishReason { ForcedCommit, NormalRelease };
     Q_ENUM(Tool)
@@ -40,6 +41,8 @@ public:
     void clearPage();
     void setTool(Tool tool);
     Tool tool() const { return m_tool; }
+    static std::optional<ShapeKind> shapeKind(Tool tool);
+    void setShapeStyle(const ShapeStyle& style) { m_shapeStyle = style; }
     void setPenColor(const QColor& color);
     void setPenWidth(qreal widthPt);
     void setPenOpacity(qreal opacity);
@@ -48,6 +51,7 @@ public:
     void setPressureSensitivity(qreal sensitivity);
     void setEraserMode(EraseMode mode) { m_eraseMode = mode; }
     void setEraserRadius(qreal radiusPt);
+    void setEditTextMarkups(bool enabled);
     void setTouchAndMouseAnnotate(bool enabled);
     void setTextReviewActive(bool active);
     void setTextStyle(const QString& family, qreal sizePt, const QColor& color);
@@ -64,9 +68,9 @@ public:
     void setExternalPenContact(bool down);
     bool isTextEditing() const { return m_editor != nullptr; }
     QSet<QUuid> selectionIds() const { return m_selection; }
-    bool hasInkSelection() const;
-    QVector<InkStroke> selectedInkStrokes() const;
-    void selectInkStrokes(const QSet<QUuid>& ids);
+    bool hasObjectSelection() const;
+    PageAnnotations selectedObjects() const;
+    void selectObjects(const QSet<QUuid>& ids);
     void clearSelection();
     void setTextPage(const std::shared_ptr<const PdfTextPage>& text);
     void setTextSelection(const QVector<TextMarkupQuad>& quads);
@@ -84,8 +88,8 @@ signals:
                               const propernotes::PageAnnotations& after, const QString& reason, const QUuid& focusId);
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
-    void inkCutRequested();
-    void inkCopyRequested();
+    void objectCutRequested();
+    void objectCopyRequested();
     void textEditingChanged(bool editing);
     void textPageRequested(int pageIndex);
     void textSelectionStarted();
@@ -110,15 +114,17 @@ protected:
     void wheelEvent(QWheelEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
+    void keyReleaseEvent(QKeyEvent* event) override;
 
 private:
-    enum class Gesture { None, Ink, Erase, Pan, Marquee, Move, InkScale, InkRotate, TextFrame, TextResize, TextSelection };
+    enum class Gesture { None, Ink, Shape, Erase, Pan, Marquee, Move, ScaleSelection, RotateSelection, TextFrame, TextResize, TextSelection };
     enum class Source { None, Pen, Mouse, Touch };
     void pointerPress(const QPointF& position, const QPointF& global, qreal pressure, Source source,
                       bool tailEraser = false, bool forcePan = false);
     void pointerMove(const QPointF& position, const QPointF& global, qreal pressure, Qt::KeyboardModifiers modifiers);
     void pointerRelease(const QPointF& position, qreal pressure, Qt::KeyboardModifiers modifiers);
     void addPoint(const QPointF& position, qreal pressure);
+    void updateShapeDraft(const QPointF& position, Qt::KeyboardModifiers modifiers);
     void eraseBetween(const QPointF& from, const QPointF& to);
     void rebuildInkCache();
     void updateExtent();
@@ -132,18 +138,23 @@ private:
     void updateTextSelection(const QPointF& position);
     void positionEditor();
     const InkStroke* selectedInkStroke() const;
+    const ShapeAnnotation* selectedShape() const;
+    bool hasTransformSelection() const;
+    bool hasSelectedTextMarkup() const;
+    void deleteSelection();
     void updateSelectionActions();
     QToolButton* selectionActionAt(const QPointF& position) const;
-    void beginStrokeStyleEdit();
-    void cancelStrokeStyleEdit();
-    QRectF inkTransformFrame() const;
-    QPointF inkRotationHandle(const QRectF& frame) const;
-    bool beginInkTransform(const QPointF& position, Source source);
-    void updateInkTransform(const QPointF& position, Qt::KeyboardModifiers modifiers);
-    void finishInkTransform(FinishReason reason);
+    void beginObjectStyleEdit();
+    void cancelObjectStyleEdit();
+    QRectF selectionTransformFrame() const;
+    QPointF selectionRotationHandle(const QRectF& frame) const;
+    bool beginSelectionTransform(const QPointF& position, Source source);
+    void updateSelectionTransform(const QPointF& position, Qt::KeyboardModifiers modifiers);
+    void finishSelectionTransform(FinishReason reason);
     QUuid textAt(const QPointF& pdfPoint) const;
     QSet<QUuid> objectsIn(const QRectF& pdfRect) const;
-    QRectF selectionBounds() const;
+    QRectF movableSelectionBounds(const PageAnnotations& annotations) const;
+    QUuid firstMovableId() const;
     int textResizeCornerAt(const QPointF& widgetPoint) const;
     QTransform pdfToWidget() const;
     QSizeF imageSize() const;
@@ -162,6 +173,7 @@ private:
     qreal m_penOpacity = 1.0;
     QColor m_highlighterColor = QColor(255, 221, 67, 82);
     qreal m_highlighterWidthPt = 14.0;
+    ShapeStyle m_shapeStyle;
     qreal m_eraserRadiusPt = 8.0;
     bool m_pressureEnabled = true;
     qreal m_pressureSensitivity = 50;
@@ -180,6 +192,7 @@ private:
     bool m_darkTheme = false;
     bool m_touchAndMouseAnnotate = false;
     bool m_textReviewActive = false;
+    bool m_editTextMarkups = true;
     bool m_tabletActive = false;
     bool m_touchActive = false;
     bool m_tailEraser = false;
@@ -208,17 +221,19 @@ private:
     QSet<QUuid> m_selection;
     QSet<QUuid> m_selectionBeforeGesture;
     InkStroke m_pendingStroke;
-    QVector<InkStroke> m_inkTransformPreview;
-    QPointF m_inkTransformPivot;
-    QPointF m_inkTransformStart;
-    bool m_inkTransformRejected = false;
+    std::optional<ShapeAnnotation> m_pendingShape;
+    PageAnnotations m_transformPreview;
+    QPointF m_transformPivot;
+    QPointF m_transformStart;
+    bool m_transformRejected = false;
     QPlainTextEdit* m_editor = nullptr;
-    QToolButton* m_strokeStyleButton = nullptr;
-    QToolButton* m_inkCutButton = nullptr;
-    QToolButton* m_inkCopyButton = nullptr;
+    QToolButton* m_objectStyleButton = nullptr;
+    QToolButton* m_objectCutButton = nullptr;
+    QToolButton* m_objectCopyButton = nullptr;
+    QToolButton* m_deleteSelectionButton = nullptr;
     QToolButton* m_touchSelectionAction = nullptr;
     QPointF m_touchSelectionStart;
-    QPointer<QDialog> m_strokeStyleDialog;
+    QPointer<QDialog> m_objectStyleDialog;
     QRect m_visibleCanvasRect;
     QUuid m_editTextId;
     QRectF m_editTextRect;

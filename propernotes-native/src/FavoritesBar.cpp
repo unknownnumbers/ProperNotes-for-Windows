@@ -49,7 +49,21 @@ QIcon toolIcon(const FavoriteTool& favorite)
         || favorite.tool == InkCanvas::Tool::Highlighter || favorite.tool == InkCanvas::Tool::TextBox;
     const QColor color = coloredTool ? favorite.color : QColor("#3977bd");
     p.setPen(QPen(color,1.6,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));p.setBrush(Qt::NoBrush);
-    if (favorite.markupKind) {
+    if (const auto shape = InkCanvas::shapeKind(favorite.tool)) {
+        ShapeAnnotation sample;
+        sample.kind = *shape;
+        sample.style = favorite.tools.shapeToolPreference(*shape).style;
+        sample.style.strokeColor.setAlpha(255);
+        sample.style.widthPt = 1.7;
+        if (isAreaShape(*shape)) {
+            sample.start = QPointF(4, 6);
+            sample.end = QPointF(24, 22);
+        } else {
+            sample.start = QPointF(5, 22);
+            sample.end = QPointF(23, 6);
+        }
+        paintShape(p, sample);
+    } else if (favorite.markupKind) {
         const auto kind = *favorite.markupKind;
         if (kind == TextMarkupKind::Highlight) {
             QColor fill = color;
@@ -155,19 +169,28 @@ private:QUuid m_id;QString m_token;std::function<bool()> m_writable;QPoint m_sta
 class FavoriteEditor final : public QDialog {
 public:
     FavoriteEditor(const FavoriteTool& original,QWidget* parent):QDialog(parent),m_original(original),m_color(original.color){
-        setWindowTitle(QStringLiteral("编辑工具收藏"));auto* box=new QVBoxLayout(this);auto* form=new QFormLayout;
+        setWindowTitle(QStringLiteral("编辑工具收藏"));auto* box=new QVBoxLayout(this);m_form=new QFormLayout;auto* form=m_form;
         m_name=new QLineEdit(original.name);m_name->setMaxLength(80);form->addRow(QStringLiteral("名称"),m_name);
         m_kind=new QComboBox;
         for (const auto kind : {InkCanvas::Tool::Pen, InkCanvas::Tool::Highlighter, InkCanvas::Tool::ObjectEraser,
                                InkCanvas::Tool::TextBox, InkCanvas::Tool::Select, InkCanvas::Tool::Pan})
             m_kind->addItem(favoriteToolName(kind), int(kind));
+        for (const auto kind : ShapeTools) m_kind->addItem(favoriteToolName(kind), int(kind));
         for (auto kind : {TextMarkupKind::Highlight, TextMarkupKind::Underline, TextMarkupKind::StrikeOut, TextMarkupKind::Squiggly})
             m_kind->addItem(textMarkupKindName(kind), MarkupOffset + int(kind));
         m_kind->setCurrentIndex(m_kind->findData(original.markupKind ? MarkupOffset + int(*original.markupKind) : int(original.tool)));
         form->addRow(QStringLiteral("工具"),m_kind);
         m_colorButton=new QToolButton;m_colorButton->setText(QStringLiteral("选择颜色…"));form->addRow(QStringLiteral("颜色"),m_colorButton);
-        m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("笔宽"),m_width);
+        m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("线宽"),m_width);
         m_opacity=new QDoubleSpinBox;m_opacity->setRange(0,100);m_opacity->setSuffix(QStringLiteral("%"));form->addRow(QStringLiteral("不透明度"),m_opacity);
+        m_fillColorButton = new QToolButton;
+        m_fillColorButton->setText(QStringLiteral("选择颜色…"));
+        form->addRow(QStringLiteral("填充颜色"), m_fillColorButton);
+        m_fillOpacity = new QSpinBox;
+        m_fillOpacity->setRange(0, 100);
+        m_fillOpacity->setSuffix(QStringLiteral("%"));
+        m_fillOpacity->setSpecialValueText(QStringLiteral("无填充"));
+        form->addRow(QStringLiteral("填充不透明度"), m_fillOpacity);
         m_pressure=new QCheckBox(QStringLiteral("启用笔压"));form->addRow(m_pressure);
         m_sensitivity=new QSpinBox;m_sensitivity->setRange(0,100);form->addRow(QStringLiteral("笔压灵敏度"),m_sensitivity);
         m_mode=new QComboBox;m_mode->addItem(QStringLiteral("整笔擦除"),"whole");m_mode->addItem(QStringLiteral("局部擦除"),"partial");form->addRow(QStringLiteral("擦除模式"),m_mode);
@@ -180,6 +203,13 @@ public:
         connect(buttons,&QDialogButtonBox::accepted,this,[this]{auto candidate=value();QString error;if(!validFavoriteTools({candidate},&error)){QMessageBox::warning(this,QStringLiteral("无法保存收藏"),error);return;}accept();});
         connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject);
         connect(m_colorButton,&QToolButton::clicked,this,[this]{auto chosen=QColorDialog::getColor(m_color,this,QStringLiteral("工具颜色"));if(chosen.isValid()){m_color=chosen;updateColor();}});
+        connect(m_fillColorButton, &QToolButton::clicked, this, [this] {
+            const auto chosen = QColorDialog::getColor(m_fillColor, this, QStringLiteral("形状填充颜色"));
+            if (!chosen.isValid()) return;
+            m_fillColor = chosen;
+            if (m_fillOpacity->value() == 0) m_fillOpacity->setValue(DefaultShapeFillOpacityPercent);
+            updateColor();
+        });
         connect(m_kind,&QComboBox::currentIndexChanged,this,[this](int){showKind();});
         showKind();
         const bool highlighter = original.tool == InkCanvas::Tool::Highlighter;
@@ -195,6 +225,18 @@ public:
         case InkCanvas::Tool::TextBox: single = original.tools.textSingleUse; break;
         case InkCanvas::Tool::TextSelect: single = original.markupKind && original.reviewSingleUse; break;
         default: break;
+        }
+        if (const auto shape = InkCanvas::shapeKind(original.tool)) {
+            const auto& preference = original.tools.shapeToolPreference(*shape);
+            const auto& style = preference.style;
+            m_color = style.strokeColor;
+            m_color.setAlpha(255);
+            m_width->setValue(style.widthPt);
+            m_opacity->setValue(qRound(style.strokeColor.alphaF() * 100));
+            m_fillColor = style.fillColor;
+            m_fillColor.setAlpha(255);
+            m_fillOpacity->setValue(qRound(style.fillColor.alphaF() * 100));
+            single = preference.singleUse;
         }
         m_single->setChecked(single);
         updateColor();
@@ -216,6 +258,17 @@ public:
                 tools.highlighterOpacity = qRound(m_opacity->value());
                 tools.highlighterSingleUse = m_single->isChecked();
             }
+            if (const auto shape = InkCanvas::shapeKind(InkCanvas::Tool(selection))) {
+                auto& preference = tools.shapeToolPreference(*shape);
+                preference.singleUse = m_single->isChecked();
+                preference.style.widthPt = m_width->value();
+                preference.style.strokeColor = m_color;
+                preference.style.strokeColor.setAlpha(qRound(m_opacity->value() * 255 / 100));
+                if (isAreaShape(*shape)) {
+                    preference.style.fillColor = m_fillColor;
+                    preference.style.fillColor.setAlpha(qRound(m_fillOpacity->value() * 255 / 100.0));
+                }
+            }
             result = captureFavorite(InkCanvas::Tool(selection),tools,m_color,m_width->value(),name);
         }
         result.id=m_original.id;
@@ -223,7 +276,11 @@ public:
     }
 private:
     static constexpr int MarkupOffset = 100;
-    void updateColor(){m_colorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_color.name()));}
+    void updateColor()
+    {
+        m_colorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_color.name()));
+        m_fillColorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_fillColor.name()));
+    }
     void showKind()
     {
         const int selection = m_kind->currentData().toInt();
@@ -232,23 +289,31 @@ private:
         const bool highlighter = selection == int(InkCanvas::Tool::Highlighter);
         const bool eraser = selection == int(InkCanvas::Tool::ObjectEraser);
         const bool text = selection == int(InkCanvas::Tool::TextBox);
-        const bool changeAppearance = pen || highlighter || text || markup;
+        const auto shape = markup ? std::nullopt : InkCanvas::shapeKind(InkCanvas::Tool(selection));
+        const bool fill = shape && isAreaShape(*shape);
+        const bool changeAppearance = pen || highlighter || text || markup || shape;
         m_colorButton->setEnabled(changeAppearance);
         m_opacity->setEnabled(changeAppearance);
-        m_opacity->setDecimals(highlighter ? 0 : 2);
-        m_opacity->setRange(highlighter ? qreal(MinHighlighterOpacity) : (markup ? 0.4 : 0), MaxHighlighterOpacity);
-        m_width->setEnabled(pen || highlighter);
+        m_opacity->setDecimals(highlighter || shape ? 0 : 2);
+        m_opacity->setRange(highlighter || shape ? qreal(MinShapeToolOpacityPercent) : (markup ? 0.4 : 0), MaxHighlighterOpacity);
+        m_width->setEnabled(pen || highlighter || shape);
         m_width->setRange(highlighter ? MinHighlighterWidthPt : 0.5, highlighter ? MaxHighlighterWidthPt : 24);
+        m_form->setRowVisible(m_fillColorButton, fill);
+        m_form->setRowVisible(m_fillOpacity, fill);
         m_pressure->setEnabled(pen);
         m_sensitivity->setEnabled(pen);
         m_mode->setEnabled(eraser);
         m_radius->setEnabled(eraser);
         m_family->setEnabled(text);
         m_size->setEnabled(text);
-        m_single->setEnabled(pen || highlighter || eraser || text || markup);
+        m_single->setEnabled(pen || highlighter || eraser || text || markup || shape);
     }
     FavoriteTool m_original;QColor m_color;QLineEdit* m_name;QComboBox* m_kind;QToolButton* m_colorButton;QDoubleSpinBox* m_width;QDoubleSpinBox* m_opacity;
     QCheckBox* m_pressure;QSpinBox* m_sensitivity;QComboBox* m_mode;QDoubleSpinBox* m_radius;QFontComboBox* m_family;QDoubleSpinBox* m_size;QCheckBox* m_single;
+    QFormLayout* m_form;
+    QToolButton* m_fillColorButton;
+    QSpinBox* m_fillOpacity;
+    QColor m_fillColor{Qt::black};
 };
 } // namespace
 

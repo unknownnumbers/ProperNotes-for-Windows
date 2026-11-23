@@ -60,6 +60,7 @@ private:
     QSpinBox* m_sidebarWidth = nullptr;
     QPushButton* m_color = nullptr;
     QDoubleSpinBox* m_penWidth = nullptr;
+    QCheckBox* m_editTextMarkups = nullptr;
     QSpinBox* m_interval = nullptr;
     QSpinBox* m_retain = nullptr;
     QLineEdit* m_directory = nullptr;

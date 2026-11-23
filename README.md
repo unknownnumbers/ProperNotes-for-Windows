@@ -37,6 +37,8 @@ The 0.3.7 revision lets a mouse or one finger pan, manually select text, or sele
 
 The 0.3.8 revision adds scaling and rotation for pen and freehand highlighter selections, with touch and keyboard cut, copy and paste within a PDF. Floating favorites can be pinned at a saved position. 原生 0.3.8 支援筆跡縮放、旋轉、同份 PDF 跨頁剪貼及固定浮動收藏欄。原生 0.3.8 支持笔迹缩放、旋转、同一 PDF 跨页剪贴及固定浮动收藏栏。
 
+The 0.3.9 revision adds editable line, arrow, rectangle and ellipse annotations. Shapes and ink can scale and rotate together. Text boxes and shapes support clipboard operations within the same PDF. A setting controls whether Select and Erase include editable text review marks. 原生 0.3.9 新增可編輯的直線、箭頭、矩形和橢圓，支援文字方塊及圖形剪貼，以及審閱標記選取和擦除設定。原生 0.3.9 新增可编辑的直线、箭头、矩形和椭圆，支持文字框及形状剪贴，以及审阅标记选择和擦除设置。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

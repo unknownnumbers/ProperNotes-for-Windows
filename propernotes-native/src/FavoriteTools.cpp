@@ -3,6 +3,7 @@
 #include <QJsonValue>
 #include <QSet>
 #include <QPair>
+#include <algorithm>
 #include <cmath>
 #include <utility>
 
@@ -31,6 +32,10 @@ QString kind(InkCanvas::Tool tool)
     case InkCanvas::Tool::TextBox: return QStringLiteral("text-box");
     case InkCanvas::Tool::Select: return QStringLiteral("select");
     case InkCanvas::Tool::Pan: return QStringLiteral("pan");
+    case InkCanvas::Tool::Line:
+    case InkCanvas::Tool::Arrow:
+    case InkCanvas::Tool::Rectangle:
+    case InkCanvas::Tool::Ellipse: return shapeToolPreferenceToken(*InkCanvas::shapeKind(tool));
     case InkCanvas::Tool::TextSelect: break;
     }
     return {};
@@ -74,6 +79,8 @@ QJsonObject styleJson(const FavoriteTool& favorite)
     if (favorite.tool == InkCanvas::Tool::TextBox)
         return {{"color",favorite.color.name(QColor::HexRgb)},{"opacity",t.opacity},
                 {"family",t.textFamily},{"sizePt",t.textSizePt},{"singleUse",t.textSingleUse}};
+    if (const auto shape = InkCanvas::shapeKind(favorite.tool))
+        return shapeToolPreferenceJson(t.shapeToolPreference(*shape));
     return {};
 }
 bool readColor(const QJsonObject& style, QColor& color)
@@ -143,6 +150,8 @@ FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& source
         result.tools.textFamily = source.textFamily;
         result.tools.textSizePt = source.textSizePt;
         result.tools.textSingleUse = source.textSingleUse;
+    } else if (const auto shape = InkCanvas::shapeKind(tool)) {
+        result.tools.shapeToolPreference(*shape) = source.shapeToolPreference(*shape);
     }
     return result;
 }
@@ -169,6 +178,8 @@ void applyFavorite(const FavoriteTool& favorite, ToolPreferences& tools, QColor&
         tools.textFamily = favorite.tools.textFamily;
         tools.textSizePt = favorite.tools.textSizePt;
         tools.textSingleUse = favorite.tools.textSingleUse;
+    } else if (const auto shape = InkCanvas::shapeKind(favorite.tool)) {
+        tools.shapeToolPreference(*shape) = favorite.tools.shapeToolPreference(*shape);
     }
 }
 
@@ -182,6 +193,10 @@ QString favoriteToolName(InkCanvas::Tool tool)
     case InkCanvas::Tool::Select: return QStringLiteral("框选 / 移动");
     case InkCanvas::Tool::Pan: return QStringLiteral("平移");
     case InkCanvas::Tool::TextSelect: return QStringLiteral("选文字");
+    case InkCanvas::Tool::Line: return QStringLiteral("直线");
+    case InkCanvas::Tool::Arrow: return QStringLiteral("箭头");
+    case InkCanvas::Tool::Rectangle: return QStringLiteral("矩形");
+    case InkCanvas::Tool::Ellipse: return QStringLiteral("椭圆");
     }
     return QStringLiteral("未知工具");
 }
@@ -204,6 +219,14 @@ QString favoriteDescription(const FavoriteTool& favorite)
             .arg(favorite.tools.eraserRadiusPt);
     else if (favorite.tool == InkCanvas::Tool::TextBox)
         detail += QStringLiteral(" · %1 %2 pt · %3% 不透明度").arg(favorite.tools.textFamily).arg(favorite.tools.textSizePt).arg(qRound(favorite.tools.opacity*100));
+    else if (const auto shape = InkCanvas::shapeKind(favorite.tool)) {
+        const auto& style = favorite.tools.shapeToolPreference(*shape).style;
+        detail += QStringLiteral(" · %1 pt · %2% 线条不透明度").arg(style.widthPt).arg(qRound(style.strokeColor.alphaF() * 100));
+        if (isAreaShape(*shape)) {
+            detail += style.fillColor.alpha() == 0 ? QStringLiteral(" · 无填充")
+                : QStringLiteral(" · %1% 填充不透明度").arg(qRound(style.fillColor.alphaF() * 100));
+        }
+    }
     std::optional<bool> single;
     switch (favorite.tool) {
     case InkCanvas::Tool::Pen: single = favorite.tools.penSingleUse; break;
@@ -212,6 +235,7 @@ QString favoriteDescription(const FavoriteTool& favorite)
     case InkCanvas::Tool::TextBox: single = favorite.tools.textSingleUse; break;
     default: break;
     }
+    if (const auto shape = InkCanvas::shapeKind(favorite.tool)) single = favorite.tools.shapeToolPreference(*shape).singleUse;
     if (single)
         detail += *single ? QStringLiteral(" · 单次") : QStringLiteral(" · 持续");
     return favorite.name + QLatin1Char('\n') + detail;
@@ -259,6 +283,9 @@ bool validFavoriteTools(const QVector<FavoriteTool>& favorites, QString* error)
              !std::isfinite(f.tools.eraserRadiusPt) || f.tools.eraserRadiusPt<1 || f.tools.eraserRadiusPt>100)) return fail();
         if (f.tool == InkCanvas::Tool::TextBox && (!safeName(f.tools.textFamily,160) ||
             !std::isfinite(f.tools.textSizePt) || f.tools.textSizePt<4 || f.tools.textSizePt>144)) return fail();
+        if (const auto shape = InkCanvas::shapeKind(f.tool)) {
+            if (!validShapeToolPreference(*shape, f.tools.shapeToolPreference(*shape))) return fail();
+        }
     }
     return true;
 }
@@ -290,7 +317,13 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
         else if (tool == "freehand-highlighter" && settingsVersion >= 5) f.tool = InkCanvas::Tool::Highlighter;
         else if(tool=="text-box")f.tool=InkCanvas::Tool::TextBox;else if(tool=="select")f.tool=InkCanvas::Tool::Select;
         else if(tool=="pan")f.tool=InkCanvas::Tool::Pan;
-        else if(tool=="text-review")f.tool=InkCanvas::Tool::TextSelect;else return false;
+        else if(tool=="text-review")f.tool=InkCanvas::Tool::TextSelect;
+        else {
+            if (settingsVersion < 9) return false;
+            const auto match = std::find_if(ShapeTools.cbegin(), ShapeTools.cend(), [&tool](auto candidate) { return kind(candidate) == tool; });
+            if (match == ShapeTools.cend()) return false;
+            f.tool = *match;
+        }
         const auto style=object.value("style").toObject();
         if (f.tool == InkCanvas::Tool::TextSelect) {
             if (!exactKeys(style, reviewStyleKeys) || !style.value("kind").isString() ||
@@ -327,7 +360,9 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
             if(!exactKeys(style,{"color","opacity","family","sizePt","singleUse"})||!readColor(style,f.color)||
                 !number(style,"opacity",0,1)||!style.value("family").isString()||!number(style,"sizePt",4,144)||!style.value("singleUse").isBool())return false;
             f.tools.opacity=style.value("opacity").toDouble();f.tools.textFamily=style.value("family").toString();f.tools.textSizePt=style.value("sizePt").toDouble();f.tools.textSingleUse=style.value("singleUse").toBool();
-        }else if(!style.isEmpty())return false;
+        } else if (const auto shape = InkCanvas::shapeKind(f.tool)) {
+            if (!readShapeToolPreference(style, *shape, f.tools.shapeToolPreference(*shape))) return false;
+        } else if (!style.isEmpty()) return false;
         result.append(f);
     }
     if(!validFavoriteTools(result))return false;

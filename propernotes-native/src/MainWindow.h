@@ -28,6 +28,7 @@ class QSpinBox;
 class QSplitter;
 class QThread;
 class QTimer;
+class QToolButton;
 class QTabBar;
 class QMenu;
 class QToolBar;
@@ -82,11 +83,11 @@ private:
     void fitWidth();
     void commitAnnotations(int page, const PageAnnotations& before, const PageAnnotations& after, const QString& reason, const QUuid& focus);
     void editHistory(bool redo);
-    void copySelectedInk(bool cut);
-    void pasteInk();
-    void updateInkClipboardUi();
-    bool inkClipboardAvailable() const;
-    bool canUseInkClipboard() const;
+    void copySelectedObjects(bool cut);
+    void pasteObjects();
+    void updateObjectClipboardUi();
+    bool objectClipboardAvailable() const;
+    bool canUseObjectClipboard() const;
     void chooseTool(InkCanvas::Tool tool, bool userChoice = true);
     void toolCompleted(InkCanvas::Tool tool, const QString& reason);
     void updateToolUi();
@@ -162,9 +163,9 @@ private:
     QAction* m_forwardAction = nullptr;
     QAction* m_overviewAction = nullptr;
     QAction* m_selectAction = nullptr;
-    QAction* m_cutInkAction = nullptr;
-    QAction* m_copyInkAction = nullptr;
-    QAction* m_pasteInkAction = nullptr;
+    QAction* m_cutObjectsAction = nullptr;
+    QAction* m_copyObjectsAction = nullptr;
+    QAction* m_pasteObjectsAction = nullptr;
     QAction* m_textAction = nullptr;
     QAction* m_followAction = nullptr;
     QAction* m_lockAction = nullptr;
@@ -180,6 +181,11 @@ private:
     QAction* m_zoomOutAction = nullptr;
     QAction* m_fitAction = nullptr;
     QAction* m_colorAction = nullptr;
+    QAction* m_shapeFillColorAction = nullptr;
+    QAction* m_shapeFillOpacityField = nullptr;
+    QDoubleSpinBox* m_shapeFillOpacity = nullptr;
+    QToolButton* m_shapeToolButton = nullptr;
+    QVector<QAction*> m_nonShapeStyleFields;
     QAction* m_pressureField = nullptr;
     QAction* m_sensitivityField = nullptr;
     QAction* m_settingsAction = nullptr;
@@ -209,12 +215,14 @@ private:
     struct EditRecord { int page; PageAnnotations before; PageAnnotations after; QString reason; QUuid focus; qsizetype bytes; };
     QVector<EditRecord> m_editUndo;
     QVector<EditRecord> m_editRedo;
-    struct InkClipboard {
+    struct ObjectClipboard {
         quint64 tabId = 0;
         int sourcePage = -1;
         QVector<InkStroke> strokes;
+        QVector<TextBox> textBoxes;
+        QVector<ShapeAnnotation> shapes;
     };
-    InkClipboard m_inkClipboard;
+    ObjectClipboard m_objectClipboard;
     struct TabState {
         quint64 id = 0;
         std::shared_ptr<DocumentSession> session;

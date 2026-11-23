@@ -82,7 +82,7 @@ void DocumentView::setDocument(const QVector<PageGeometry>& pages, const QMap<in
 void DocumentView::clearDocument()
 {
     finishGesture();
-    clearPendingInkSelection();
+    clearPendingObjectSelection();
     invalidateRequest();
     m_refreshTimer.stop();
     m_rasterRefreshTimer.stop();
@@ -118,12 +118,16 @@ void DocumentView::updatePageAnnotations(int page, const PageAnnotations& annota
     if (page < 0 || page >= m_pages.size())
         return;
     m_annotations[page] = annotations;
-    if (m_pendingInkPage == page) {
+    if (m_pendingObjectPage == page) {
         QSet<QUuid> surviving;
         for (const auto& stroke : annotations.strokes)
-            if (m_pendingInkIds.contains(stroke.id)) surviving.insert(stroke.id);
-        m_pendingInkIds = std::move(surviving);
-        if (m_pendingInkIds.isEmpty()) clearPendingInkSelection();
+            if (m_pendingObjectIds.contains(stroke.id)) surviving.insert(stroke.id);
+        for (const auto& box : annotations.textBoxes)
+            if (m_pendingObjectIds.contains(box.id)) surviving.insert(box.id);
+        for (const auto& shape : annotations.shapes)
+            if (m_pendingObjectIds.contains(shape.id)) surviving.insert(shape.id);
+        m_pendingObjectIds = std::move(surviving);
+        if (m_pendingObjectIds.isEmpty()) clearPendingObjectSelection();
     }
     if (auto* canvas = m_canvases.value(page, nullptr)) {
         if (canvas->pageAnnotations() != annotations)
@@ -504,10 +508,12 @@ void DocumentView::configureCanvas(InkCanvas* canvas)
     canvas->setPenWidth(m_penWidth);
     canvas->setPenOpacity(m_penOpacity);
     canvas->setHighlighterStyle(m_highlighterColor, m_highlighterWidthPt);
+    canvas->setShapeStyle(m_shapeStyle);
     canvas->setPressureEnabled(m_pressure);
     canvas->setPressureSensitivity(m_sensitivity);
     canvas->setEraserMode(m_eraserMode);
     canvas->setEraserRadius(m_eraserRadius);
+    canvas->setEditTextMarkups(m_editTextMarkups);
     canvas->setTouchAndMouseAnnotate(m_inputFollowsTool);
     canvas->setTextReviewActive(m_textReviewActive);
     canvas->setTextStyle(m_textFamily, m_textSize, m_textColor);
@@ -556,7 +562,7 @@ void DocumentView::refreshVisible()
     if (row != m_rows.cend())
         for (int page = row->first; page <= row->last; ++page)
             desired.insert(page);
-    if (m_pendingInkPage >= 0 && !m_visible.contains(m_pendingInkPage)) clearPendingInkSelection();
+    if (m_pendingObjectPage >= 0 && !m_visible.contains(m_pendingObjectPage)) clearPendingObjectSelection();
     QVector<int> ordered(desired.cbegin(), desired.cend());
     const QPointF center = viewportRect.center();
     std::sort(ordered.begin(), ordered.end(), [this, center](int a, int b) {
@@ -603,19 +609,19 @@ void DocumentView::refreshVisible()
             connect(canvas, &InkCanvas::normalToolCompleted, this, &DocumentView::normalToolCompleted);
             connect(canvas, &InkCanvas::selectionChanged, this, [this, canvas, page] {
                 if (m_canvases.value(page) != canvas) return;
-                if (m_pendingInkPage >= 0 && canvas->hasFocus() && !canvas->selectionIds().isEmpty())
-                    clearPendingInkSelection();
+                if (m_pendingObjectPage >= 0 && canvas->hasFocus() && !canvas->selectionIds().isEmpty())
+                    clearPendingObjectSelection();
                 Q_EMIT selectionChanged();
             });
-            connect(canvas, &InkCanvas::inkCutRequested, this, [this, canvas, page] {
+            connect(canvas, &InkCanvas::objectCutRequested, this, [this, canvas, page] {
                 if (m_canvases.value(page) != canvas) return;
-                const QScopedValueRollback<int> sourcePage(m_inkActionPage, page);
-                Q_EMIT inkCutRequested();
+                const QScopedValueRollback<int> sourcePage(m_objectActionPage, page);
+                Q_EMIT objectCutRequested();
             });
-            connect(canvas, &InkCanvas::inkCopyRequested, this, [this, canvas, page] {
+            connect(canvas, &InkCanvas::objectCopyRequested, this, [this, canvas, page] {
                 if (m_canvases.value(page) != canvas) return;
-                const QScopedValueRollback<int> sourcePage(m_inkActionPage, page);
-                Q_EMIT inkCopyRequested();
+                const QScopedValueRollback<int> sourcePage(m_objectActionPage, page);
+                Q_EMIT objectCopyRequested();
             });
             connect(canvas, &InkCanvas::textEditingChanged, this, &DocumentView::textEditingChanged);
             connect(canvas, &InkCanvas::textPageRequested, this, &DocumentView::requestTextPage);
@@ -803,7 +809,7 @@ void DocumentView::applyImage(int page)
         canvas->setZoom(m_zoom);
     }
     canvas->setEditingEnabled(m_editing);
-    applyPendingInkSelection(page);
+    applyPendingObjectSelection(page);
 }
 
 void DocumentView::trimCache()
@@ -978,18 +984,18 @@ bool DocumentView::isTextEditing() const
 }
 void DocumentView::clearSelection()
 {
-    clearPendingInkSelection();
+    clearPendingObjectSelection();
     for (auto* canvas : std::as_const(m_canvases))
         canvas->clearSelection();
     clearTextSelection();
 }
 
-int DocumentView::inkSelectionPage() const
+int DocumentView::objectSelectionPage() const
 {
     if (!m_editing || m_tool != InkCanvas::Tool::Select) return -1;
-    if (m_inkActionPage >= 0) {
-        const auto* canvas = m_canvases.value(m_inkActionPage, nullptr);
-        return canvas && m_visible.contains(m_inkActionPage) && canvas->hasInkSelection() ? m_inkActionPage : -1;
+    if (m_objectActionPage >= 0) {
+        const auto* canvas = m_canvases.value(m_objectActionPage, nullptr);
+        return canvas && m_visible.contains(m_objectActionPage) && canvas->hasObjectSelection() ? m_objectActionPage : -1;
     }
 
     const auto* focus = QApplication::focusWidget();
@@ -999,58 +1005,60 @@ int DocumentView::inkSelectionPage() const
         const auto* canvas = m_canvases.value(page, nullptr);
         if (!canvas) continue;
         if (canvas == focus || (focus && canvas->isAncestorOf(focus)))
-            return canvas->hasInkSelection() ? page : -1;
+            return canvas->hasObjectSelection() ? page : -1;
         if (!canvas->selectionIds().isEmpty()) {
             ambiguous = ambiguous || selectedPage >= 0;
             selectedPage = page;
         }
     }
-    return !ambiguous && selectedPage >= 0 && m_canvases.value(selectedPage)->hasInkSelection() ? selectedPage : -1;
+    return !ambiguous && selectedPage >= 0 && m_canvases.value(selectedPage)->hasObjectSelection() ? selectedPage : -1;
 }
 
-bool DocumentView::hasSelectedInk() const { return inkSelectionPage() >= 0; }
+bool DocumentView::hasSelectedObjects() const { return objectSelectionPage() >= 0; }
 
-DocumentView::InkSelection DocumentView::selectedInk() const
+DocumentView::ObjectSelection DocumentView::selectedObjects() const
 {
-    const int page = inkSelectionPage();
-    return page < 0 ? InkSelection{} : InkSelection{page, m_canvases.value(page)->selectedInkStrokes()};
+    const int page = objectSelectionPage();
+    if (page < 0) return {};
+    auto selected = m_canvases.value(page)->selectedObjects();
+    return {page, std::move(selected.strokes), std::move(selected.textBoxes), std::move(selected.shapes)};
 }
 
-void DocumentView::clearPendingInkSelection()
+void DocumentView::clearPendingObjectSelection()
 {
-    m_pendingInkPage = -1;
-    m_pendingInkIds.clear();
+    m_pendingObjectPage = -1;
+    m_pendingObjectIds.clear();
 }
 
-void DocumentView::selectPageInk(int page, const QSet<QUuid>& ids)
+void DocumentView::selectPageObjects(int page, const QSet<QUuid>& ids)
 {
     if (!m_editing || m_tool != InkCanvas::Tool::Select || page < 0 || page >= m_pages.size()) return;
     clearSelection();
     if (ids.isEmpty() || !m_visible.contains(page)) return;
-    m_pendingInkPage = page;
-    m_pendingInkIds = ids;
-    applyPendingInkSelection(page);
+    m_pendingObjectPage = page;
+    m_pendingObjectIds = ids;
+    applyPendingObjectSelection(page);
 }
 
-void DocumentView::applyPendingInkSelection(int page)
+void DocumentView::applyPendingObjectSelection(int page)
 {
-    if (page != m_pendingInkPage || !m_editing || m_tool != InkCanvas::Tool::Select
+    if (page != m_pendingObjectPage || !m_editing || m_tool != InkCanvas::Tool::Select
         || !m_cache.contains(page) || !m_visible.contains(page) || hasActiveGesture()) return;
     auto* canvas = m_canvases.value(page, nullptr);
     if (!canvas || canvas->pageIndex() != page || !canvas->property("propernotesRenderId").toULongLong()
         || canvas->hasPointerContact()) return;
-    const auto ids = std::exchange(m_pendingInkIds, QSet<QUuid>{});
-    m_pendingInkPage = -1;
+    const auto ids = std::exchange(m_pendingObjectIds, QSet<QUuid>{});
+    m_pendingObjectPage = -1;
     const QWidget* focus = QApplication::focusWidget();
     if (focus && (focus == this || isAncestorOf(focus))) canvas->setFocus(Qt::OtherFocusReason);
-    canvas->selectInkStrokes(ids);
+    canvas->selectObjects(ids);
 }
 
 void DocumentView::setTool(InkCanvas::Tool tool)
 {
     if (m_tool == tool)
         return;
-    clearPendingInkSelection();
+    clearPendingObjectSelection();
     m_tool = tool;
     for (auto* canvas : std::as_const(m_canvases))
         canvas->setTool(tool);
@@ -1069,6 +1077,8 @@ PROPERNOTES_CANVAS_OPTION(setPressureEnabled, m_pressure, bool, setPressureEnabl
 PROPERNOTES_CANVAS_OPTION(setPressureSensitivity, m_sensitivity, qreal, setPressureSensitivity)
 PROPERNOTES_CANVAS_OPTION(setEraserMode, m_eraserMode, InkCanvas::EraseMode, setEraserMode)
 PROPERNOTES_CANVAS_OPTION(setEraserRadius, m_eraserRadius, qreal, setEraserRadius)
+PROPERNOTES_CANVAS_OPTION(setEditTextMarkups, m_editTextMarkups, bool, setEditTextMarkups)
+PROPERNOTES_CANVAS_OPTION(setShapeStyle, m_shapeStyle, const ShapeStyle&, setShapeStyle)
 PROPERNOTES_CANVAS_OPTION(setInputFollowsTool, m_inputFollowsTool, bool, setTouchAndMouseAnnotate)
 PROPERNOTES_CANVAS_OPTION(setTextReviewActive, m_textReviewActive, bool, setTextReviewActive)
 #undef PROPERNOTES_CANVAS_OPTION
@@ -1102,7 +1112,7 @@ void DocumentView::setEditingEnabled(bool enabled)
     m_editing = enabled;
     for (auto it = m_canvases.cbegin(); it != m_canvases.cend(); ++it)
         it.value()->setEditingEnabled(enabled && m_cache.contains(it.key()));
-    if (enabled && m_pendingInkPage >= 0) applyPendingInkSelection(m_pendingInkPage);
+    if (enabled && m_pendingObjectPage >= 0) applyPendingObjectSelection(m_pendingObjectPage);
 }
 
 } // namespace propernotes

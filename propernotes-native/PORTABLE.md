@@ -4,17 +4,32 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
-In **Select / Move** (框选 / 移动), select one or more pen or freehand highlighter
-strokes. Drag a corner to scale the selection and its stroke widths together.
+Choose Line, Arrow, Rectangle or Ellipse from **Shapes** (形状). Drag to preview
+and release to draw. Hold Shift to constrain lines and arrows to 45° increments,
+or rectangles and ellipses to squares and circles. Save the current shape as a
+favorite with its outline, fill and continuous or single-use setting. Use the
+whole-object eraser to remove a shape by touching its outline or visible fill.
+
+In **Select / Move** (框选 / 移动), select one or more strokes or shapes. Drag a
+corner to scale the selection and its stroke widths together.
 Drag the rotation handle to rotate about the selection center. Hold Shift to snap
 to 15° increments. Use the pen, or enable **Mouse & Touch Follow Tool** to drag
 these handles with a mouse or one finger.
 
-Use **Cut** or **Copy** beside the selection and **Paste Ink** (粘贴笔迹) in the tools
-toolbar. Ctrl+X, Ctrl+C and Ctrl+V are also available. Paste into the current page
-of the same open PDF. The new selection keeps its size and appears near the middle
-of the visible page, adjusted to stay within the page. Each completed transform,
-cut or paste can be undone. Save the PDF and reopen it to keep editing.
+Select ink, shapes, text boxes or a group of them. Use **Cut** or **Copy** beside the selection and
+**Paste Annotations** (粘贴批注) in the toolbar, or use Ctrl+X, Ctrl+C and Ctrl+V.
+Paste into another page of the same open PDF to keep the selected annotations
+editable. Paste selects the new objects near the center of the visible page.
+Each completed transform, cut or paste can be undone.
+
+In Settings, **Include text review marks in Select and Erase** is on by default.
+It covers editable highlights, underlines, squiggly lines and strikeouts, which
+stay attached to their text. In mixed selections, drag the dashed frame to move
+ink, shapes and text boxes. Dotted outlines show the attached marks. Delete removes the
+entire selection. For cut or copy, select movable annotations without review marks.
+The eraser removes a whole review mark when enabled. Partial erase
+preserves shapes and text boxes. Freehand highlighter strokes follow the same eraser rules
+as pen strokes.
 
 The floating favorites bar has a pin button. Pin it where you want it, and unlock
 it before dragging it again. The position and pin state are restored on restart.
@@ -127,9 +142,13 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
-在「框选 / 移动」中選取普通筆跡或自由螢光筆跡，拖曳角點可等比縮放並同步調整線寬，拖曳旋轉把手可繞選區中心旋轉，按住 Shift 可每 15° 吸附。可用手寫筆拖曳，滑鼠或單指拖曳需開啟「鼠标与手跟随工具」。
+從「形状」選擇直線、箭頭、矩形或橢圓，拖曳時預覽，放開後建立。按住 Shift 可將直線和箭頭約束為 45° 的倍數，將矩形和橢圓約束為正方形和正圓。線條、填充和持續或單次模式可收藏。整筆橡皮碰到邊線或可見填充即可移除整個圖形。
 
-可點選區旁的「剪切」「复制」，再於同一份 PDF 的目標頁點工具列上的「粘贴笔迹」。也支援 Ctrl+X、Ctrl+C、Ctrl+V。副本保留大小並置於目前頁面可見區域附近，完成後仍選取副本。變換、剪下和貼上各可復原，儲存後重開 PDF 可繼續編輯。浮動收藏欄可按圖釘固定，重啟後恢復位置和固定狀態。
+在「框选 / 移动」中選取筆跡或圖形，拖曳角點可等比縮放並同步調整線寬，拖曳旋轉把手可繞選區中心旋轉，按住 Shift 可每 15° 吸附。可用手寫筆拖曳，滑鼠或單指拖曳需開啟「鼠标与手跟随工具」。
+
+選取筆跡、圖形或文字方塊，點選區旁的「剪切」「复制」，再於同一份 PDF 的目標頁點工具列上的「粘贴批注」。也支援 Ctrl+X、Ctrl+C、Ctrl+V。貼上後會選取目前頁面可見區域中央附近的副本。變換、剪下和貼上各可復原。浮動收藏欄可按圖釘固定，重啟後恢復位置和固定狀態。
+
+設定中的「框选和橡皮作用于正文审阅标记」預設開啟，適用於可編輯的高亮、底線、波浪線和刪除線。混選時，拖曳虛線框會移動筆跡、圖形和文字方塊，點線輪廓的審閱標記仍附在原文字上。「删除」會移除整個選區。剪貼時請單獨選取可移動的批注。開啟設定時，橡皮碰到審閱標記會移除整項。局部擦除會保留圖形和文字方塊，自由螢光筆跡沿用普通筆跡的擦除規則。
 
 關閉「鼠标与手跟随工具」時，可用滑鼠左鍵或單指平移、在「选文字」模式手動選字，或在「框选 / 移动」模式選取和移動既有批注。若要用滑鼠或單指繪製、擦除或拖選後自動加審閱標記，請開啟開關。工具列、收藏欄及選區旁的「样式」按鈕可直接點擊。
 
@@ -181,9 +200,13 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 
 ## Simplified Chinese (zh-SC)
 
-在「框选 / 移动」中选中普通笔迹或自由荧光笔迹，拖动角点可等比缩放并同步调整线宽，拖动旋转手柄可绕选区中心旋转，按住 Shift 可每 15° 吸附。可用手写笔拖动，鼠标或单指拖动需打开「鼠标与手跟随工具」。
+从「形状」选择直线、箭头、矩形或椭圆，拖动时预览，松开后创建。按住 Shift 可将直线和箭头约束为 45° 的倍数，将矩形和椭圆约束为正方形和正圆。线条、填充和持续或单次模式可收藏。整笔橡皮碰到边线或可见填充即可删除整个形状。
 
-可点选区旁的「剪切」「复制」，再到同一份 PDF 的目标页点工具栏上的「粘贴笔迹」。也支持 Ctrl+X、Ctrl+C、Ctrl+V。副本保留大小并放在当前页可见区域中央附近，粘贴后选中新副本。变换、剪切和粘贴各可撤销，保存后重开 PDF 可继续编辑。浮动收藏栏可点图钉固定，重启后恢复位置和固定状态。
+在「框选 / 移动」中选中笔迹或形状，拖动角点可等比缩放并同步调整线宽，拖动旋转手柄可绕选区中心旋转，按住 Shift 可每 15° 吸附。可用手写笔拖动，鼠标或单指拖动需打开「鼠标与手跟随工具」。
+
+选中笔迹、形状或文字框，点选区旁的「剪切」「复制」，再到同一份 PDF 的目标页点工具栏上的「粘贴批注」。也支持 Ctrl+X、Ctrl+C、Ctrl+V。粘贴后会选中当前页可见区域中央附近的副本。变换、剪切和粘贴各可撤销。浮动收藏栏可点图钉固定，重启后恢复位置和固定状态。
+
+设置中的「框选和橡皮作用于正文审阅标记」默认开启，适用于可编辑的高亮、下划线、波浪线和删除线。混选时，拖动虚线框会移动笔迹、形状和文字框，点线轮廓的审阅标记仍附在原文字上。「删除」会移除整个选区。剪贴时请单独选中可移动的批注。开启设置时，橡皮碰到审阅标记会移除整项。局部擦除会保留形状和文字框，自由荧光笔迹沿用普通笔迹的擦除规则。
 
 关闭「鼠标与手跟随工具」时，可用鼠标左键或单指平移、在「选文字」模式手动选字，或在「框选 / 移动」模式框选和移动已有批注。要用鼠标或单指画、擦，或在拖选后自动加审阅标记，请打开开关。工具栏、收藏栏和选区旁的「样式」按钮可以直接点击。
 

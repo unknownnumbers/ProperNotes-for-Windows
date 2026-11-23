@@ -214,6 +214,7 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     m_view->setEraserMode(effective.tools.eraserMode == QStringLiteral("partial")
         ? InkCanvas::EraseMode::PartialStroke : InkCanvas::EraseMode::WholeStroke);
     m_view->setEraserRadius(effective.tools.eraserRadiusPt);
+    m_view->setEditTextMarkups(values.editTextMarkups);
     m_view->setInputFollowsTool(values.tools.inputFollowsTool);
     QColor textColor = effective.penColor;
     textColor.setAlphaF(effective.tools.opacity);
@@ -683,9 +684,11 @@ void MainWindow::updateUi()
     m_sidebarAction->setEnabled(preferencesReady);
     m_splitter->handle(1)->setEnabled(preferencesReady && !m_settingsDialog);
     m_colorAction->setEnabled(preferencesReady);
+    m_shapeFillColorAction->setEnabled(preferencesReady);
+    m_shapeToolButton->setEnabled(editable);
     for (auto* action : {m_penAction,m_highlighterAction,m_eraserAction,m_selectAction,m_textAction}) action->setEnabled(editable);
     m_panAction->setEnabled(ready);
-    for (auto* widget : QVector<QWidget*>{m_width,m_opacity,m_eraserSize,m_textSize,
+    for (auto* widget : QVector<QWidget*>{m_width,m_opacity,m_shapeFillOpacity,m_eraserSize,m_textSize,
                                         m_pressure,m_sensitivity,m_eraseMode,m_textFamily})
         widget->setEnabled(preferencesReady);
     m_followAction->setEnabled(preferencesReady);

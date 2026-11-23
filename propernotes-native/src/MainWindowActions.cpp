@@ -16,6 +16,7 @@
 #include <QLabel>
 #include <QLineF>
 #include <QListWidget>
+#include <QMenu>
 #include <QMetaObject>
 #include <QPainter>
 #include <QPixmap>
@@ -23,10 +24,11 @@
 #include <QSpinBox>
 #include <QStatusBar>
 #include <QTimer>
+#include <QToolButton>
+#include <QtMath>
 #include <algorithm>
 #include <cmath>
 #include <exception>
-#include <iterator>
 #include <utility>
 
 namespace propernotes {
@@ -41,6 +43,7 @@ qsizetype modelBytes(const PageAnnotations& page)
 {
     qsizetype bytes = qsizetype(page.strokes.size()) * sizeof(InkStroke) + qsizetype(page.textBoxes.size()) * sizeof(TextBox);
     bytes += page.textMarkups.size() * qsizetype(sizeof(TextMarkup));
+    bytes += page.shapes.size() * qsizetype(sizeof(ShapeAnnotation));
     for (const auto& stroke : page.strokes) bytes += stroke.points.size() * qsizetype(sizeof(InkPoint));
     for (const auto& text : page.textBoxes) bytes += (text.text.size() + text.fontFamily.size()) * 2;
     for (const auto& markup : page.textMarkups) bytes += markup.quads.size() * qsizetype(sizeof(TextMarkupQuad));
@@ -48,7 +51,7 @@ qsizetype modelBytes(const PageAnnotations& page)
 }
 bool modelFits(const QMap<int, PageAnnotations>& pages, QString& error)
 {
-    qsizetype strokes = 0, points = 0, texts = 0, characters = 0;
+    qsizetype strokes = 0, points = 0, texts = 0, characters = 0, shapes = 0;
     qsizetype markupCount = 0, markupQuads = 0, markupElements = 0;
     QSet<QUuid> ids;
     for (const auto& page : pages) {
@@ -82,7 +85,15 @@ bool modelFits(const QMap<int, PageAnnotations>& pages, QString& error)
                 return false;
             }
         }
-        if (strokes > 100000 || points > 2000000 || texts > 10000 || characters > 2000000) {
+        for (const auto& shape : page.shapes) {
+            if (ids.contains(shape.id) || !validShape(shape)) {
+                error = QStringLiteral("形状的范围或样式无效，本次编辑未应用。");
+                return false;
+            }
+            ids.insert(shape.id);
+        }
+        shapes += page.shapes.size();
+        if (strokes > 100000 || points > 2000000 || texts > 10000 || characters > 2000000 || shapes > MaxDocumentShapes) {
             error = QStringLiteral("文档已达到当前批注数量或内容上限，本次编辑未应用；原数据保留。"); return false;
         }
     }
@@ -93,6 +104,7 @@ QRectF focusBounds(const PageAnnotations& page, const QUuid& id)
     for (const auto& stroke : page.strokes) if (stroke.id == id) return inkStrokeOutline(stroke).boundingRect();
     for (const auto& text : page.textBoxes) if (text.id == id) return text.rect;
     for (const auto& markup : page.textMarkups) if (markup.id == id) return textMarkupBounds(markup);
+    for (const auto& shape : page.shapes) if (shape.id == id) return shapeBounds(shape);
     return {};
 }
 QString layoutName(DocumentView::LayoutMode mode)
@@ -190,6 +202,13 @@ void MainWindow::editHistory(bool redo)
             }
         }
         if (focus.isEmpty()) {
+            QSet<QUuid> currentShapes;
+            for (const auto& shape : value.shapes) currentShapes.insert(shape.id);
+            for (const auto& shape : removed.shapes) {
+                if (!currentShapes.contains(shape.id)) { focus = shapeBounds(shape); break; }
+            }
+        }
+        if (focus.isEmpty()) {
             QSet<QUuid> currentMarkups;
             for (const auto& markup : value.textMarkups) currentMarkups.insert(markup.id);
             for (const auto& markup : removed.textMarkups) {
@@ -207,78 +226,89 @@ void MainWindow::editHistory(bool redo)
     scheduleWorkspaceSave();
 }
 
-bool MainWindow::canUseInkClipboard() const
+bool MainWindow::canUseObjectClipboard() const
 {
     return m_tool == InkCanvas::Tool::Select && m_pageCount > 0 && !m_readOnly && !m_fileBusy &&
         !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog && !m_view->isTextEditing();
 }
 
-bool MainWindow::inkClipboardAvailable() const
+bool MainWindow::objectClipboardAvailable() const
 {
-    return !m_inkClipboard.strokes.isEmpty() && m_activeTab >= 0 && m_activeTab < m_tabs.size() &&
-        m_tabs[m_activeTab]->id == m_inkClipboard.tabId &&
-        m_inkClipboard.sourcePage >= 0 && m_inkClipboard.sourcePage < m_geometry.size();
+    return (!m_objectClipboard.strokes.isEmpty() || !m_objectClipboard.textBoxes.isEmpty() || !m_objectClipboard.shapes.isEmpty()) &&
+        m_activeTab >= 0 && m_activeTab < m_tabs.size() &&
+        m_tabs[m_activeTab]->id == m_objectClipboard.tabId &&
+        m_objectClipboard.sourcePage >= 0 && m_objectClipboard.sourcePage < m_geometry.size();
 }
 
-void MainWindow::updateInkClipboardUi()
+void MainWindow::updateObjectClipboardUi()
 {
-    const bool usable = canUseInkClipboard();
-    const bool selected = usable && m_view->hasSelectedInk();
-    m_cutInkAction->setEnabled(selected);
-    m_copyInkAction->setEnabled(selected);
-    m_pasteInkAction->setVisible(m_tool == InkCanvas::Tool::Select);
-    m_pasteInkAction->setEnabled(usable && inkClipboardAvailable());
+    const bool usable = canUseObjectClipboard();
+    const bool selected = usable && m_view->hasSelectedObjects();
+    m_cutObjectsAction->setEnabled(selected);
+    m_copyObjectsAction->setEnabled(selected);
+    m_pasteObjectsAction->setVisible(m_tool == InkCanvas::Tool::Select);
+    m_pasteObjectsAction->setEnabled(usable && objectClipboardAvailable());
 }
 
-void MainWindow::copySelectedInk(bool cut)
+void MainWindow::copySelectedObjects(bool cut)
 {
-    if (!canUseInkClipboard() || m_view->hasActiveGesture() || m_activeTab < 0 || m_activeTab >= m_tabs.size()) return;
-    auto selection = m_view->selectedInk();
-    if (selection.strokes.isEmpty() || selection.page < 0 || selection.page >= m_geometry.size()) return;
+    if (!canUseObjectClipboard() || m_view->hasActiveGesture() || m_activeTab < 0 || m_activeTab >= m_tabs.size()) return;
+    auto selection = m_view->selectedObjects();
+    const qsizetype count = selection.strokes.size() + selection.textBoxes.size() + selection.shapes.size();
+    if (!count || selection.page < 0 || selection.page >= m_geometry.size()) return;
 
     if (cut) {
         const auto before = m_pageAnnotations.value(selection.page);
         QSet<QUuid> ids;
         for (const auto& stroke : std::as_const(selection.strokes)) ids.insert(stroke.id);
+        for (const auto& box : std::as_const(selection.textBoxes)) ids.insert(box.id);
+        for (const auto& shape : std::as_const(selection.shapes)) ids.insert(shape.id);
         auto after = before;
-        const auto last = std::remove_if(after.strokes.begin(), after.strokes.end(),
-            [&ids](const InkStroke& stroke) { return ids.contains(stroke.id); });
-        if (std::distance(last, after.strokes.end()) != selection.strokes.size()) return;
-        after.strokes.erase(last, after.strokes.end());
-        commitAnnotations(selection.page, before, after, QStringLiteral("ink-cut"), selection.strokes.front().id);
+        const auto isSelected = [&ids](const auto& annotation) { return ids.contains(annotation.id); };
+        if (after.strokes.removeIf(isSelected) != selection.strokes.size() ||
+            after.textBoxes.removeIf(isSelected) != selection.textBoxes.size() ||
+            after.shapes.removeIf(isSelected) != selection.shapes.size()) return;
+        QUuid focus;
+        if (!selection.shapes.isEmpty()) focus = selection.shapes.front().id;
+        else if (!selection.textBoxes.isEmpty()) focus = selection.textBoxes.front().id;
+        else focus = selection.strokes.front().id;
+        commitAnnotations(selection.page, before, after, QStringLiteral("annotation-cut"), focus);
         if (!std::exchange(m_lastCommitAccepted, false)) return;
         m_view->updatePageAnnotations(selection.page, after);
     }
 
-    const qsizetype count = selection.strokes.size();
-    m_inkClipboard = { m_tabs[m_activeTab]->id, selection.page, std::move(selection.strokes) };
-    updateInkClipboardUi();
-    statusBar()->showMessage((cut ? QStringLiteral("已剪切 %1 条笔迹，可粘贴到本 PDF 的其他页。")
-        : QStringLiteral("已复制 %1 条笔迹，可粘贴到本 PDF 的其他页。")).arg(count), 4500);
+    m_objectClipboard = {m_tabs[m_activeTab]->id, selection.page, std::move(selection.strokes),
+        std::move(selection.textBoxes), std::move(selection.shapes)};
+    updateObjectClipboardUi();
+    statusBar()->showMessage((cut ? QStringLiteral("已剪切 %1 个批注，可粘贴到本 PDF 的其他页。")
+        : QStringLiteral("已复制 %1 个批注，可粘贴到本 PDF 的其他页。")).arg(count), 4500);
 }
 
-void MainWindow::pasteInk()
+void MainWindow::pasteObjects()
 {
-    if (!canUseInkClipboard() || m_view->hasActiveGesture() || !inkClipboardAvailable()) return;
+    if (!canUseObjectClipboard() || m_view->hasActiveGesture() || !objectClipboardAvailable()) return;
     const int page = m_view->currentPage();
     if (page < 0 || page >= m_geometry.size()) return;
     const auto& target = m_geometry[page];
-    const auto& source = m_geometry[m_inkClipboard.sourcePage];
+    const auto& source = m_geometry[m_objectClipboard.sourcePage];
     bool invertible = false;
     const QTransform displayToPdf = target.pdfToDisplay.inverted(&invertible);
     const QRectF paper = target.pdfRect.normalized();
     if (!invertible || !paper.isValid()) return;
-    const QTransform sourceToTarget = page == m_inkClipboard.sourcePage
+    const QTransform sourceToTarget = page == m_objectClipboard.sourcePage
         ? QTransform() : source.pdfToDisplay * displayToPdf;
-    // Coordinates and pen widths share the PDF page's user-space units.
-    const qreal widthScale = std::hypot(sourceToTarget.m11(), sourceToTarget.m12());
+    // Coordinates, pen widths and font sizes use PDF page user-space units.
+    const qreal sizeScale = std::hypot(sourceToTarget.m11(), sourceToTarget.m12());
+    const qreal pageRotation = qRadiansToDegrees(std::atan2(sourceToTarget.m12(), sourceToTarget.m11()));
 
-    auto strokes = m_inkClipboard.strokes;
+    auto strokes = m_objectClipboard.strokes;
+    auto boxes = m_objectClipboard.textBoxes;
+    auto shapes = m_objectClipboard.shapes;
     QRectF bounds;
     for (auto& stroke : strokes) {
-        stroke.widthPt *= widthScale;
+        stroke.widthPt *= sizeScale;
         if (!(stroke.widthPt >= MinInkStrokeWidthPt && stroke.widthPt <= MaxInkStrokeWidthPt)) {
-            statusBar()->showMessage(QStringLiteral("换算后的线宽超出当前页可编辑范围。剪贴板仍保留原笔迹。"), 6500);
+            statusBar()->showMessage(QStringLiteral("换算后的线宽超出当前页可编辑范围。剪贴板仍保留原批注。"), 6500);
             return;
         }
         for (auto& point : stroke.points) {
@@ -286,8 +316,34 @@ void MainWindow::pasteInk()
         }
         bounds = bounds.united(inkStrokeBounds(stroke));
     }
+    for (auto& box : boxes) {
+        // Keep the text layout dimensions while positioning the center in the destination page.
+        const QPointF center = sourceToTarget.map(box.rect.center());
+        const QSizeF size = box.rect.size() * sizeScale;
+        box.rect = QRectF(center - QPointF(size.width() / 2, size.height() / 2), size);
+        box.fontSizePt *= sizeScale;
+        if (!(size.width() >= 0.1 && size.width() <= 100'000 && size.height() >= 0.1 && size.height() <= 100'000 &&
+              box.fontSizePt >= 1 && box.fontSizePt <= 1000)) {
+            statusBar()->showMessage(QStringLiteral("换算后的文字框尺寸或字号超出当前页可编辑范围。剪贴板仍保留原批注。"), 6500);
+            return;
+        }
+        bounds = bounds.united(box.rect);
+    }
+    for (auto& shape : shapes) {
+        const QPointF center = shapeCenter(shape);
+        const QPointF targetCenter = sourceToTarget.map(center);
+        shape.start = targetCenter + (shape.start - center) * sizeScale;
+        shape.end = targetCenter + (shape.end - center) * sizeScale;
+        shape.rotationDegrees = std::remainder(shape.rotationDegrees + pageRotation, qreal(360));
+        shape.style.widthPt *= sizeScale;
+        if (!(shape.style.widthPt >= MinInkStrokeWidthPt && shape.style.widthPt <= MaxInkStrokeWidthPt)) {
+            statusBar()->showMessage(QStringLiteral("换算后的形状线宽超出当前页可编辑范围。剪贴板仍保留原批注。"), 6500);
+            return;
+        }
+        bounds = bounds.united(shapeBounds(shape));
+    }
     if (!bounds.isValid() || bounds.width() > paper.width() || bounds.height() > paper.height()) {
-        statusBar()->showMessage(QStringLiteral("剪贴板中的笔迹放不进当前页，笔迹仍可粘贴到其他页。"), 6500);
+        statusBar()->showMessage(QStringLiteral("剪贴板中的批注放不进当前页，仍可粘贴到其他页。"), 6500);
         return;
     }
     const QPointF center = m_view->visiblePageCenterPdf(page);
@@ -297,28 +353,55 @@ void MainWindow::pasteInk()
         std::clamp(center.x() - bounds.width() / 2, paper.left(), right),
         std::clamp(center.y() - bounds.height() / 2, paper.top(), bottom));
     const QPointF offset = targetOrigin - bounds.topLeft();
+    const auto positionFits = [](const QPointF& point) {
+        return std::abs(point.x()) <= MaxInkCoordinate && std::abs(point.y()) <= MaxInkCoordinate;
+    };
     QSet<QUuid> ids;
     for (auto& stroke : strokes) {
         stroke.id = QUuid::createUuid();
         ids.insert(stroke.id);
         for (auto& point : stroke.points) {
             point.position += offset;
-            if (!(std::abs(point.position.x()) <= MaxInkCoordinate && std::abs(point.position.y()) <= MaxInkCoordinate)) {
+            if (!positionFits(point.position)) {
                 statusBar()->showMessage(QStringLiteral("粘贴位置超出 PDF 坐标范围。"), 6500);
                 return;
             }
         }
     }
+    for (auto& box : boxes) {
+        box.rect.translate(offset);
+        if (!positionFits(box.rect.topLeft()) || !positionFits(box.rect.bottomRight())) {
+            statusBar()->showMessage(QStringLiteral("粘贴位置超出 PDF 坐标范围。"), 6500);
+            return;
+        }
+        box.id = QUuid::createUuid();
+        ids.insert(box.id);
+    }
+    for (auto& shape : shapes) {
+        shape.start += offset;
+        shape.end += offset;
+        if (!validShape(shape)) {
+            statusBar()->showMessage(QStringLiteral("换算后的形状超出当前页可编辑范围，剪贴板仍保留原批注。"), 6500);
+            return;
+        }
+        shape.id = QUuid::createUuid();
+        ids.insert(shape.id);
+    }
 
     const auto before = m_pageAnnotations.value(page);
     auto after = before;
-    const QUuid focus = strokes.front().id;
+    QUuid focus;
+    if (!shapes.isEmpty()) focus = shapes.front().id;
+    else if (!boxes.isEmpty()) focus = boxes.front().id;
+    else focus = strokes.front().id;
     after.strokes.append(strokes);
-    commitAnnotations(page, before, after, QStringLiteral("ink-paste"), focus);
+    after.textBoxes.append(boxes);
+    after.shapes.append(shapes);
+    commitAnnotations(page, before, after, QStringLiteral("annotation-paste"), focus);
     if (!std::exchange(m_lastCommitAccepted, false)) return;
     m_view->updatePageAnnotations(page, after);
-    m_view->selectPageInk(page, ids);
-    statusBar()->showMessage(QStringLiteral("已粘贴 %1 条笔迹。可拖动新选区。").arg(strokes.size()), 4500);
+    m_view->selectPageObjects(page, ids);
+    statusBar()->showMessage(QStringLiteral("已粘贴 %1 个批注。可拖动新选区。").arg(ids.size()), 4500);
 }
 
 bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
@@ -332,6 +415,7 @@ bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
     if (tool == InkCanvas::Tool::Highlighter) return preferences.highlighterSingleUse;
     if (tool == InkCanvas::Tool::ObjectEraser) return preferences.eraserSingleUse;
     if (tool == InkCanvas::Tool::TextBox) return preferences.textSingleUse;
+    if (const auto shape = InkCanvas::shapeKind(tool)) return preferences.shapeToolPreference(*shape).singleUse;
     return false;
 }
 
@@ -380,8 +464,8 @@ void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
     if (m_review && (m_tool != tool || (userChoice && activeReviewTool()))) m_review->reviewFeedback.clear();
     if(userChoice&&m_liveFavorite->active){clearFavoriteSelection();applyPreferences(m_preferences);}
     m_tool = tool;
-    syncStrokeStyleControls(effectiveToolPreferences(), effectivePenWidth());
     m_view->setTool(tool);
+    syncStrokeStyleControls(effectiveToolPreferences(), effectivePenWidth());
     if(userChoice)rememberPersistentTool();
     updateToolUi();
     updateTextReviewUi();
@@ -426,14 +510,17 @@ void MainWindow::updateToolUi()
     m_selectAction->setChecked(m_tool == InkCanvas::Tool::Select);
     m_textAction->setChecked(m_tool == InkCanvas::Tool::TextBox);
     m_panAction->setChecked(m_tool == InkCanvas::Tool::Pan);
+    const auto shape = InkCanvas::shapeKind(m_tool);
+    m_shapeToolButton->setText(shape ? favoriteToolName(m_tool) : QStringLiteral("形状"));
+    for (auto* action : m_shapeToolButton->menu()->actions()) action->setChecked(action->data().toInt() == int(m_tool));
     m_followAction->setChecked(m_preferences.tools.inputFollowsTool);
     m_lockAction->setChecked(!isSingleUse(m_tool));
     const auto* review = activeReviewTool();
     m_view->setTextReviewActive(review != nullptr);
-    updateInkClipboardUi();
+    updateObjectClipboardUi();
     const bool lockableReview = review && m_pageCount > 0 && !m_readOnly && !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog;
     const bool lockableDrawingTool = m_preferencesWritable && (m_tool == InkCanvas::Tool::Pen ||
-        m_tool == InkCanvas::Tool::Highlighter || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox);
+        m_tool == InkCanvas::Tool::Highlighter || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox || shape);
     m_lockAction->setEnabled(!m_preferencesBusy && !m_backupBusy && !m_fileBusy && (lockableReview || lockableDrawingTool));
     m_updatingUi = wasUpdating;
     if(m_favoritesBar){
@@ -521,6 +608,7 @@ void MainWindow::requestPageRender(int page, qreal scale, quint64 id, int route)
                     const auto annotations = window->m_pageAnnotations.value(page);
                     for (const auto& markup : annotations.textMarkups) paintTextMarkup(painter, markup);
                     for (const auto& stroke : annotations.strokes) paintInkStroke(painter, stroke);
+                    for (const auto& shape : annotations.shapes) paintShape(painter, shape);
                     for (const auto& text : annotations.textBoxes) paintTextBox(painter, text);
                     painter.end();
                     if (auto* item = window->m_pages->item(page)) item->setIcon(QIcon(QPixmap::fromImage(image)));

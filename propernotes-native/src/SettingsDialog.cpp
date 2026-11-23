@@ -79,6 +79,18 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     appearance->setEnabled(preferencesWritable);
     settingsLayout->addWidget(appearance);
 
+    auto* annotations = new QGroupBox(QStringLiteral("正文审阅标记"));
+    auto* annotationLayout = new QVBoxLayout(annotations);
+    m_editTextMarkups = new QCheckBox(QStringLiteral("框选和橡皮作用于正文审阅标记"));
+    m_editTextMarkups->setChecked(value.editTextMarkups);
+    auto* markupExplanation = new QLabel(QStringLiteral("适用于本应用可编辑的高亮、下划线、波浪线和删除线。开启后，橡皮命中会移除整项标记。自由荧光笔按笔迹处理。"));
+    markupExplanation->setWordWrap(true);
+    m_editTextMarkups->setAccessibleDescription(markupExplanation->text());
+    annotationLayout->addWidget(m_editTextMarkups);
+    annotationLayout->addWidget(markupExplanation);
+    annotations->setEnabled(preferencesWritable);
+    settingsLayout->addWidget(annotations);
+
     auto* backup = new QGroupBox(QStringLiteral("本地备份"));
     auto* backupForm = new QFormLayout(backup);
     m_interval = new QSpinBox;
@@ -217,6 +229,7 @@ AppPreferenceValues SettingsDialog::values() const
     result.sidebarWidth = m_sidebarWidth->value();
     result.penColor = m_penColor;
     result.penWidthPt = m_penWidth->value();
+    result.editTextMarkups = m_editTextMarkups->isChecked();
     result.backupIntervalMinutes = m_interval->value();
     result.backupRetainCount = m_retain->value();
     result.backupDirectory = m_directory->text().trimmed();

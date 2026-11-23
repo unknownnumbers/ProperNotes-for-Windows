@@ -10,6 +10,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
 #include <QPixmap>
 #include <QScopedValueRollback>
 #include <QScrollBar>
@@ -18,6 +19,7 @@
 #include <QStatusBar>
 #include <QTimer>
 #include <QToolBar>
+#include <QToolButton>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <cmath>
@@ -26,6 +28,40 @@ namespace propernotes {
 void MainWindow::syncStrokeStyleControls(const ToolPreferences& tools, qreal penWidth)
 {
     const QScopedValueRollback<bool> updating(m_updatingUi, true);
+    const auto shape = InkCanvas::shapeKind(m_tool);
+    const bool fill = shape && isAreaShape(*shape);
+    m_shapeFillColorAction->setVisible(fill);
+    m_shapeFillOpacityField->setVisible(fill);
+    for (auto* field : m_nonShapeStyleFields) field->setVisible(!shape);
+    if (shape) {
+        const auto& style = tools.shapeToolPreference(*shape).style;
+        m_view->setShapeStyle(style);
+        m_width->setRange(MinShapeToolWidthPt, MaxShapeToolWidthPt);
+        m_width->setValue(style.widthPt);
+        m_opacity->setDecimals(0);
+        m_opacity->setRange(MinShapeToolOpacityPercent, 100);
+        m_opacity->setValue(qRound(style.strokeColor.alphaF() * 100));
+        m_pressureField->setVisible(false);
+        m_sensitivityField->setVisible(false);
+        m_colorAction->setText(QStringLiteral("线条颜色"));
+        m_colorAction->setToolTip(QStringLiteral("形状的线条颜色"));
+        m_width->setToolTip(QStringLiteral("形状的线条粗细"));
+        m_opacity->setToolTip(QStringLiteral("形状的线条不透明度"));
+        QPixmap outlineSwatch(14, 14);
+        auto outline = style.strokeColor;
+        outline.setAlpha(255);
+        outlineSwatch.fill(outline);
+        m_colorAction->setIcon(QIcon(outlineSwatch));
+        if (fill) {
+            QPixmap fillSwatch(14, 14);
+            auto color = style.fillColor;
+            color.setAlpha(255);
+            fillSwatch.fill(color);
+            m_shapeFillColorAction->setIcon(QIcon(fillSwatch));
+            m_shapeFillOpacity->setValue(qRound(style.fillColor.alphaF() * 100));
+        }
+        return;
+    }
     const bool highlighter = m_tool == InkCanvas::Tool::Highlighter;
     m_width->setRange(highlighter ? MinHighlighterWidthPt : 0.5, highlighter ? MaxHighlighterWidthPt : 24.0);
     m_width->setValue(highlighter ? tools.highlighterWidthPt : penWidth);
@@ -34,8 +70,10 @@ void MainWindow::syncStrokeStyleControls(const ToolPreferences& tools, qreal pen
     m_opacity->setValue(highlighter ? tools.highlighterOpacity : tools.opacity * 100);
     m_pressureField->setVisible(!highlighter);
     m_sensitivityField->setVisible(!highlighter);
+    m_colorAction->setText(QStringLiteral("颜色"));
     m_colorAction->setToolTip(highlighter ? QStringLiteral("自由荧光笔颜色") : QStringLiteral("笔与新文字框颜色"));
     m_width->setToolTip(highlighter ? QStringLiteral("自由荧光笔粗细") : QStringLiteral("笔的粗细"));
+    m_opacity->setToolTip(QStringLiteral("不透明度"));
     QPixmap swatch(14, 14);
     swatch.fill(highlighter ? tools.highlighterColor : m_color);
     m_colorAction->setIcon(QIcon(swatch));
@@ -66,22 +104,38 @@ void MainWindow::buildUi() {
     m_highlighterAction->setToolTip(QStringLiteral("直接在 PDF 页面上划线，扫描页也可用。"));
     m_eraserAction=addTool(QStringLiteral("橡皮"),InkCanvas::Tool::ObjectEraser);
     m_selectAction=addTool(QStringLiteral("框选 / 移动"),InkCanvas::Tool::Select);
-    m_pasteInkAction = tools->addAction(QStringLiteral("粘贴笔迹"));
-    m_pasteInkAction->setShortcut(QKeySequence::Paste);
-    m_pasteInkAction->setToolTip(QStringLiteral("粘贴笔迹到当前页（Ctrl+V）"));
-    connect(m_pasteInkAction, &QAction::triggered, this, &MainWindow::pasteInk);
-    m_cutInkAction = new QAction(QStringLiteral("剪切笔迹"), this);
-    m_copyInkAction = new QAction(QStringLiteral("复制笔迹"), this);
-    m_cutInkAction->setShortcut(QKeySequence::Cut);
-    m_copyInkAction->setShortcut(QKeySequence::Copy);
-    addActions({m_cutInkAction, m_copyInkAction});
-    connect(m_cutInkAction, &QAction::triggered, this, [this] { copySelectedInk(true); });
-    connect(m_copyInkAction, &QAction::triggered, this, [this] { copySelectedInk(false); });
+    m_pasteObjectsAction = tools->addAction(QStringLiteral("粘贴批注"));
+    m_pasteObjectsAction->setShortcut(QKeySequence::Paste);
+    m_pasteObjectsAction->setToolTip(QStringLiteral("将本 PDF 中剪切或复制的笔迹、文字框和形状粘贴到当前页（Ctrl+V）"));
+    connect(m_pasteObjectsAction, &QAction::triggered, this, &MainWindow::pasteObjects);
+    m_cutObjectsAction = new QAction(QStringLiteral("剪切批注"), this);
+    m_copyObjectsAction = new QAction(QStringLiteral("复制批注"), this);
+    m_cutObjectsAction->setShortcut(QKeySequence::Cut);
+    m_copyObjectsAction->setShortcut(QKeySequence::Copy);
+    addActions({m_cutObjectsAction, m_copyObjectsAction});
+    connect(m_cutObjectsAction, &QAction::triggered, this, [this] { copySelectedObjects(true); });
+    connect(m_copyObjectsAction, &QAction::triggered, this, [this] { copySelectedObjects(false); });
     m_textAction=addTool(QStringLiteral("文字框"),InkCanvas::Tool::TextBox);
+    m_shapeToolButton = new QToolButton;
+    m_shapeToolButton->setText(QStringLiteral("形状"));
+    m_shapeToolButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    m_shapeToolButton->setAutoRaise(true);
+    m_shapeToolButton->setPopupMode(QToolButton::InstantPopup);
+    auto* shapeMenu = new QMenu(m_shapeToolButton);
+    for (auto tool : ShapeTools) {
+        auto* action = shapeMenu->addAction(favoriteToolName(tool));
+        action->setCheckable(true);
+        action->setData(int(tool));
+        toolGroup->addAction(action);
+        connect(action, &QAction::triggered, this, [this, tool] { chooseTool(tool); });
+    }
+    m_shapeToolButton->setMenu(shapeMenu);
+    m_shapeToolButton->setToolTip(QStringLiteral("选择直线、箭头、矩形或椭圆，在页面上拖动绘制。按住 Shift 可约束方向或比例。"));
+    tools->addWidget(m_shapeToolButton);
     m_panAction=addTool(QStringLiteral("平移"),InkCanvas::Tool::Pan);
     m_penAction->setChecked(true);
     m_followAction=tools->addAction(QStringLiteral("鼠标与手跟随工具"));m_followAction->setCheckable(true);
-    m_followAction->setToolTip(QStringLiteral("关闭时，鼠标左键和单指可平移、手动选字、框选及移动已有批注。开启后也可用当前工具写、擦或自动审阅。笔使用当前工具，两指负责浏览。"));
+    m_followAction->setToolTip(QStringLiteral("关闭时，鼠标左键和单指可平移、手动选字、框选及移动已有批注。开启后也可用当前工具写、画、擦或自动审阅。笔使用当前工具，两指负责浏览。"));
     m_lockAction=tools->addAction(QStringLiteral("持续使用"));m_lockAction->setCheckable(true);
     m_lockAction->setToolTip(QStringLiteral("选中为持续使用；取消后，成功完成一次操作回到上一个持续工具。"));
     m_undoAction=tools->addAction(QStringLiteral("撤销"));m_undoAction->setShortcut(QKeySequence::Undo);
@@ -100,24 +154,47 @@ void MainWindow::buildUi() {
         if(m_tool==InkCanvas::Tool::Highlighter)p.tools.highlighterSingleUse=!locked;
         if(m_tool==InkCanvas::Tool::ObjectEraser)p.tools.eraserSingleUse=!locked;
         if(m_tool==InkCanvas::Tool::TextBox)p.tools.textSingleUse=!locked;
+        if (const auto shape = InkCanvas::shapeKind(m_tool)) p.tools.shapeToolPreference(*shape).singleUse = !locked;
         beginPendingDefaultChange();persistPreferences(p);});
     addToolBarBreak();auto* style=addToolBar(QStringLiteral("笔与对象属性"));style->setMovable(false);
     m_colorAction=style->addAction(QStringLiteral("颜色"));
     m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSingleStep(0.5);m_width->setSuffix(QStringLiteral(" pt"));style->addWidget(m_width);
     m_opacity=new QDoubleSpinBox;m_opacity->setRange(0,100);m_opacity->setSuffix(QStringLiteral("% 不透明度"));style->addWidget(m_opacity);
+    m_shapeFillColorAction = style->addAction(QStringLiteral("填充颜色"));
+    m_shapeFillOpacity = new QDoubleSpinBox;
+    m_shapeFillOpacity->setRange(0, 100);
+    m_shapeFillOpacity->setDecimals(0);
+    m_shapeFillOpacity->setSuffix(QStringLiteral("% 填充"));
+    m_shapeFillOpacity->setToolTip(QStringLiteral("形状的填充不透明度。0% 表示无填充。"));
+    m_shapeFillOpacityField = style->addWidget(m_shapeFillOpacity);
     m_pressure=new QCheckBox(QStringLiteral("笔压"));m_pressureField=style->addWidget(m_pressure);
     m_sensitivity=new QSpinBox;m_sensitivity->setRange(0,100);m_sensitivity->setPrefix(QStringLiteral("灵敏度 "));m_sensitivityField=style->addWidget(m_sensitivity);
-    m_eraseMode=new QComboBox;m_eraseMode->addItem(QStringLiteral("整笔擦除"),"whole");m_eraseMode->addItem(QStringLiteral("局部擦除"),"partial");style->addWidget(m_eraseMode);
-    m_eraserSize=new QDoubleSpinBox;m_eraserSize->setRange(1,100);m_eraserSize->setPrefix(QStringLiteral("橡皮半径 "));m_eraserSize->setSuffix(QStringLiteral(" pt"));style->addWidget(m_eraserSize);
-    m_textFamily=new QFontComboBox;style->addWidget(m_textFamily);
-    m_textSize=new QDoubleSpinBox;m_textSize->setRange(4,144);m_textSize->setSuffix(QStringLiteral(" pt 字号"));style->addWidget(m_textSize);
-    for(auto* spin:{m_width,m_opacity,m_eraserSize,m_textSize})spin->setKeyboardTracking(false);
+    m_eraseMode=new QComboBox;m_eraseMode->addItem(QStringLiteral("整笔擦除"),"whole");m_eraseMode->addItem(QStringLiteral("局部擦除"),"partial");m_nonShapeStyleFields.append(style->addWidget(m_eraseMode));
+    m_eraseMode->setToolTip(QStringLiteral("整笔擦除也可移除整个文字框或形状。局部擦除保留这些对象。正文审阅标记遵循独立开关。"));
+    m_eraserSize=new QDoubleSpinBox;m_eraserSize->setRange(1,100);m_eraserSize->setPrefix(QStringLiteral("橡皮半径 "));m_eraserSize->setSuffix(QStringLiteral(" pt"));m_nonShapeStyleFields.append(style->addWidget(m_eraserSize));
+    m_textFamily=new QFontComboBox;m_nonShapeStyleFields.append(style->addWidget(m_textFamily));
+    m_textSize=new QDoubleSpinBox;m_textSize->setRange(4,144);m_textSize->setSuffix(QStringLiteral(" pt 字号"));m_nonShapeStyleFields.append(style->addWidget(m_textSize));
+    for(auto* spin:{m_width,m_opacity,m_shapeFillOpacity,m_eraserSize,m_textSize})spin->setKeyboardTracking(false);
     m_sensitivity->setKeyboardTracking(false);
     auto saveStyle=[this](const QString& field){
         if(m_updatingUi||m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable)return;
         const auto old=effectiveToolPreferences();const qreal oldWidth=effectivePenWidth();
         const auto changed=[](QDoubleSpinBox* spin,qreal original){const qreal scale=std::pow(10.0,spin->decimals());return !qFuzzyCompare(spin->value()+1,std::round(original*scale)/scale+1);};
         bool modified=false;auto p=m_preferences;p.tools=old;p.penColor=m_color;p.penWidthPt=oldWidth;
+        if (const auto shape = InkCanvas::shapeKind(m_tool)) {
+            auto& style = p.tools.shapeToolPreference(*shape).style;
+            const auto previous = style;
+            if (field == QStringLiteral("width") && changed(m_width, style.widthPt)) style.widthPt = m_width->value();
+            else if (field == QStringLiteral("opacity") && changed(m_opacity, style.strokeColor.alphaF() * 100))
+                style.strokeColor.setAlpha(qRound(m_opacity->value() * 255 / 100));
+            else if (field == QStringLiteral("shape-fill") && isAreaShape(*shape)
+                && changed(m_shapeFillOpacity, style.fillColor.alphaF() * 100))
+                style.fillColor.setAlpha(qRound(m_shapeFillOpacity->value() * 255 / 100));
+            if (style == previous) return;
+            beginPendingDefaultChange();
+            persistPreferences(p);
+            return;
+        }
         const bool highlighter = m_tool == InkCanvas::Tool::Highlighter;
         if(field==QStringLiteral("width")) {
             modified=changed(m_width,highlighter ? old.highlighterWidthPt : oldWidth);
@@ -138,24 +215,38 @@ void MainWindow::buildUi() {
     };
     connect(m_width,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("width"));});
     connect(m_opacity,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("opacity"));});
+    connect(m_shapeFillOpacity, &QDoubleSpinBox::editingFinished, this, [saveStyle] { saveStyle(QStringLiteral("shape-fill")); });
     connect(m_eraserSize,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("radius"));});
     connect(m_textSize,&QDoubleSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("text-size"));});
     connect(m_sensitivity,&QSpinBox::editingFinished,this,[saveStyle]{saveStyle(QStringLiteral("sensitivity"));});
     connect(m_pressure,&QCheckBox::clicked,this,[saveStyle](bool){saveStyle(QStringLiteral("pressure"));});
     connect(m_eraseMode,&QComboBox::activated,this,[saveStyle](int){saveStyle(QStringLiteral("erase-mode"));});
     connect(m_textFamily,&QFontComboBox::currentFontChanged,this,[this,saveStyle](const QFont&){if(!m_updatingUi)saveStyle(QStringLiteral("family"));});
-    connect(m_colorAction,&QAction::triggered,this,[this]{
+    const auto chooseColor = [this](bool fill) {
         if(m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable)return;
         m_view->finishGesture();
         const auto toolSerial = m_toolSerial;
+        const auto shape = InkCanvas::shapeKind(m_tool);
+        if (fill && (!shape || !isAreaShape(*shape))) return;
         const bool highlighter = m_tool == InkCanvas::Tool::Highlighter;
         auto p=m_preferences;p.tools=effectiveToolPreferences();p.penWidthPt=effectivePenWidth();p.penColor=m_color;
-        QColor& color = highlighter ? p.tools.highlighterColor : p.penColor;
-        const QColor chosen=QColorDialog::getColor(color,this,m_colorAction->toolTip());
-        if(!chosen.isValid() || chosen==color || m_toolSerial!=toolSerial)return;
+        QColor* target = highlighter ? &p.tools.highlighterColor : &p.penColor;
+        if (shape) {
+            auto& style = p.tools.shapeToolPreference(*shape).style;
+            target = fill ? &style.fillColor : &style.strokeColor;
+        }
+        QColor& color = *target;
+        QColor initial = color;
+        initial.setAlpha(255);
+        auto chosen = QColorDialog::getColor(initial, this, fill ? QStringLiteral("形状填充颜色") : m_colorAction->toolTip());
+        if(!chosen.isValid() || m_toolSerial!=toolSerial)return;
+        if (shape) chosen.setAlpha(fill && color.alpha() == 0 ? qRound(DefaultShapeFillOpacityPercent * 255 / 100.0) : color.alpha());
+        if (chosen == color) return;
         color=chosen;
         beginPendingDefaultChange();persistPreferences(p);
-    });
+    };
+    connect(m_colorAction, &QAction::triggered, this, [chooseColor] { chooseColor(false); });
+    connect(m_shapeFillColorAction, &QAction::triggered, this, [chooseColor] { chooseColor(true); });
     addToolBarBreak();auto* read=addToolBar(QStringLiteral("阅读"));read->setMovable(false);
     m_backAction=read->addAction(QStringLiteral("视角返回"));m_backAction->setShortcut(QKeySequence(Qt::ALT|Qt::Key_Left));
     m_forwardAction=read->addAction(QStringLiteral("视角前进"));m_forwardAction->setShortcut(QKeySequence(Qt::ALT|Qt::Key_Right));
@@ -191,8 +282,8 @@ void MainWindow::buildUi() {
     connect(m_view,&DocumentView::currentPageChanged,this,[this](int p){m_currentPage=p;m_targetPage=p;updateUi();m_sidebarPreviewTimer->start();});
     connect(m_view,&DocumentView::viewStateChanged,this,&MainWindow::viewChanged);
     connect(m_view,&DocumentView::textEditingChanged,this,[this](bool){updateUi();});connect(m_view,&DocumentView::selectionChanged,this,[this]{updateUi();});
-    connect(m_view, &DocumentView::inkCutRequested, this, [this] { copySelectedInk(true); });
-    connect(m_view, &DocumentView::inkCopyRequested, this, [this] { copySelectedInk(false); });
+    connect(m_view, &DocumentView::objectCutRequested, this, [this] { copySelectedObjects(true); });
+    connect(m_view, &DocumentView::objectCopyRequested, this, [this] { copySelectedObjects(false); });
     connect(m_view,&DocumentView::activity,this,[this](const QString& s){statusBar()->showMessage(s,8000);});
     applyPreferences(m_preferences);
 }

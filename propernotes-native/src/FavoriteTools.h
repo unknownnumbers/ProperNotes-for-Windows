@@ -5,9 +5,13 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRect>
+#include <array>
 #include <optional>
 
 namespace propernotes {
+
+inline constexpr auto ShapeTools = std::array{InkCanvas::Tool::Line, InkCanvas::Tool::Arrow,
+                                              InkCanvas::Tool::Rectangle, InkCanvas::Tool::Ellipse};
 
 // Only applicable tool fields are captured/serialized/applied. The remaining
 // ToolPreferences fields are defaults, never input-routing or reading presets.

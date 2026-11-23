@@ -17,6 +17,7 @@ struct AppPreferenceValues {
     QColor penColor = QColor(QStringLiteral("#202833"));
     qreal penWidthPt = 2.5;
     ToolPreferences tools;
+    bool editTextMarkups = true;
     QVector<FavoriteTool> favorites = defaultFavoriteTools();
     FavoritesBarPreferences favoritesBar;
     int backupIntervalMinutes = 5;

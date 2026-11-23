@@ -20,6 +20,7 @@ namespace propernotes {
 namespace {
 constexpr qint64 MaximumSettingsBytes = 256 * 1024;
 constexpr int MaximumRoots = 32;
+constexpr int SettingsSchemaVersion = 9;
 
 bool fail(QString* error, const QString& message)
 {
@@ -166,13 +167,14 @@ bool AppPreferences::load()
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(&m_error, QStringLiteral("设置文件已损坏；采用临时默认值，不覆盖原文件。"));
     const QJsonObject root = document.object();
-    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 7))
+    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, SettingsSchemaVersion))
         return fail(&m_error, QStringLiteral("设置版本不受支持；采用临时默认值，不覆盖原文件。"));
     QStringList rootKeys{QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
                         QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")};
     const int schemaVersion = root.value(QStringLiteral("schemaVersion")).toInt();
     if (schemaVersion >= 2) rootKeys.append(QStringLiteral("tools"));
     if (schemaVersion >= 3) { rootKeys.append(QStringLiteral("favorites")); rootKeys.append(QStringLiteral("favoritesBar")); }
+    if (schemaVersion >= 8) rootKeys.append(QStringLiteral("editTextMarkups"));
     if (!exactKeys(root, rootKeys))
         return fail(&m_error, QStringLiteral("设置文件含未知字段；未覆盖原文件。"));
     const QJsonObject backup = root.value(QStringLiteral("backup")).toObject();
@@ -186,13 +188,19 @@ bool AppPreferences::load()
     AppPreferenceValues candidate;
     if (schemaVersion >= 2 &&
         (!root.value(QStringLiteral("tools")).isObject()
-         || !readToolPreferences(root.value(QStringLiteral("tools")).toObject(), candidate.tools, schemaVersion >= 5)))
+         || !readToolPreferences(root.value(QStringLiteral("tools")).toObject(), candidate.tools, schemaVersion)))
         return fail(&m_error, QStringLiteral("工具设置字段无效，原设置文件保留。"));
     if (schemaVersion >= 3 &&
         (!root.value(QStringLiteral("favorites")).isArray() || !root.value(QStringLiteral("favoritesBar")).isObject() ||
          !readFavoriteTools(root.value(QStringLiteral("favorites")).toArray(), candidate.favorites, schemaVersion) ||
          !readFavoritesBar(root.value(QStringLiteral("favoritesBar")).toObject(), candidate.favoritesBar, schemaVersion)))
         return fail(&m_error, QStringLiteral("工具收藏或收藏栏设置无效，原设置文件保留。"));
+    if (schemaVersion >= 8) {
+        const auto editTextMarkups = root.value(QStringLiteral("editTextMarkups"));
+        if (!editTextMarkups.isBool())
+            return fail(&m_error, QStringLiteral("正文审阅标记设置无效，原设置文件保留。"));
+        candidate.editTextMarkups = editTextMarkups.toBool();
+    }
     candidate.theme = root.value(QStringLiteral("theme")).toString();
     candidate.sidebarVisible = root.value(QStringLiteral("sidebarVisible")).toBool();
     candidate.sidebarWidth = root.value(QStringLiteral("sidebarWidth")).toInt();
@@ -255,10 +263,11 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                        {QStringLiteral("retainCount"), candidate.backupRetainCount},
                        {QStringLiteral("directory"), candidate.backupDirectory},
                        {QStringLiteral("knownDirectories"), directories}};
-    const QJsonObject root{{QStringLiteral("schemaVersion"), 7}, {QStringLiteral("theme"), candidate.theme},
+    const QJsonObject root{{QStringLiteral("schemaVersion"), SettingsSchemaVersion}, {QStringLiteral("theme"), candidate.theme},
                            {QStringLiteral("sidebarVisible"), candidate.sidebarVisible}, {QStringLiteral("sidebarWidth"), candidate.sidebarWidth},
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
                            {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)},
+                           {QStringLiteral("editTextMarkups"), candidate.editTextMarkups},
                            {QStringLiteral("favorites"),favoriteToolsJson(candidate.favorites)},
                            {QStringLiteral("favoritesBar"),favoritesBarJson(candidate.favoritesBar)}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);

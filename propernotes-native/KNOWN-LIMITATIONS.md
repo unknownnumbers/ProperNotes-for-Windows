@@ -6,6 +6,15 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+Documents saved with native shapes use format v5. Earlier edits use their original
+native formats when the document has no shapes. Older native builds protect v5 from
+overwrite. The shapes use PDF annotation appearances. This version supports
+proportional transforms and reserves individual endpoint editing for later work.
+
+含原生圖形的 PDF 使用 v5。其餘文件沿用對應的舊原生格式。舊原生版本對 v5 有覆寫保護。圖形使用 PDF 批注外觀，本版支援等比變換，單獨調整端點留待後續。
+
+含原生形状的 PDF 使用 v5。其余文件沿用对应的旧原生格式。旧原生版本对 v5 有覆写保护。形状使用 PDF 批注外观，本版支持等比变换，单独调整端点留待后续。
+
 Freehand highlighter uses fixed-width strokes. The presence of freehand strokes
 requires native format v4. The editor also reads v1–v3, and v4 is overwrite-protected in older native builds.
 
@@ -66,7 +75,7 @@ provenance; 应用尚未启动、测试或实际验收.
 点击后仅影响后续操作. 多收藏栏及其他工具预设后续. 后台 PDF 模型仍占内存, 不由这些数量推定总内存上限.
 
 - Pen pressure is collected through Qt tablet events when the device/driver reports it. Mouse input is a constant-pressure fallback. Device and driver coverage is not asserted.
-- The 0.3.0 baseline adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. The 0.3.1 source integrates tabs, recents, session restoration and single-bar favorites. Shapes, bookmarks, annotation lists and locking, full custom navigation and shortcuts, and other confirmed first-batch tools remain open.
+- The 0.3.0 baseline adds reading layouts, view history, page overview, session document undo/redo, partial erasure, selection/movement, basic text boxes and the confirmed input/single-use policies. The 0.3.1 source integrates tabs, recents, session restoration and single-bar favorites. Bookmarks, annotation lists and locking, full custom navigation and shortcuts, and other confirmed first-batch tools remain open.
 - Input and serialized output are currently capped at 512MiB. A 1GB-class document is a future design/acceptance target, not supported capacity claimed by this build. See LARGE-DOCUMENTS.md for the verified parser/serialization constraints and planned work.
 - Recovery backups are full PDFs in the native backup catalog, not edits to the original file. Restore creates a separate PDF. Legacy web-preview backup catalogs are not imported. Atomic writes, source checks and verified copies do not guarantee recovery under every disk, power or filesystem failure.
 - An interrupted migration can leave pending entries visible for inspection or retry. Source data is preserved until destination copies are verified and committed. A corrupt or foreign catalog is protected rather than silently repaired.

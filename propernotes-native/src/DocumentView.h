@@ -33,9 +33,11 @@ public:
         ZoomMode zoomMode = ZoomMode::FitWidth;
         bool valid = false;
     };
-    struct InkSelection {
+    struct ObjectSelection {
         int page = -1;
         QVector<InkStroke> strokes;
+        QVector<TextBox> textBoxes;
+        QVector<ShapeAnnotation> shapes;
     };
 
     explicit DocumentView(QWidget* parent = nullptr);
@@ -62,10 +64,12 @@ public:
     void setPenWidth(qreal width);
     void setPenOpacity(qreal opacity);
     void setHighlighterStyle(const QColor& color, qreal widthPt);
+    void setShapeStyle(const ShapeStyle& style);
     void setPressureEnabled(bool enabled);
     void setPressureSensitivity(qreal sensitivity);
     void setEraserMode(InkCanvas::EraseMode mode);
     void setEraserRadius(qreal radius);
+    void setEditTextMarkups(bool enabled);
     void setInputFollowsTool(bool enabled);
     void setTextReviewActive(bool active);
     void setTextStyle(const QString& family, qreal size, const QColor& color);
@@ -76,10 +80,10 @@ public:
     bool hasActiveGesture() const;
     bool isTextEditing() const;
     void clearSelection();
-    bool hasSelectedInk() const;
-    InkSelection selectedInk() const;
+    bool hasSelectedObjects() const;
+    ObjectSelection selectedObjects() const;
     QPointF visiblePageCenterPdf(int page) const;
-    void selectPageInk(int page, const QSet<QUuid>& ids);
+    void selectPageObjects(int page, const QSet<QUuid>& ids);
     void deliverTextPage(int page, const std::shared_ptr<const PdfTextPage>& text);
     PdfTextSelection textSelection() const { return m_textSelection; }
     int textSelectionPage() const { return m_textSelectionPage; }
@@ -98,8 +102,8 @@ signals:
                               const propernotes::PageAnnotations& after, const QString& reason, const QUuid& focusId);
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
-    void inkCutRequested();
-    void inkCopyRequested();
+    void objectCutRequested();
+    void objectCopyRequested();
     void textEditingChanged(bool editing);
     void textPageRequested(int page);
     void textSelectionChanged();
@@ -123,9 +127,9 @@ private:
     void planRasterScales();
     void requestNext();
     void applyImage(int page);
-    int inkSelectionPage() const;
-    void applyPendingInkSelection(int page);
-    void clearPendingInkSelection();
+    int objectSelectionPage() const;
+    void applyPendingObjectSelection(int page);
+    void clearPendingObjectSelection();
     void configureCanvas(InkCanvas* canvas);
     void updatePenContactGate();
     void trimCache();
@@ -149,9 +153,9 @@ private:
     QVector<int> m_visible;
     QMap<int, PageAnnotations> m_annotations;
     QHash<int, InkCanvas*> m_canvases;
-    int m_inkActionPage = -1;
-    int m_pendingInkPage = -1;
-    QSet<QUuid> m_pendingInkIds;
+    int m_objectActionPage = -1;
+    int m_pendingObjectPage = -1;
+    QSet<QUuid> m_pendingObjectIds;
     QHash<int, CachedPage> m_cache;
     QHash<int, QString> m_errors;
     QSet<int> m_wanted;
@@ -182,6 +186,7 @@ private:
     qreal m_penOpacity = 1;
     QColor m_highlighterColor = QColor(255, 221, 67, 82);
     qreal m_highlighterWidthPt = 14;
+    ShapeStyle m_shapeStyle;
     bool m_pressure = true;
     qreal m_sensitivity = 50;
     qreal m_eraserRadius = 8;
@@ -190,6 +195,7 @@ private:
     QColor m_textColor = QColor("#202833");
     bool m_inputFollowsTool = false;
     bool m_textReviewActive = false;
+    bool m_editTextMarkups = true;
     bool m_dark = false;
     bool m_editing = false;
     bool m_rebuilding = false;

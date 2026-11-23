@@ -6,6 +6,7 @@
 #include <QMetaType>
 #include <QPointF>
 #include <QPainterPath>
+#include <QPainterPathStroker>
 #include <QPolygonF>
 #include <QPainter>
 #include <QFont>
@@ -17,6 +18,7 @@
 #include <QTransform>
 #include <QUuid>
 #include <QVector>
+#include <algorithm>
 #include <cmath>
 
 namespace propernotes {
@@ -81,10 +83,34 @@ inline constexpr qsizetype MaxDocumentTextMarkupQuads = 100'000;
 inline constexpr qsizetype MaxDocumentTextMarkups = 10'000;
 inline constexpr qsizetype MaxDocumentTextMarkupPathElements = 1'000'000;
 
+enum class ShapeKind { Line, Arrow, Rectangle, Ellipse };
+
+struct ShapeStyle {
+    QColor strokeColor = QColor("#202833");
+    qreal widthPt = 2.5;
+    QColor fillColor = Qt::transparent;
+
+    bool operator==(const ShapeStyle&) const = default;
+};
+
+struct ShapeAnnotation {
+    QUuid id = QUuid::createUuid();
+    ShapeKind kind = ShapeKind::Line;
+    QPointF start;
+    QPointF end;
+    qreal rotationDegrees = 0;
+    ShapeStyle style;
+
+    bool operator==(const ShapeAnnotation&) const = default;
+};
+
+inline constexpr qsizetype MaxDocumentShapes = 10'000;
+
 struct PageAnnotations {
     QVector<InkStroke> strokes;
     QVector<TextBox> textBoxes;
     QVector<TextMarkup> textMarkups;
+    QVector<ShapeAnnotation> shapes;
 };
 
 inline bool operator==(const InkPoint& a, const InkPoint& b)
@@ -100,7 +126,127 @@ inline bool operator==(const TextBox& a, const TextBox& b)
         && a.fontFamily == b.fontFamily && a.fontSizePt == b.fontSizePt && a.color == b.color;
 }
 inline bool operator==(const PageAnnotations& a, const PageAnnotations& b)
-{ return a.strokes == b.strokes && a.textBoxes == b.textBoxes && a.textMarkups == b.textMarkups; }
+{ return a.strokes == b.strokes && a.textBoxes == b.textBoxes && a.textMarkups == b.textMarkups && a.shapes == b.shapes; }
+
+inline bool isAreaShape(ShapeKind kind)
+{
+    return kind == ShapeKind::Rectangle || kind == ShapeKind::Ellipse;
+}
+
+inline QPointF shapeCenter(const ShapeAnnotation& shape)
+{
+    return (shape.start + shape.end) / 2;
+}
+
+inline QTransform shapeRotation(const ShapeAnnotation& shape)
+{
+    const QPointF center = shapeCenter(shape);
+    QTransform transform;
+    transform.translate(center.x(), center.y());
+    transform.rotate(shape.rotationDegrees);
+    transform.translate(-center.x(), -center.y());
+    return transform;
+}
+
+inline QPainterPath shapePath(const ShapeAnnotation& shape)
+{
+    QPainterPath path;
+    const QRectF rect = QRectF(shape.start, shape.end).normalized();
+    switch (shape.kind) {
+    case ShapeKind::Line:
+    case ShapeKind::Arrow:
+        path.moveTo(shape.start);
+        path.lineTo(shape.end);
+        break;
+    case ShapeKind::Rectangle:
+        path.addRect(rect);
+        break;
+    case ShapeKind::Ellipse:
+        path.addEllipse(rect);
+        break;
+    }
+    return path;
+}
+
+inline QPainterPath shapeFill(const ShapeAnnotation& shape)
+{
+    if (!isAreaShape(shape.kind) || shape.style.fillColor.alpha() == 0) return {};
+    return shapeRotation(shape).map(shapePath(shape));
+}
+
+inline QPainterPath shapeOutline(const ShapeAnnotation& shape)
+{
+    if (shape.style.strokeColor.alpha() == 0 || !std::isfinite(shape.style.widthPt) || shape.style.widthPt <= 0)
+        return {};
+    if (shape.kind == ShapeKind::Arrow) {
+        const QPointF delta = shape.end - shape.start;
+        const qreal length = std::hypot(delta.x(), delta.y());
+        if (!std::isfinite(length) || length < 0.001) return {};
+        const QPointF direction = delta / length;
+        const QPointF normal(-direction.y(), direction.x());
+        const qreal halfShaft = shape.style.widthPt / 2;
+        const qreal headLength = std::min(length * 0.65, shape.style.widthPt * 4);
+        const qreal halfHead = std::max(halfShaft, headLength * 0.45);
+        const QPointF base = shape.end - direction * headLength;
+        // A single silhouette applies alpha once to the shaft and head.
+        QPainterPath outline;
+        outline.moveTo(shape.start + normal * halfShaft);
+        outline.lineTo(base + normal * halfShaft);
+        outline.lineTo(base + normal * halfHead);
+        outline.lineTo(shape.end);
+        outline.lineTo(base - normal * halfHead);
+        outline.lineTo(base - normal * halfShaft);
+        outline.lineTo(shape.start - normal * halfShaft);
+        outline.closeSubpath();
+        return shapeRotation(shape).map(outline);
+    }
+    QPainterPathStroker stroker;
+    stroker.setWidth(shape.style.widthPt);
+    stroker.setCapStyle(Qt::RoundCap);
+    stroker.setJoinStyle(Qt::RoundJoin);
+    return shapeRotation(shape).map(stroker.createStroke(shapePath(shape)));
+}
+
+inline QRectF shapeBounds(const ShapeAnnotation& shape)
+{
+    return shapeOutline(shape).boundingRect().united(shapeFill(shape).boundingRect());
+}
+
+inline bool validShape(const ShapeAnnotation& shape)
+{
+    if (shape.id.isNull() || !shape.style.strokeColor.isValid() || !shape.style.fillColor.isValid()
+        || !std::isfinite(shape.style.widthPt) || shape.style.widthPt < MinInkStrokeWidthPt
+        || shape.style.widthPt > MaxInkStrokeWidthPt || !std::isfinite(shape.rotationDegrees)
+        || std::abs(shape.rotationDegrees) > 180)
+        return false;
+    const auto pointFits = [](const QPointF& p) {
+        return std::abs(p.x()) <= MaxInkCoordinate && std::abs(p.y()) <= MaxInkCoordinate;
+    };
+    if (!pointFits(shape.start) || !pointFits(shape.end)) return false;
+    const QPointF delta = shape.end - shape.start;
+    switch (shape.kind) {
+    case ShapeKind::Line:
+    case ShapeKind::Arrow:
+        if (std::hypot(delta.x(), delta.y()) < 0.001 || shape.style.fillColor.alpha() != 0)
+            return false;
+        break;
+    case ShapeKind::Rectangle:
+    case ShapeKind::Ellipse:
+        if (std::abs(delta.x()) < 0.001 || std::abs(delta.y()) < 0.001)
+            return false;
+        break;
+    default:
+        return false;
+    }
+    const QRectF bounds = shapeBounds(shape);
+    return bounds.isValid() && pointFits(bounds.topLeft()) && pointFits(bounds.bottomRight());
+}
+
+inline void paintShape(QPainter& painter, const ShapeAnnotation& shape)
+{
+    painter.fillPath(shapeFill(shape), shape.style.fillColor);
+    painter.fillPath(shapeOutline(shape), shape.style.strokeColor);
+}
 
 inline qreal textMarkupLength(const QPointF& delta)
 {
@@ -379,5 +525,8 @@ Q_DECLARE_METATYPE(propernotes::InkStroke)
 Q_DECLARE_METATYPE(propernotes::TextBox)
 Q_DECLARE_METATYPE(propernotes::TextMarkupQuad)
 Q_DECLARE_METATYPE(propernotes::TextMarkup)
+Q_DECLARE_METATYPE(propernotes::ShapeKind)
+Q_DECLARE_METATYPE(propernotes::ShapeStyle)
+Q_DECLARE_METATYPE(propernotes::ShapeAnnotation)
 Q_DECLARE_METATYPE(propernotes::PageAnnotations)
 Q_DECLARE_METATYPE(propernotes::RenderedPage)
