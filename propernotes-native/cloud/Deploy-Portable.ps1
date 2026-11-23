@@ -9,7 +9,7 @@ param(
     [Parameter(Mandatory = $true)][string]$QtRoot,
     [Parameter(Mandatory = $true)][string]$QtSourceDirectory,
     [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
-    [string]$PackageName = 'ProperNotes-for-Windows-0.3.11-native-preview.1-win-x64'
+    [string]$PackageName = 'ProperNotes-for-Windows-0.3.12-native-preview.1-win-x64'
 )
 
 Set-StrictMode -Version Latest
@@ -110,6 +110,14 @@ if (Test-Path -LiteralPath (Join-Path $ProjectDirectory 'licenses')) {
     Copy-Tree (Join-Path $ProjectDirectory 'licenses') (Join-Path $licenses 'project/legal-texts')
     Copy-File (Join-Path $ProjectDirectory 'licenses/CC-BY-SA-4.0.txt') (Join-Path $licenses 'CC-BY-SA-4.0.txt')
 }
+foreach ($notice in @(
+    @{ source = 'licenses/lucide.txt'; target = 'Lucide/LICENSE.txt' },
+    @{ source = 'licenses/lucide-source.json'; target = 'Lucide/source.json' }
+)) {
+    $inputFile = Join-Path $ProjectDirectory $notice.source
+    if (-not (Test-Path -LiteralPath $inputFile -PathType Leaf)) { throw "Required Lucide notice is missing: $($notice.source)" }
+    Copy-File $inputFile (Join-Path $licenses $notice.target)
+}
 foreach ($name in @('README.md', 'PORTABLE.md', 'KNOWN-LIMITATIONS.md', 'LARGE-DOCUMENTS.md')) {
     if (Test-Path -LiteralPath (Join-Path $ProjectDirectory $name)) {
         Copy-File (Join-Path $ProjectDirectory $name) (Join-Path $portable $name)
@@ -184,6 +192,12 @@ Write-Utf8 (Join-Path $licenses 'README.md') @'
 
 ProperNotes native code is GPL-3.0-only; original documentation is CC-BY-SA-4.0.
 Third-party components keep their respective copyright and license terms.
+The executable embeds Lucide SVG icons, including retained Feather attribution,
+under their upstream combined ISC and MIT notice. Their full copyright and license
+text is in Lucide/LICENSE.txt, and Lucide/source.json records the fixed upstream
+commit and unmodified source-file hashes. Runtime color substitution does not
+relicense those resources as ProperNotes code. The original application's code
+license remains GPL-3.0-only, and original explanatory text remains CC-BY-SA-4.0.
 PDF4QT is MIT, with separately licensed embedded CMaps and Liberation fonts.
 Qt is dynamically deployed; its license texts, third-party attributions, and matching
 qtbase/qtsvg source are supplied. No WebView2, Node.js, OCR engine, or OCR model is deployed.

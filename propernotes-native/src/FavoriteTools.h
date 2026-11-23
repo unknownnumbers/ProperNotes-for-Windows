@@ -31,7 +31,8 @@ struct FavoritesBarPreferences {
     bool collapsed = false;
     QString side = QStringLiteral("right");
     bool floating = true;
-    // Viewport-relative in settings v10. The initial x clamps to the right edge.
+    // Last floating geometry, viewport-relative since v10. Docking never
+    // overwrites it with the sidebar's full-height layout rectangle.
     QRect geometry = QRect(100000, 72, 80, 420);
     bool pinned = true;
 };

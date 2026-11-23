@@ -49,6 +49,61 @@ function Write-FileLicenseIndex {
     $qtNames = @{}
     $portOwners = @{}
     $portEvidence = @{}
+    $lucideMetadataPath = Join-Path $ProjectDirectory 'licenses/lucide-source.json'
+    $lucideLicensePath = Join-Path $ProjectDirectory 'licenses/lucide.txt'
+    if (-not (Test-Path -LiteralPath $lucideMetadataPath -PathType Leaf) -or
+        -not (Test-Path -LiteralPath $lucideLicensePath -PathType Leaf)) {
+        throw 'Lucide source provenance and its complete upstream license are required.'
+    }
+    $lucide = Get-Content -LiteralPath $lucideMetadataPath -Raw | ConvertFrom-Json
+    if ($lucide.schemaVersion -ne 1 -or $lucide.repository -cne 'https://github.com/lucide-icons/lucide' -or
+        $lucide.commit -cnotmatch '^[0-9a-f]{40}$' -or $lucide.license.path -cne 'licenses/lucide.txt' -or
+        $lucide.license.upstreamPath -cne 'LICENSE' -or $lucide.license.licenseExpression -cne 'ISC AND MIT' -or
+        $lucide.license.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        (Get-FileHash -LiteralPath $lucideLicensePath -Algorithm SHA256).Hash.ToLowerInvariant() -cne $lucide.license.sha256) {
+        throw 'Lucide provenance or license identity is invalid.'
+    }
+    $lucideAssets = @{}
+    foreach ($asset in $lucide.assets) {
+        if ($asset.path -cnotmatch '^src/icons/lucide/[a-z0-9-]+\.svg$' -or
+            $asset.upstreamPath -cnotmatch '^icons/[a-z0-9-]+\.svg$' -or
+            $asset.sha256 -cnotmatch '^[0-9a-f]{64}$' -or $lucideAssets.ContainsKey($asset.path)) {
+            throw 'Unexpected or duplicate Lucide asset provenance.'
+        }
+        $source = Join-Path $ProjectDirectory $asset.path
+        if (-not (Test-Path -LiteralPath $source -PathType Leaf) -or
+            (Get-Item -LiteralPath $source).Length -ne $asset.bytes -or
+            (Get-FileHash -LiteralPath $source -Algorithm SHA256).Hash.ToLowerInvariant() -cne $asset.sha256) {
+            throw "Lucide asset differs from its recorded upstream bytes: $($asset.path)"
+        }
+        $lucideAssets[$asset.path] = $asset
+    }
+    if ($lucideAssets.Count -eq 0 -or
+        @(Get-ChildItem -LiteralPath (Join-Path $ProjectDirectory 'src/icons/lucide') -File -Filter '*.svg').Count -ne $lucideAssets.Count) {
+        throw 'Lucide asset inventory is empty or incomplete.'
+    }
+
+    function Get-LucideEvidence {
+        param([string]$AssetPath = '')
+        $upstream = if ($AssetPath) { $lucideAssets[$AssetPath].upstreamPath } else { $lucide.license.upstreamPath }
+        return [ordered]@{
+            component = 'Lucide SVG icons and retained Feather attribution'
+            licenseDeclared = 'ISC AND MIT'
+            licenseConcluded = 'ISC AND MIT'
+            licenseEvidence = @('licenses/Lucide/LICENSE.txt', 'licenses/Lucide/source.json')
+            source = "$($lucide.repository)/blob/$($lucide.commit)/$upstream"
+            note = 'The upstream combined ISC and Feather MIT notice is retained. Individual icon ancestry is not asserted separately; no ProperNotes GPL relicensing is applied to these upstream assets.'
+        }
+    }
+    function Get-LucideMetadataEvidence {
+        return [ordered]@{
+            component = 'Lucide source provenance measurements'
+            licenseConcluded = 'NOASSERTION'
+            licenseEvidence = @('licenses/Lucide/LICENSE.txt')
+            source = "$($lucide.repository)/tree/$($lucide.commit)"
+            note = 'Generated source identities, hashes and upstream references. No new copyright or license assertion over factual metadata.'
+        }
+    }
     $infoRoot = Join-Path $InstalledDirectory 'vcpkg/info'
     foreach ($list in Get-ChildItem -LiteralPath $infoRoot -File -Filter '*.list') {
         $port = $list.BaseName.Split('_')[0]
@@ -74,7 +129,12 @@ function Write-FileLicenseIndex {
             $sourceHash = (Get-FileHash -LiteralPath $inputFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             $evidence = [ordered]@{ component = $inputKind; source = "$inputKind/$sourcePath"; inputSha256 = $sourceHash; licenseConcluded = 'NOASSERTION'; licenseEvidence = @() }
             switch ($inputKind) {
-                'application' { $evidence.licenseConcluded = 'GPL-3.0-only'; $evidence.licenseEvidence = @('LICENSE', 'COPYRIGHT.md') }
+                'application' {
+                    $evidence.licenseConcluded = 'GPL-3.0-only'
+                    $evidence.licenseEvidence = @('LICENSE', 'COPYRIGHT.md')
+                    $evidence['embeddedResources'] = @((Get-LucideEvidence))
+                    $evidence['note'] = 'GPL-3.0-only describes the original application code. Embedded Lucide/Feather SVG resources retain the separately recorded ISC and MIT terms.'
+                }
                 'PDF4QT' {
                     $evidence.licenseConcluded = 'MIT AND BSD-3-Clause AND OFL-1.1'
                     $evidence.licenseEvidence = @('licenses/PDF4QT/LICENSE', 'licenses/PDF4QT/cmaps/LICENSE.txt', 'licenses/PDF4QT/liberation-fonts/LICENSE')
@@ -106,6 +166,12 @@ function Write-FileLicenseIndex {
     function Get-PathEvidence {
         param([string]$Relative, [string]$TextPrefix)
         $evidence = [ordered]@{ component = 'unresolved'; licenseConcluded = 'NOASSERTION'; licenseEvidence = @(); source = $null }
+        if ($Relative -match '^licenses/(?:Lucide/source\.json|project/legal-texts/lucide-source\.json)$') {
+            return Get-LucideMetadataEvidence
+        }
+        if ($Relative -match '^licenses/(?:Lucide/LICENSE\.txt|project/legal-texts/lucide\.txt)$') {
+            return Get-LucideEvidence
+        }
         if ($Relative -match '^licenses/Qt/(?<module>[^/]+)/') {
             $evidence.component = "Qt:$($Matches.module) notices"; $evidence.licenseEvidence = @('licenses/Qt/attribution-inventory.json'); return $evidence
         }
@@ -138,6 +204,12 @@ function Write-FileLicenseIndex {
         }
         if ($Relative -match '^source-inputs/ProperNotes-native-source\.zip!/(?:propernotes-native/)?(?<inner>.+)$') {
             $inner = $Matches.inner
+            if ($inner -eq 'licenses/lucide-source.json') { return Get-LucideMetadataEvidence }
+            if ($inner -eq 'licenses/lucide.txt') { return Get-LucideEvidence }
+            if ($inner -match '^src/icons/lucide/.+\.svg$') {
+                if (-not $lucideAssets.ContainsKey($inner)) { throw "Unrecorded Lucide source asset: $inner" }
+                return Get-LucideEvidence $inner
+            }
             $evidence.component = 'ProperNotes original source'
             $evidence.licenseEvidence = @('licenses/project/LICENSE', 'licenses/project/LICENSE-DOCS', 'licenses/project/COPYRIGHT.md')
             if ($inner -match '(^|/)(LICENSE|CC-BY-SA-4\.0\.txt)$') { return $evidence }

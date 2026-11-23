@@ -2,6 +2,7 @@
 #pragma once
 #include "FavoriteTools.h"
 #include <QHash>
+#include <QPointer>
 #include <QTimer>
 #include <QWidget>
 #include <optional>
@@ -9,15 +10,17 @@
 class QAction;
 class QCloseEvent;
 class QScrollArea;
+class QLabel;
 class QToolButton;
 class QVBoxLayout;
 
 namespace propernotes {
-// Child overlay of the reading viewport, never an independent desktop window.
+// A child overlay or an occupied side strip, never a desktop top-level window.
 class FavoritesBar final : public QWidget {
     Q_OBJECT
 public:
     explicit FavoritesBar(QWidget* parent);
+    void setDockHosts(QWidget* viewport, QWidget* leftHost, QWidget* rightHost);
     void setFavorites(const QVector<FavoriteTool>& favorites);
     void setBarPreferences(const FavoritesBarPreferences& preferences);
     void setCurrentTool(const FavoriteTool& liveSnapshot);
@@ -53,6 +56,11 @@ private:
     FavoritesBarPreferences currentLayout() const;
     void syncPlacementControls();
     void constrainGeometry();
+    QRect boundedFloatingGeometry(const QRect& geometry) const;
+    void applyPlacement(bool floating, const QString& side);
+    void syncDockHosts();
+    void showDockPreview(const QPointF& global, const QRect& proposed);
+    void hideDockPreview();
     int minimumPaletteHeight() const;
     void handleGesture(int kind, int phase, const QPointF& global);
     void keyboardGeometry(int kind, int key, bool accelerated);
@@ -61,6 +69,10 @@ private:
     void syncVisibility();
     int indexOf(const QUuid& id) const;
     QScrollArea* m_scroll = nullptr;
+    QPointer<QWidget> m_viewport;
+    QPointer<QWidget> m_leftHost;
+    QPointer<QWidget> m_rightHost;
+    QPointer<QLabel> m_dockPreview;
     QWidget* m_entries = nullptr;
     QVBoxLayout* m_entriesLayout = nullptr;
     QToolButton* m_pan = nullptr;
@@ -80,11 +92,21 @@ private:
     QUuid m_revealId;
     bool m_applying = false;
     bool m_hostClosing = false;
-    bool m_preferencesApplied = false;
     bool m_writable = false;
     bool m_activationEnabled = true;
+    bool m_floating = true;
+    QString m_side = QStringLiteral("right");
+    QString m_dockCandidate;
+    QRect m_floatingGeometry = QRect(100000,72,80,420);
     std::optional<bool> m_visibilityOverride;
-    struct Gesture { int kind; QPointF origin; QRect geometry; };
+    struct Gesture {
+        int kind;
+        QPointF origin;
+        QRect geometry;
+        QPoint grabOffset;
+        bool startedFloating = true;
+        bool moved = false;
+    };
     std::optional<Gesture> m_gesture;
     QTimer m_layoutTimer;
 };

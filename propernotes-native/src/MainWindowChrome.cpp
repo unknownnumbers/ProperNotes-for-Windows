@@ -33,6 +33,18 @@ void MainWindow::buildReaderChrome()
         for (auto* action : toolbar->actions()) if (!qobject_cast<QWidgetAction*>(action)) addAction(action);
         toolbar->hide(); removeToolBar(toolbar);
     }
+    auto* readingHost=new QWidget;
+    auto* readingRow=new QHBoxLayout(readingHost);readingRow->setContentsMargins(0,0,0,0);readingRow->setSpacing(0);
+    const auto dockHost=[readingHost](const QString& name){
+        auto* host=new QFrame(readingHost);host->setObjectName(name);host->setFixedWidth(80);host->setAutoFillBackground(true);
+        auto* column=new QVBoxLayout(host);column->setContentsMargins(0,0,0,0);column->setSpacing(0);host->hide();return host;
+    };
+    auto* leftDock=dockHost(QStringLiteral("readerDockLeft"));
+    auto* rightDock=dockHost(QStringLiteral("readerDockRight"));
+    m_splitter->replaceWidget(1,readingHost);
+    readingRow->addWidget(leftDock);readingRow->addWidget(m_view,1);readingRow->addWidget(rightDock);
+    m_splitter->setStretchFactor(1,1);
+    m_favoritesBar->setDockHosts(m_view->viewport(),leftDock,rightDock);
     auto* edit = menuBar()->addMenu(QStringLiteral("编辑"));
     edit->addAction(m_undoAction); edit->addAction(m_redoAction); edit->addSeparator();
     edit->addAction(m_cutObjectsAction); edit->addAction(m_copyObjectsAction); edit->addAction(m_pasteObjectsAction);
@@ -89,8 +101,8 @@ void MainWindow::buildReaderChrome()
     railLayout->setContentsMargins(6,8,6,8); railLayout->setSpacing(6);
     const auto railButton = [rail, railLayout](QAction* action) {
         auto* button = new QToolButton(rail); button->setDefaultAction(action);
-        button->setFixedSize(44,44); button->setIconSize(QSize(23,23));
-        button->setAutoRaise(true); button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        configureReaderIconButton(button);
+        button->setAutoRaise(true);
         button->setAccessibleName(action->text()); railLayout->addWidget(button); return button;
     };
     railButton(m_openAction); railButton(m_saveAction);
@@ -135,10 +147,10 @@ void MainWindow::buildReaderChrome()
     // transient zoom/history groups. It uses the same navigation command.
     auto* pages = new QFrame(m_view->viewport()); pages->setObjectName(QStringLiteral("readerPagePicker"));
     auto* pageRow = new QHBoxLayout(pages); pageRow->setContentsMargins(5,4,5,4); pageRow->setSpacing(4);
-    m_chromePageNumber = new QSpinBox; m_chromePageNumber->setMinimumHeight(40); m_chromePageNumber->setButtonSymbols(QAbstractSpinBox::NoButtons);
+    m_chromePageNumber = new QSpinBox; m_chromePageNumber->setMinimumHeight(44); m_chromePageNumber->setButtonSymbols(QAbstractSpinBox::NoButtons);
     m_chromePageNumber->setKeyboardTracking(false); m_chromePageNumber->setAccessibleName(QStringLiteral("跳转页码"));
     m_chromePageTotal = new QLabel;
-    auto* overview = new QToolButton; overview->setDefaultAction(m_overviewAction); overview->setFixedSize(40,40); overview->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    auto* overview = new QToolButton; overview->setDefaultAction(m_overviewAction);configureReaderIconButton(overview);
     pageRow->addWidget(m_chromePageNumber);pageRow->addWidget(m_chromePageTotal);pageRow->addWidget(overview);
     connect(m_chromePageNumber,&QSpinBox::editingFinished,this,[this]{if(!m_updatingUi)goToPage(m_chromePageNumber->value()-1);});
     // A lightweight filter on the page picker tracks viewport resizing.
@@ -149,12 +161,12 @@ void MainWindow::refreshReaderChrome()
 {
     if (!m_palettePinAction) return;
     for (const auto& item : QList<QPair<QAction*,QString>>{{m_openAction,"open"},{m_saveAction,"save"},{m_settingsAction,"settings"},
-            {m_followAction,"hand"},{m_backAction,"back"},{m_forwardAction,"forward"},{m_undoAction,"undo"},{m_redoAction,"redo"},
-            {m_zoomOutAction,"minus"},{m_zoomInAction,"zoom-in"},{m_overviewAction,"pages"},{m_review->find,"search"}})
+            {m_followAction,"mouse"},{m_backAction,"back"},{m_forwardAction,"forward"},{m_undoAction,"undo"},{m_redoAction,"redo"},
+            {m_zoomOutAction,"minus"},{m_zoomInAction,"zoom-in"},{m_overviewAction,"overview"},{m_review->find,"search"}})
         item.first->setIcon(uiIcon(item.second,palette()));
     m_palettePinAction->setChecked(m_preferences.favoritesBar.pinned);
     m_palettePinAction->setEnabled(m_preferencesWritable && !m_preferencesBusy && !m_backupBusy && !m_fileBusy && !m_settingsDialog && !m_closingAll);
-    m_palettePinAction->setIcon(uiIcon(m_preferences.favoritesBar.pinned?QStringLiteral("pin"):QStringLiteral("pin-off"),palette()));
+    m_palettePinAction->setIcon(uiIcon(m_preferences.favoritesBar.pinned?QStringLiteral("pin-toolbar"):QStringLiteral("unpin-toolbar"),palette()));
     m_palettePinAction->setToolTip(m_preferences.favoritesBar.pinned?QStringLiteral("解除工具栏位置与高度固定"):QStringLiteral("固定工具栏位置与高度"));
     m_fullScreenAction->setChecked(isFullScreen());
     m_fullScreenAction->setIcon(uiIcon(isFullScreen()?QStringLiteral("restore"):QStringLiteral("fullscreen"),palette()));

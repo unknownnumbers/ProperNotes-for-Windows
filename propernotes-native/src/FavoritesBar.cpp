@@ -15,12 +15,14 @@
 #include <QFrame>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QList>
 #include <QLineEdit>
 #include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QPointer>
+#include <QPair>
 #include <QScopedValueRollback>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -50,25 +52,35 @@ public:
     GeometryHandle(Gesture gesture,std::function<void(int,bool)> key,QWidget* parent)
         :QToolButton(parent),m_gesture(std::move(gesture)),m_key(std::move(key))
     {setAttribute(Qt::WA_AcceptTouchEvents);setAutoRaise(true);}
+    void cancelContact(){m_mouse=m_touch=m_tablet=false;setDown(false);if(QWidget::mouseGrabber()==this)releaseMouse();}
 protected:
     bool event(QEvent* event) override {
         if(event->type()==QEvent::TouchBegin||event->type()==QEvent::TouchUpdate||event->type()==QEvent::TouchEnd||event->type()==QEvent::TouchCancel){
             auto* touch=static_cast<QTouchEvent*>(event);
-            if(event->type()==QEvent::TouchBegin){if(!isEnabled()||m_mouse||touch->points().isEmpty())return false;m_touch=true;setDown(true);m_last=touch->points().first().globalPosition();m_gesture(0,m_last);}
-            else if(m_touch){if(!touch->points().isEmpty())m_last=touch->points().first().globalPosition();if(event->type()==QEvent::TouchUpdate)m_gesture(1,m_last);else{m_touch=false;setDown(false);m_gesture(2,m_last);}}
+            if(event->type()==QEvent::TouchBegin){if(!isEnabled()||m_mouse||m_tablet||touch->points().isEmpty())return false;m_touch=true;setDown(true);m_last=touch->points().first().globalPosition();m_gesture(0,m_last);}
+            else if(m_touch){if(!touch->points().isEmpty())m_last=touch->points().first().globalPosition();if(event->type()==QEvent::TouchUpdate)m_gesture(1,m_last);else{m_touch=false;setDown(false);m_gesture(event->type()==QEvent::TouchCancel?3:2,m_last);}}
             event->accept();return true;
         }
-        if(event->type()==QEvent::UngrabMouse&&m_mouse){m_mouse=false;setDown(false);m_gesture(2,m_last);}
-        if(event->type()==QEvent::Hide&&(m_mouse||m_touch)){m_mouse=m_touch=false;setDown(false);m_gesture(2,m_last);}
+        if(event->type()==QEvent::UngrabMouse&&m_mouse){m_mouse=false;setDown(false);m_gesture(3,m_last);}
+        if(event->type()==QEvent::Hide&&(m_mouse||m_touch||m_tablet)){m_mouse=m_touch=m_tablet=false;setDown(false);m_gesture(3,m_last);}
         return QToolButton::event(event);
     }
-    void mousePressEvent(QMouseEvent* e) override {if(e->button()!=Qt::LeftButton||m_touch){e->ignore();return;}m_mouse=true;m_last=e->globalPosition();setDown(true);grabMouse();m_gesture(0,m_last);e->accept();}
+    void mousePressEvent(QMouseEvent* e) override {if(e->button()!=Qt::LeftButton||m_touch||m_tablet){e->ignore();return;}m_mouse=true;m_last=e->globalPosition();setDown(true);grabMouse();m_gesture(0,m_last);e->accept();}
     void mouseMoveEvent(QMouseEvent* e) override {if(!m_mouse){QToolButton::mouseMoveEvent(e);return;}m_last=e->globalPosition();m_gesture(1,m_last);e->accept();}
     void mouseReleaseEvent(QMouseEvent* e) override {if(!m_mouse||e->button()!=Qt::LeftButton){e->ignore();return;}m_mouse=false;m_last=e->globalPosition();setDown(false);releaseMouse();m_gesture(2,m_last);e->accept();}
-    void tabletEvent(QTabletEvent* e) override {if(e->type()==QEvent::TabletPress){m_last=e->globalPosition();m_gesture(0,m_last);setDown(true);}else if(e->type()==QEvent::TabletMove){m_last=e->globalPosition();m_gesture(1,m_last);}else if(e->type()==QEvent::TabletRelease){m_last=e->globalPosition();m_gesture(2,m_last);setDown(false);}e->accept();}
-    void keyPressEvent(QKeyEvent* e) override {if(e->key()==Qt::Key_Up||e->key()==Qt::Key_Down||e->key()==Qt::Key_Left||e->key()==Qt::Key_Right){m_key(e->key(),e->modifiers().testFlag(Qt::ShiftModifier));e->accept();}else QToolButton::keyPressEvent(e);}
+    void tabletEvent(QTabletEvent* e) override {
+        if(e->type()==QEvent::TabletPress&&isEnabled()&&!m_mouse&&!m_touch){m_tablet=true;m_last=e->globalPosition();m_gesture(0,m_last);setDown(true);}
+        else if(e->type()==QEvent::TabletMove&&m_tablet){m_last=e->globalPosition();m_gesture(1,m_last);}
+        else if(e->type()==QEvent::TabletRelease&&m_tablet){m_tablet=false;m_last=e->globalPosition();setDown(false);m_gesture(2,m_last);}
+        else{e->ignore();return;}e->accept();
+    }
+    void keyPressEvent(QKeyEvent* e) override {
+        if(e->key()==Qt::Key_Escape){m_gesture(3,m_last);m_mouse=m_touch=m_tablet=false;setDown(false);if(QWidget::mouseGrabber()==this)releaseMouse();e->accept();}
+        else if(e->key()==Qt::Key_Up||e->key()==Qt::Key_Down||e->key()==Qt::Key_Left||e->key()==Qt::Key_Right){m_key(e->key(),e->modifiers().testFlag(Qt::ShiftModifier));e->accept();}
+        else QToolButton::keyPressEvent(e);
+    }
 private:
-    Gesture m_gesture;std::function<void(int,bool)> m_key;QPointF m_last;bool m_mouse=false,m_touch=false;
+    Gesture m_gesture;std::function<void(int,bool)> m_key;QPointF m_last;bool m_mouse=false,m_touch=false,m_tablet=false;
 };
 
 // The dialog owns an isolated draft. Saving uses the host's normal protected
@@ -162,14 +174,14 @@ private:
 };
 }
 
-FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent)
+FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent),m_viewport(parent)
 {
     setObjectName(QStringLiteral("propernotesFavoritesBar"));setAttribute(Qt::WA_StyledBackground);setAutoFillBackground(true);
     setStyleSheet(QStringLiteral("QWidget#propernotesFavoritesBar{border:1px solid palette(mid);border-radius:12px;background:palette(window);} QToolButton{border:0;border-radius:7px;padding:0;} QToolButton:hover{background:palette(alternate-base);} QToolButton:checked{background:palette(highlight);}"));
     setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setContentsMargins(8,6,8,6);layout->setSpacing(2);
-    auto handle=[this,layout](int kind,const QString& label,const QString& icon){auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},[this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);b->setToolTip(label);b->setAccessibleName(label);b->setIcon(uiIcon(icon,palette()));b->setIconSize(QSize(24,24));b->setFixedHeight(44);b->setCursor(kind==MoveHandle?Qt::SizeAllCursor:Qt::SizeVerCursor);layout->addWidget(b);return b;};
+    auto handle=[this,layout](int kind,const QString& label,const QString& icon){auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},[this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);b->setToolTip(label);b->setAccessibleName(label);b->setIcon(uiIcon(icon,palette()));configureReaderIconButton(b);b->setCursor(kind==MoveHandle?Qt::SizeAllCursor:Qt::SizeVerCursor);layout->addWidget(b,0,Qt::AlignHCenter);return b;};
     m_topResize=handle(TopHandle,QStringLiteral("拖动上沿调整高度，或使用上下方向键"),QStringLiteral("grip"));
-    auto button=[this,layout](const QString& label,const QString& icon,int height=44){auto* b=new QToolButton(this);b->setAutoRaise(true);b->setFixedHeight(height);b->setIcon(uiIcon(icon,palette()));b->setIconSize(QSize(26,26));b->setToolTip(label);b->setAccessibleName(label);layout->addWidget(b);return b;};
+    auto button=[this,layout](const QString& label,const QString& icon){auto* b=new QToolButton(this);b->setAutoRaise(true);configureReaderIconButton(b);b->setIcon(uiIcon(icon,palette()));b->setToolTip(label);b->setAccessibleName(label);layout->addWidget(b,0,Qt::AlignHCenter);return b;};
     m_pan=button(QStringLiteral("平移"),QStringLiteral("hand"));m_pan->setCheckable(true);m_select=button(QStringLiteral("框选／移动"),QStringLiteral("select"));m_select->setCheckable(true);m_selectMore=button(QStringLiteral("框选选项"),QStringLiteral("ellipsis"));m_selectMore->hide();
     auto separator=[this,layout]{auto* line=new QFrame(this);line->setFrameShape(QFrame::HLine);line->setFixedHeight(8);layout->addWidget(line);};separator();
     m_scroll=new QScrollArea(this);m_scroll->setObjectName(QStringLiteral("favoritesScroll"));m_scroll->setWidgetResizable(true);m_scroll->setFrameShape(QFrame::NoFrame);m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setMinimumHeight(0);m_scroll->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Expanding);
@@ -178,7 +190,21 @@ FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent)
     connect(m_pan,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Pan);});connect(m_select,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Select);});connect(m_selectMore,&QToolButton::clicked,this,&FavoritesBar::selectionOptionsRequested);connect(m_add,&QToolButton::clicked,this,&FavoritesBar::openLibrary);
     m_visibilityAction=new QAction(QStringLiteral("显示收藏工具栏"),this);m_visibilityAction->setCheckable(true);connect(m_visibilityAction,&QAction::triggered,this,&FavoritesBar::setUserVisible);
     m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
-    parent->installEventFilter(this);setContextMenuPolicy(Qt::CustomContextMenu);connect(this,&QWidget::customContextMenuRequested,this,[this](const QPoint& point){showMenu(mapToGlobal(point));});resize(80,420);syncPlacementControls();rebuild();syncVisibility();
+    parent->installEventFilter(this);qApp->installEventFilter(this);setContextMenuPolicy(Qt::CustomContextMenu);connect(this,&QWidget::customContextMenuRequested,this,[this](const QPoint& point){showMenu(mapToGlobal(point));});resize(80,420);syncPlacementControls();rebuild();syncVisibility();
+}
+void FavoritesBar::setDockHosts(QWidget* viewport,QWidget* leftHost,QWidget* rightHost)
+{
+    if(!viewport||!leftHost||!rightHost)return;
+    if(m_viewport&&m_viewport!=viewport)m_viewport->removeEventFilter(this);
+    m_viewport=viewport;m_leftHost=leftHost;m_rightHost=rightHost;
+    m_viewport->installEventFilter(this);
+    if(!m_dockPreview){
+        m_dockPreview=new QLabel(viewport);m_dockPreview->setAlignment(Qt::AlignCenter);
+        m_dockPreview->setWordWrap(true);m_dockPreview->setAttribute(Qt::WA_TransparentForMouseEvents);
+        m_dockPreview->setStyleSheet(QStringLiteral("border:2px solid palette(highlight);border-radius:8px;background:palette(alternate-base);padding:8px;"));
+        m_dockPreview->hide();
+    }
+    applyPlacement(m_preferences.floating,m_preferences.side);
 }
 void FavoritesBar::setFavorites(const QVector<FavoriteTool>& favorites)
 {
@@ -200,22 +226,22 @@ void FavoritesBar::setWritable(bool writable)
 {
     std::optional<FavoritesBarPreferences> pending;
     if(m_writable&&!writable&&(m_layoutTimer.isActive()||m_gesture)){m_layoutTimer.stop();pending=currentLayout();}
-    m_writable=writable;if(!writable)m_gesture.reset();syncPlacementControls();
+    m_writable=writable;if(!writable){m_gesture.reset();hideDockPreview();}syncPlacementControls();
     if(pending&&!m_hostClosing&&favoritesBarJson(*pending)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(*pending);
 }
 void FavoritesBar::setActivationEnabled(bool enabled)
 {m_activationEnabled=enabled;for(auto* b:m_buttons)b->setEnabled(enabled);m_pan->setEnabled(enabled);m_select->setEnabled(enabled);m_selectMore->setEnabled(enabled);m_add->setEnabled(enabled||m_writable);}
 void FavoritesBar::setPinned(bool pinned)
-{if(!m_writable||m_hostClosing)return;m_gesture.reset();m_layoutTimer.stop();auto preferences=currentLayout();preferences.pinned=pinned;Q_EMIT barPreferencesEdited(preferences);}
+{if(!m_writable||m_hostClosing)return;m_gesture.reset();hideDockPreview();m_layoutTimer.stop();auto preferences=currentLayout();preferences.pinned=pinned;Q_EMIT barPreferencesEdited(preferences);}
 void FavoritesBar::syncPlacementControls()
 {
-    const bool unlocked=!m_preferences.pinned;m_move->setVisible(unlocked);m_topResize->setVisible(unlocked);m_bottomResize->setVisible(unlocked);m_move->setEnabled(m_writable);m_topResize->setEnabled(m_writable);m_bottomResize->setEnabled(m_writable);m_add->setEnabled(m_activationEnabled||m_writable);
+    const bool unlocked=!m_preferences.pinned;m_move->setVisible(unlocked);m_topResize->setVisible(unlocked&&m_floating);m_bottomResize->setVisible(unlocked&&m_floating);m_move->setEnabled(m_writable);m_topResize->setEnabled(m_writable);m_bottomResize->setEnabled(m_writable);m_add->setEnabled(m_activationEnabled||m_writable);
 }
 void FavoritesBar::rebuild()
 {
     const int scroll=m_scroll->verticalScrollBar()->value();m_buttons.clear();m_moreButtons.clear();while(auto* item=m_entriesLayout->takeAt(0)){if(auto* widget=item->widget()){widget->hide();widget->deleteLater();}delete item;}
-    for(const auto& favorite:m_favorites){auto* row=new QWidget(m_entries);auto* layout=new QVBoxLayout(row);layout->setContentsMargins(0,0,0,0);layout->setSpacing(0);auto* button=new QToolButton(row);button->setAutoRaise(true);button->setFixedSize(60,52);button->setIcon(favoriteIcon(favorite,palette()));button->setIconSize(QSize(52,52));button->setCheckable(true);button->setEnabled(m_activationEnabled);button->setToolTip(tooltip(favoriteDescription(favorite)));button->setAccessibleName(favoriteDescription(favorite));layout->addWidget(button);m_buttons.insert(favorite.id,button);
-        auto* more=new QToolButton(row);more->setAutoRaise(true);more->setFixedSize(60,44);more->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));more->setIconSize(QSize(22,22));more->setToolTip(QStringLiteral("此收藏工具的选项"));more->setAccessibleName(more->toolTip());layout->addWidget(more);m_moreButtons.insert(favorite.id,more);m_entriesLayout->addWidget(row);
+    for(const auto& favorite:m_favorites){auto* row=new QWidget(m_entries);auto* layout=new QVBoxLayout(row);layout->setContentsMargins(0,0,0,0);layout->setSpacing(0);auto* button=new QToolButton(row);button->setAutoRaise(true);configureFavoriteButton(button,favorite);button->setCheckable(true);button->setEnabled(m_activationEnabled);button->setToolTip(tooltip(favoriteDescription(favorite)));button->setAccessibleName(favoriteDescription(favorite));layout->addWidget(button,0,Qt::AlignHCenter);m_buttons.insert(favorite.id,button);
+        auto* more=new QToolButton(row);more->setAutoRaise(true);configureReaderIconButton(more);more->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));more->setToolTip(QStringLiteral("此收藏工具的选项"));more->setAccessibleName(more->toolTip());layout->addWidget(more,0,Qt::AlignHCenter);m_moreButtons.insert(favorite.id,more);m_entriesLayout->addWidget(row);
         connect(button,&QToolButton::clicked,this,[this,id=favorite.id]{const int index=indexOf(id);if(index>=0&&m_activationEnabled){const auto favorite=m_favorites[index];Q_EMIT activated(favorite);}});connect(more,&QToolButton::clicked,this,[this,id=favorite.id]{editFavorite(id);});button->setContextMenuPolicy(Qt::CustomContextMenu);connect(button,&QWidget::customContextMenuRequested,this,[this,button,id=favorite.id](const QPoint& point){showMenu(button->mapToGlobal(point),id);});}
     m_entriesLayout->addStretch();setActiveFavoriteId(m_activeId);
     const QUuid reveal=m_revealId;m_revealId={};QTimer::singleShot(0,this,[this,scroll,reveal]{m_scroll->verticalScrollBar()->setValue(scroll);if(m_buttons.contains(reveal))m_scroll->ensureWidgetVisible(m_buttons.value(reveal)->parentWidget(),0,0);});
@@ -238,11 +264,52 @@ void FavoritesBar::showMenu(const QPoint& global,const QUuid& id)
     if(index>=0){menu.addSeparator();auto* edit=menu.addAction(QStringLiteral("编辑选项…"));connect(edit,&QAction::triggered,this,[this,id]{editFavorite(id);});auto* copy=menu.addAction(QStringLiteral("复制收藏"));copy->setEnabled(m_writable&&m_favorites.size()<128);connect(copy,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable||m_favorites.size()>=128)return;auto candidate=m_favorites;auto copy=candidate[i];copy.id=QUuid::createUuid();copy.name=copy.name.left(74);if(!copy.name.isEmpty()&&copy.name.back().isHighSurrogate())copy.name.chop(1);copy.name+=QStringLiteral(" 副本");candidate.insert(i+1,copy);Q_EMIT favoritesEdited(candidate);});
         auto* earlier=menu.addAction(QStringLiteral("上移"));auto* later=menu.addAction(QStringLiteral("下移"));earlier->setEnabled(m_writable&&index>0);later->setEnabled(m_writable&&index+1<m_favorites.size());connect(earlier,&QAction::triggered,this,[this,id]{auto candidate=m_favorites;const int i=indexOf(id);if(m_writable&&i>0){candidate.move(i,i-1);Q_EMIT favoritesEdited(candidate);}});connect(later,&QAction::triggered,this,[this,id]{auto candidate=m_favorites;const int i=indexOf(id);if(m_writable&&i>=0&&i+1<candidate.size()){candidate.move(i,i+1);Q_EMIT favoritesEdited(candidate);}});
         auto* remove=menu.addAction(QStringLiteral("移除收藏"));remove->setEnabled(m_writable);connect(remove,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable)return;auto candidate=m_favorites;candidate.removeAt(i);Q_EMIT favoritesEdited(candidate);});}
+    menu.addSeparator();
+    for(const auto& placement:QList<QPair<QString,QString>>{{QStringLiteral("停靠到左侧"),QStringLiteral("left")},{QStringLiteral("停靠到右侧"),QStringLiteral("right")},{QStringLiteral("设为悬浮"),QString()}}){
+        auto* action=menu.addAction(placement.first);action->setCheckable(true);
+        action->setChecked(placement.second.isEmpty()?m_floating:!m_floating&&m_side==placement.second);
+        action->setEnabled(m_writable&&!m_preferences.pinned&&m_leftHost&&m_rightHost);
+        connect(action,&QAction::triggered,this,[this,side=placement.second]{
+            if(!m_writable||m_preferences.pinned)return;
+            applyPlacement(side.isEmpty(),side.isEmpty()?m_side:side);recordLayout();
+        });
+    }
     menu.addSeparator();auto* hide=menu.addAction(QStringLiteral("隐藏收藏工具栏"));connect(hide,&QAction::triggered,this,[this]{setUserVisible(false);});menu.exec(global);
 }
 void FavoritesBar::setBarPreferences(const FavoritesBarPreferences& preferences)
 {
-    if(!validFavoritesBarPreferences(preferences)||m_hostClosing)return;const bool geometryChanged=!m_preferencesApplied||preferences.geometry!=m_preferences.geometry;const QScopedValueRollback<bool> applying(m_applying,true);m_preferences=preferences;m_preferencesApplied=true;if(m_visibilityOverride&&*m_visibilityOverride==preferences.visible)m_visibilityOverride.reset();m_gesture.reset();syncPlacementControls();if(geometryChanged)setGeometry(QRect(preferences.geometry.topLeft(),QSize(80,preferences.geometry.height())));constrainGeometry();syncVisibility();
+    if(!validFavoritesBarPreferences(preferences)||m_hostClosing)return;
+    const QScopedValueRollback<bool> applying(m_applying,true);
+    m_preferences=preferences;
+    if(m_visibilityOverride&&*m_visibilityOverride==preferences.visible)m_visibilityOverride.reset();
+    m_gesture.reset();hideDockPreview();
+    m_floatingGeometry=QRect(preferences.geometry.topLeft(),QSize(80,preferences.geometry.height()));
+    applyPlacement(preferences.floating,preferences.side);syncVisibility();
+}
+void FavoritesBar::applyPlacement(bool floating,const QString& side)
+{
+    if(!m_viewport||m_hostClosing)return;
+    if(!floating&&(!m_leftHost||!m_rightHost))floating=true;
+    const QScopedValueRollback<bool> applying(m_applying,true);
+    QWidget* target=floating?m_viewport.data():(side==QStringLiteral("left")?m_leftHost.data():m_rightHost.data());
+    if(parentWidget()!=target){
+        if(parentWidget()&&parentWidget()->layout())parentWidget()->layout()->removeWidget(this);
+        setParent(target);
+        if(!floating&&target->layout())target->layout()->addWidget(this);
+    }
+    m_floating=floating;m_side=side==QStringLiteral("left")?QStringLiteral("left"):QStringLiteral("right");
+    setSizePolicy(QSizePolicy::Fixed,floating?QSizePolicy::Preferred:QSizePolicy::Expanding);
+    syncPlacementControls();syncDockHosts();
+    if(floating){setGeometry(boundedFloatingGeometry(m_floatingGeometry));m_floatingGeometry=geometry();}
+    syncVisibility();
+}
+void FavoritesBar::syncDockHosts()
+{
+    const bool visible=requestedVisible()&&!m_hostClosing;
+    if(m_leftHost)m_leftHost->setVisible(visible&&!m_floating&&m_side==QStringLiteral("left"));
+    if(m_rightHost)m_rightHost->setVisible(visible&&!m_floating&&m_side==QStringLiteral("right"));
+    if(m_leftHost&&m_leftHost->parentWidget()&&m_leftHost->parentWidget()->layout())
+        m_leftHost->parentWidget()->layout()->activate();
 }
 int FavoritesBar::minimumPaletteHeight()const
 {
@@ -250,38 +317,139 @@ int FavoritesBar::minimumPaletteHeight()const
 }
 void FavoritesBar::constrainGeometry()
 {
-    if(!parentWidget()||m_hostClosing)return;const QScopedValueRollback<bool> applying(m_applying,true);const int availableHeight=std::max(80,parentWidget()->height()-92);const int minimum=std::min(minimumPaletteHeight(),availableHeight);const int height=std::clamp(this->height(),minimum,availableHeight);const int x=std::clamp(this->x(),8,std::max(8,parentWidget()->width()-width()-8));const int y=std::clamp(this->y(),8,std::max(8,parentWidget()->height()-height-84));setGeometry(x,y,width(),height);raise();
+    if(!m_viewport||m_hostClosing||!m_floating)return;
+    const QScopedValueRollback<bool> applying(m_applying,true);
+    setGeometry(boundedFloatingGeometry(geometry()));raise();
+}
+QRect FavoritesBar::boundedFloatingGeometry(const QRect& geometry)const
+{
+    if(!m_viewport)return geometry;
+    const int reserve=m_viewport->width()<420?140:84;
+    const int availableHeight=std::max(80,m_viewport->height()-reserve-8);
+    const int minimum=std::min(minimumPaletteHeight(),availableHeight);
+    const int height=std::clamp(geometry.height(),minimum,availableHeight);
+    return QRect(std::clamp(geometry.x(),8,std::max(8,m_viewport->width()-88)),
+        std::clamp(geometry.y(),8,std::max(8,m_viewport->height()-height-reserve)),80,height);
+}
+void FavoritesBar::showDockPreview(const QPointF& global,const QRect& proposed)
+{
+    m_dockCandidate.clear();if(!m_dockPreview||!m_viewport||!m_leftHost||!m_rightHost)return;
+    const QPoint point=m_viewport->mapFromGlobal(global.toPoint());
+    const int outsideAllowance=m_floating?24:104; // A docked handle starts in an 80px side strip.
+    if(point.x()>=-outsideAllowance&&point.x()<=m_viewport->width()+outsideAllowance&&point.y()>=-24&&point.y()<=m_viewport->height()+24){
+        if(proposed.left()<=24)m_dockCandidate=QStringLiteral("left");
+        else if(proposed.right()>=m_viewport->width()-24)m_dockCandidate=QStringLiteral("right");
+    }
+    if(!m_dockCandidate.isEmpty()){
+        m_dockPreview->setText(m_dockCandidate==QStringLiteral("left")?QStringLiteral("停靠\n左侧"):QStringLiteral("停靠\n右侧"));
+        m_dockPreview->setGeometry(m_dockCandidate==QStringLiteral("left")?0:std::max(0,m_viewport->width()-80),8,80,std::max(80,m_viewport->height()-16));
+    }else if(m_gesture&&!m_gesture->startedFloating){m_dockPreview->setText(QStringLiteral("悬浮"));m_dockPreview->setGeometry(boundedFloatingGeometry(proposed));}
+    else{m_dockPreview->hide();return;}
+    m_dockPreview->show();m_dockPreview->raise();
+}
+void FavoritesBar::hideDockPreview()
+{
+    m_dockCandidate.clear();if(m_dockPreview)m_dockPreview->hide();
 }
 void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
 {
-    if(phase==2){if(m_gesture){m_gesture.reset();recordLayout();}return;}if(m_preferences.pinned||!m_writable||m_hostClosing)return;if(phase==0){m_layoutTimer.stop();m_gesture=Gesture{kind,global,geometry()};return;}if(!m_gesture||m_gesture->kind!=kind)return;
-    const auto start=m_gesture->geometry;const QPoint delta=(global-m_gesture->origin).toPoint();const int bottom=parentWidget()->height()-84;const int minimum=std::min(minimumPaletteHeight(),std::max(80,bottom-8));QRect proposed=start;
-    if(kind==MoveHandle)proposed.translate(delta);else if(kind==BottomHandle)proposed.setHeight(std::clamp(start.height()+delta.y(),minimum,std::max(minimum,bottom-start.top())));else{const int end=std::min(start.bottom()+1,bottom);const int top=std::clamp(start.top()+delta.y(),8,std::max(8,end-minimum));proposed.setTop(top);proposed.setBottom(end-1);}const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(proposed);constrainGeometry();
+    if(phase==3){
+        if(m_gesture){
+            const auto gesture=*m_gesture;m_gesture.reset();hideDockPreview();
+            static_cast<GeometryHandle*>(gesture.kind==MoveHandle?m_move:gesture.kind==TopHandle?m_topResize:m_bottomResize)->cancelContact();
+            if(gesture.startedFloating&&m_floating){
+                const QScopedValueRollback<bool> applying(m_applying,true);
+                setGeometry(boundedFloatingGeometry(gesture.geometry));m_floatingGeometry=geometry();
+            }
+        }
+        return;
+    }
+    if(phase==2){
+        if(!m_gesture||m_gesture->kind!=kind)return;
+        // Some devices publish a final position only on release.
+        if((global-m_gesture->origin).toPoint().manhattanLength()>=8)handleGesture(kind,1,global);
+        if(!m_gesture)return;
+        const auto gesture=*m_gesture;
+        // Preserve the input receiver until release. Docked drags use a ghost
+        // preview so reparenting cannot cancel a mouse, pen or touch sequence.
+        m_gesture.reset();const QString candidate=m_dockCandidate;hideDockPreview();
+        if(kind==MoveHandle&&gesture.moved){
+            if(!candidate.isEmpty())applyPlacement(false,candidate);
+            else if(!gesture.startedFloating){
+                applyPlacement(true,m_side);
+                const QRect proposed(m_viewport->mapFromGlobal(global.toPoint())-gesture.grabOffset,m_floatingGeometry.size());
+                const QScopedValueRollback<bool> applying(m_applying,true);
+                setGeometry(boundedFloatingGeometry(proposed));m_floatingGeometry=geometry();
+            }
+        }
+        recordLayout();return;
+    }
+    if(m_preferences.pinned||!m_writable||m_hostClosing||!m_viewport)return;
+    if(phase==0){
+        if(kind!=MoveHandle&&!m_floating)return;
+        m_layoutTimer.stop();hideDockPreview();
+        const QPoint offset=m_floating?m_viewport->mapFromGlobal(global.toPoint())-geometry().topLeft():QPoint(40,std::max(44,m_floatingGeometry.height()-72));
+        m_gesture=Gesture{kind,global,geometry(),offset,m_floating,false};return;
+    }
+    if(!m_gesture||m_gesture->kind!=kind)return;
+    const auto start=m_gesture->geometry;const QPoint delta=(global-m_gesture->origin).toPoint();
+    if(delta.manhattanLength()>=8)m_gesture->moved=true;
+    if(!m_gesture->moved)return;
+    if(kind==MoveHandle){
+        const QRect proposed=m_gesture->startedFloating?start.translated(delta)
+            :QRect(m_viewport->mapFromGlobal(global.toPoint())-m_gesture->grabOffset,m_floatingGeometry.size());
+        if(m_gesture->startedFloating){const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));m_floatingGeometry=geometry();}
+        showDockPreview(global,proposed);return;
+    }
+    const int reserve=m_viewport->width()<420?140:84;const int bottom=m_viewport->height()-reserve;
+    const int minimum=std::min(minimumPaletteHeight(),std::max(80,bottom-8));QRect proposed=start;
+    if(kind==BottomHandle)proposed.setHeight(std::clamp(start.height()+delta.y(),minimum,std::max(minimum,bottom-start.top())));
+    else{const int end=std::min(start.bottom()+1,bottom);const int top=std::clamp(start.top()+delta.y(),8,std::max(8,end-minimum));proposed.setTop(top);proposed.setBottom(end-1);}
+    const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));m_floatingGeometry=geometry();
 }
 void FavoritesBar::keyboardGeometry(int kind,int key,bool accelerated)
 {
-    if(m_preferences.pinned||!m_writable||m_hostClosing)return;if(kind!=MoveHandle&&(key==Qt::Key_Left||key==Qt::Key_Right))return;const int step=accelerated?24:8;const QPointF delta(key==Qt::Key_Left?-step:key==Qt::Key_Right?step:0,key==Qt::Key_Up?-step:key==Qt::Key_Down?step:0);handleGesture(kind,0,{});handleGesture(kind,1,delta);handleGesture(kind,2,delta);
+    if(m_preferences.pinned||!m_writable||m_hostClosing)return;
+    if(kind!=MoveHandle&&(key==Qt::Key_Left||key==Qt::Key_Right))return;
+    QPointer<QWidget> previousFocus=QApplication::focusWidget();
+    if(!m_floating)applyPlacement(true,m_side);
+    const int step=accelerated?24:8;QRect proposed=geometry();
+    const QPoint delta(key==Qt::Key_Left?-step:key==Qt::Key_Right?step:0,key==Qt::Key_Up?-step:key==Qt::Key_Down?step:0);
+    if(kind==MoveHandle)proposed.translate(delta);
+    else if(kind==TopHandle)proposed.setTop(std::min(proposed.bottom()-minimumPaletteHeight()+1,proposed.top()+delta.y()));
+    else proposed.setHeight(std::max(minimumPaletteHeight(),proposed.height()+delta.y()));
+    {const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));m_floatingGeometry=geometry();}
+    if(previousFocus&&(previousFocus==this||isAncestorOf(previousFocus)))previousFocus->setFocus(Qt::OtherFocusReason);
+    m_layoutTimer.start();
 }
 FavoritesBarPreferences FavoritesBar::currentLayout()const
 {
-    auto p=m_preferences;p.visible=requestedVisible();p.collapsed=false;p.floating=true;p.geometry=QRect(std::clamp(x(),-100000,100000),std::clamp(y(),-100000,100000),80,std::clamp(height(),80,1600));return p;
+    auto p=m_preferences;p.visible=requestedVisible();p.collapsed=false;p.floating=m_floating;p.side=m_side;
+    const QRect saved=m_floating?geometry():m_floatingGeometry;
+    p.geometry=QRect(std::clamp(saved.x(),-100000,100000),std::clamp(saved.y(),-100000,100000),80,std::clamp(saved.height(),80,1600));return p;
 }
 void FavoritesBar::recordLayout()
 {
     if(m_applying||!m_writable||m_hostClosing||!isVisible())return;const auto p=currentLayout();if(favoritesBarJson(p)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(p);
 }
 bool FavoritesBar::requestedVisible()const{return m_visibilityOverride.value_or(m_preferences.visible);}
-void FavoritesBar::syncVisibility(){m_visibilityAction->setChecked(requestedVisible());setVisible(requestedVisible()&&!m_hostClosing);if(isVisible()){constrainGeometry();raise();}}
+void FavoritesBar::syncVisibility(){m_visibilityAction->setChecked(requestedVisible());syncDockHosts();setVisible(requestedVisible()&&!m_hostClosing);if(isVisible()){constrainGeometry();raise();}}
 void FavoritesBar::setUserVisible(bool visible){if(m_hostClosing)return;m_visibilityOverride=visible;auto candidate=currentLayout();m_layoutTimer.stop();syncVisibility();Q_EMIT barPreferencesEdited(candidate);}
-void FavoritesBar::prepareForHostClose(){m_hostClosing=true;m_gesture.reset();m_layoutTimer.stop();hide();}
+void FavoritesBar::prepareForHostClose(){m_hostClosing=true;m_gesture.reset();hideDockPreview();m_layoutTimer.stop();syncDockHosts();hide();}
 bool FavoritesBar::eventFilter(QObject* watched,QEvent* e)
 {
+    if(m_gesture&&(e->type()==QEvent::ShortcutOverride||e->type()==QEvent::KeyPress)&&static_cast<QKeyEvent*>(e)->key()==Qt::Key_Escape){
+        e->accept();
+        if(e->type()==QEvent::KeyPress)handleGesture(m_gesture->kind,3,m_gesture->origin);
+        return true;
+    }
+    if(m_gesture&&watched==window()&&e->type()==QEvent::WindowDeactivate)handleGesture(m_gesture->kind,3,m_gesture->origin);
     if(watched==m_scroll->viewport()&&e->type()==QEvent::Wheel){const auto* wheel=static_cast<QWheelEvent*>(e);auto* bar=m_scroll->verticalScrollBar();const int delta=wheel->pixelDelta().y()!=0?wheel->pixelDelta().y():qRound(wheel->angleDelta().y()*52.0/120);bar->setValue(bar->value()-delta);e->accept();return true;}
-    if(watched==parentWidget()&&(e->type()==QEvent::Resize||e->type()==QEvent::Show))constrainGeometry();return QWidget::eventFilter(watched,e);
+    if(watched==m_viewport&&(e->type()==QEvent::Resize||e->type()==QEvent::Show))constrainGeometry();return QWidget::eventFilter(watched,e);
 }
 bool FavoritesBar::event(QEvent* e)
 {
-    const auto type=e->type();const bool result=QWidget::event(e);if(m_scroll&&!m_applying&&!m_hostClosing&&!m_gesture&&(type==QEvent::Move||type==QEvent::Resize))m_layoutTimer.start();
+    const auto type=e->type();const bool result=QWidget::event(e);if(m_scroll&&m_floating&&!m_applying&&!m_hostClosing&&!m_gesture&&(type==QEvent::Move||type==QEvent::Resize))m_layoutTimer.start();
     if(m_scroll&&(type==QEvent::PaletteChange||type==QEvent::ApplicationPaletteChange)){m_pan->setIcon(uiIcon(QStringLiteral("hand"),palette()));m_select->setIcon(uiIcon(QStringLiteral("select"),palette()));m_selectMore->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));m_add->setIcon(uiIcon(QStringLiteral("plus"),palette()));m_move->setIcon(uiIcon(QStringLiteral("move"),palette()));m_topResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));m_bottomResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));rebuild();}return result;
 }
 void FavoritesBar::closeEvent(QCloseEvent* e){if(!m_hostClosing)setUserVisible(false);e->accept();}

@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "component": "Lucide icon SVG subset",
+  "repository": "https://github.com/lucide-icons/lucide",
+  "commit": "c26ce5515667640ca2753e095ba319d225fc0d8d",
+  "sourceTree": "f600158c63e6ff2561bb4b856d856a38dfac9766",
+  "license": {
+    "path": "licenses/lucide.txt",
+    "upstreamPath": "LICENSE",
+    "gitBlobSha": "718bb3f0e44153809972abed31839375804bf652",
+    "sha256": "b495047bd93a9b06913511076f504daba17d5bbeb3e0650f3bb53a4220329c57",
+    "bytes": 3208,
+    "licenseExpression": "ISC AND MIT",
+    "notice": "The complete upstream combined notice is preserved, including the list of Feather-derived icons and Cole Bemis's MIT terms."
+  },
+  "assets": [
+    {
+      "path": "src/icons/lucide/settings.svg",
+      "upstreamPath": "icons/settings.svg",
+      "gitBlobSha": "4c6263af909841a3911f41a385021778eacba736",
+      "sha256": "0ae27fd0f81999229e3127ac96c5b32edfea448e291d509e76212b917551d66b",
+      "bytes": 586
+    },
+    {
+      "path": "src/icons/lucide/maximize.svg",
+      "upstreamPath": "icons/maximize.svg",
+      "gitBlobSha": "f78ca32408d3bfa431f79f9563736d38942f1316",
+      "sha256": "1f790856b0de805ab62e871609f1990b89d227d472022e57a11fde015aad4826",
+      "bytes": 366
+    },
+    {
+      "path": "src/icons/lucide/minimize.svg",
+      "upstreamPath": "icons/minimize.svg",
+      "gitBlobSha": "13eb99c9be251fb830abc6259bcddc1d1d182ae2",
+      "sha256": "7daa304bc3dccac1f100304e66a41139662cc6c0ba3eba67480d97466a9ce02b",
+      "bytes": 366
+    },
+    {
+      "path": "src/icons/lucide/hand.svg",
+      "upstreamPath": "icons/hand.svg",
+      "gitBlobSha": "30af9046926e671bb2d3a2e8bc9c15da06e900b0",
+      "sha256": "fe3771fa2f0a9a3c7736164c9a855beefacc02548084ac1d6fc8da8a8a9180b0",
+      "bytes": 483
+    },
+    {
+      "path": "src/icons/lucide/pin.svg",
+      "upstreamPath": "icons/pin.svg",
+      "gitBlobSha": "04bc7cb604b4705f22b44a15666a4f4615351048",
+      "sha256": "55e8e5e04bcb671179fc1dd589abf09cf6a1e71301ff14eb739419cfab6011e7",
+      "bytes": 450
+    },
+    {
+      "path": "src/icons/lucide/pin-off.svg",
+      "upstreamPath": "icons/pin-off.svg",
+      "gitBlobSha": "a072f03d52ee7e35ecf587aba810eea196ca60bb",
+      "sha256": "149a4fb01201562c05dd7eb53573090cd3a0ba5b111686c45e2df8c6cd04a3be",
+      "bytes": 408
+    },
+    {
+      "path": "src/icons/lucide/files.svg",
+      "upstreamPath": "icons/files.svg",
+      "gitBlobSha": "46ddbebec5cf0aa3eb24f454ecf0a3d302f6d8c2",
+      "sha256": "97adf06fc0511e7a40be93ecda04466ed196718ab4a5e3a62b1148cc49697775",
+      "bytes": 444
+    },
+    {
+      "path": "src/icons/lucide/list.svg",
+      "upstreamPath": "icons/list.svg",
+      "gitBlobSha": "0d88fb189cde6db143ee290aa12c255d7344f13c",
+      "sha256": "ff97a7379eb962ddc3863bb59f0f45875ac8da91aac8a38a67361e7118d2d627",
+      "bytes": 353
+    },
+    {
+      "path": "src/icons/lucide/search.svg",
+      "upstreamPath": "icons/search.svg",
+      "gitBlobSha": "03e442a5440cff92c219fe3a3c1f2b0788d30701",
+      "sha256": "283d371c2e433817bb9c0c8310caa6c77fa4177c0f4f1168d9c83b97af7389dc",
+      "bytes": 275
+    },
+    {
+      "path": "src/icons/lucide/plus.svg",
+      "upstreamPath": "icons/plus.svg",
+      "gitBlobSha": "41f92bb93eb6626368d71c9884127bbcf7d3ccdf",
+      "sha256": "7f6af73bf1ff6c4bca3f18351c8d1bdec6749c0c2530c4de5da85d520c21df17",
+      "bytes": 256
+    },
+    {
+      "path": "src/icons/lucide/move.svg",
+      "upstreamPath": "icons/move.svg",
+      "gitBlobSha": "d78876f71b39c7dd1553a8bdc53c6d3f45aa616c",
+      "sha256": "915074a1292f72d59165339b8b93f8d440c8d55b7116b52fca240b9ded5af74d",
+      "bytes": 371
+    },
+    {
+      "path": "src/icons/lucide/grip-horizontal.svg",
+      "upstreamPath": "icons/grip-horizontal.svg",
+      "gitBlobSha": "033a60b6d1e0275113c38b2bcf58ee5f1b4fbf2e",
+      "sha256": "4a895999aa62eb54f8a4d67b976521d826e6d70633df34bdd6322a1839a11894",
+      "bytes": 413
+    },
+    {
+      "path": "src/icons/lucide/chevron-up.svg",
+      "upstreamPath": "icons/chevron-up.svg",
+      "gitBlobSha": "b011f77212616bf402f6b7686ce8476f28b0edd2",
+      "sha256": "d09f13fcbef3c493ead7e4663b5ee91804fec38d5edb5e7cc3acfbd547641cf4",
+      "bytes": 238
+    },
+    {
+      "path": "src/icons/lucide/chevron-down.svg",
+      "upstreamPath": "icons/chevron-down.svg",
+      "gitBlobSha": "e70d30b88399a721cd5d20d0d26756608cf8c42b",
+      "sha256": "66ea878e72ed3488bb3b464c39dfdccee8d1f78e560dccea40e5e12da0e87e87",
+      "bytes": 236
+    },
+    {
+      "path": "src/icons/lucide/arrow-left.svg",
+      "upstreamPath": "icons/arrow-left.svg",
+      "gitBlobSha": "b40bff851c85eff44f678eb7984fc6070d7ea721",
+      "sha256": "c5f4b88076108eb1a0d95336e1aa7e7bb1419a3a92af96f6247d88cd3456f933",
+      "bytes": 262
+    },
+    {
+      "path": "src/icons/lucide/arrow-right.svg",
+      "upstreamPath": "icons/arrow-right.svg",
+      "gitBlobSha": "433ded3fcc5f7bd2b6a59356c6ffe8eceac6b7e3",
+      "sha256": "288397fdb73bb4f783cf9eabb726ff47357df1d4e3f1201dd748090579f108b9",
+      "bytes": 261
+    },
+    {
+      "path": "src/icons/lucide/undo-2.svg",
+      "upstreamPath": "icons/undo-2.svg",
+      "gitBlobSha": "3e93594c0a400186e7f6e8f1d3981dc82cffe7e8",
+      "sha256": "efad2edbbd2be6038cc23fd64df2d012fad5cc6460dfbf227cfa3d990e9e897f",
+      "bytes": 309
+    },
+    {
+      "path": "src/icons/lucide/redo-2.svg",
+      "upstreamPath": "icons/redo-2.svg",
+      "gitBlobSha": "72371c8d34b46f77243fa889ec464780bbd7ceb9",
+      "sha256": "4cbd2cdebc70b6b7979c681ed3f313d9cbb102465dcf7d0d2d6a72c937b344bc",
+      "bytes": 308
+    },
+    {
+      "path": "src/icons/lucide/minus.svg",
+      "upstreamPath": "icons/minus.svg",
+      "gitBlobSha": "75093e27c20965c9e37fb9dcef9f939746c67578",
+      "sha256": "a0c743ab6dbf545d8a6e19ef3874f48ede686ce68d25e231bd81f540d97b1f19",
+      "bytes": 232
+    },
+    {
+      "path": "src/icons/lucide/save.svg",
+      "upstreamPath": "icons/save.svg",
+      "gitBlobSha": "07af0708302018606f9619adb2d4d6ec2175db57",
+      "sha256": "ee9d56a7fec4b20dd6689546d41f68219ea8cbd67f99bd17a1bdaff5be6edb53",
+      "bytes": 417
+    },
+    {
+      "path": "src/icons/lucide/folder-open.svg",
+      "upstreamPath": "icons/folder-open.svg",
+      "gitBlobSha": "b01f60fcb51848a9b3a7380d4566c4de7534745c",
+      "sha256": "ee57452b40e71df310214091dd9da1941a397c83197b8ff8d7ae66dd4242578b",
+      "bytes": 401
+    },
+    {
+      "path": "src/icons/lucide/ellipsis.svg",
+      "upstreamPath": "icons/ellipsis.svg",
+      "gitBlobSha": "68456c39be516d1d14aee329ca3b0056ba84d3c5",
+      "sha256": "4f495cc72013ffdfec677f03b33a150f7b4dd741979283fd6853a09024bca112",
+      "bytes": 312
+    },
+    {
+      "path": "src/icons/lucide/scan.svg",
+      "upstreamPath": "icons/scan.svg",
+      "gitBlobSha": "33d067b2a20cfb5c91ac60a9ed0da7a954cdd5f2",
+      "sha256": "c77f0e634b2451a14a262a59b61d75bbcea3994b16eeba1f5753e86b33282a4d",
+      "bytes": 366
+    },
+    {
+      "path": "src/icons/lucide/pen-line.svg",
+      "upstreamPath": "icons/pen-line.svg",
+      "gitBlobSha": "8b22d50c461db7366a8750aef3848817c0c2a12c",
+      "sha256": "43c431457784ab409341b549119257111385e5af0a36dee08f37c91259c08799",
+      "bytes": 376
+    },
+    {
+      "path": "src/icons/lucide/highlighter.svg",
+      "upstreamPath": "icons/highlighter.svg",
+      "gitBlobSha": "ce0937c8e1b970f1a0bb9cf9f0a7f4fa7cb16b1e",
+      "sha256": "8e6662b0c5bded9e68721e87592270c27af6e89321076e356eba8bb8b0d98a00",
+      "bytes": 317
+    },
+    {
+      "path": "src/icons/lucide/eraser.svg",
+      "upstreamPath": "icons/eraser.svg",
+      "gitBlobSha": "6abb6fdda7b509f760d32acc59975483301d9f76",
+      "sha256": "838d4355dd49340523c38a22a2d23f1aca72ef42f8eba79f6a0c84bf6e27b929",
+      "bytes": 383
+    },
+    {
+      "path": "src/icons/lucide/type.svg",
+      "upstreamPath": "icons/type.svg",
+      "gitBlobSha": "8f269e72e02cd39c8bd8bf8712bc83fa817fe198",
+      "sha256": "82c514732330f9c36c0f1f7fd1034634fa6ad21ba2016ffa76cf5d9608c3d6b1",
+      "bytes": 310
+    },
+    {
+      "path": "src/icons/lucide/text-cursor.svg",
+      "upstreamPath": "icons/text-cursor.svg",
+      "gitBlobSha": "2aadd3ca5730eaa62ff983bb17e9cb2179b55243",
+      "sha256": "1224fd2e9488b38a4cdc743ea2ada7db7fe0a31e53d44758e5a5ac45f7971177",
+      "bytes": 338
+    },
+    {
+      "path": "src/icons/lucide/move-up-right.svg",
+      "upstreamPath": "icons/move-up-right.svg",
+      "gitBlobSha": "ab5ed21c61d3057677e5f1d37fbcbaf21cf1ec45",
+      "sha256": "cb984560f973a1a4ad84daa50a3fbc2f1bc597c0bd61e38d9662f3f2cf28f617",
+      "bytes": 261
+    },
+    {
+      "path": "src/icons/lucide/slash.svg",
+      "upstreamPath": "icons/slash.svg",
+      "gitBlobSha": "391dc6ad04137d8583ecaf4244c5488e159dcd20",
+      "sha256": "2e8b636164f057c3113b04d36a5bb958f78aff454c4a644642da790ae2addbc8",
+      "bytes": 234
+    },
+    {
+      "path": "src/icons/lucide/square.svg",
+      "upstreamPath": "icons/square.svg",
+      "gitBlobSha": "7862733557b3a069a22721196e0bd6c5c92b9339",
+      "sha256": "bd979354f0ab184b95cecf03eedefe40c2dc65830ac6d7e60017b2b25a354acb",
+      "bytes": 261
+    },
+    {
+      "path": "src/icons/lucide/circle.svg",
+      "upstreamPath": "icons/circle.svg",
+      "gitBlobSha": "1717bb4ba7381455f5c85e69ac75c182c34ba1c9",
+      "sha256": "3a991bd47beaf9874fba6fdf87bbba442970a89b5e6aa391558bc8b0a00a0513",
+      "bytes": 244
+    },
+    {
+      "path": "src/icons/lucide/underline.svg",
+      "upstreamPath": "icons/underline.svg",
+      "gitBlobSha": "3d7f422ccc7a04dfca0ba86ebd453dd64f773b7d",
+      "sha256": "f83a0a4cc2f4e3a8616dd27b8a4c5a9e60e577a9791c08353eaa2fdc8370f6cb",
+      "bytes": 289
+    },
+    {
+      "path": "src/icons/lucide/strikethrough.svg",
+      "upstreamPath": "icons/strikethrough.svg",
+      "gitBlobSha": "a6f2265039d5170e67656b74d5fc53d60b855c29",
+      "sha256": "1f52d0951beb1f5ddd888cf0e432694ed18ed3020d356f5d0b7ceb16bc371728",
+      "bytes": 328
+    },
+    {
+      "path": "src/icons/lucide/waves-horizontal.svg",
+      "upstreamPath": "icons/waves-horizontal.svg",
+      "gitBlobSha": "7a14fb375e540587914c5a9c209fa75f37736ad6",
+      "sha256": "b31f6534ef601e7c138922e99b0557ae61db7e5704c1a05806ecb78b2eaad443",
+      "bytes": 336
+    },
+    {
+      "path": "src/icons/lucide/scan-text.svg",
+      "upstreamPath": "icons/scan-text.svg",
+      "gitBlobSha": "e05aa8361e91c93635a02a214f17ee69686854b6",
+      "sha256": "6c05f5346bf0a9c7cdf6132f7ae3428ea932e2206ace2480f41a3d3bdc6efd80",
+      "bytes": 435
+    },
+    {
+      "path": "src/icons/lucide/mouse.svg",
+      "upstreamPath": "icons/mouse.svg",
+      "gitBlobSha": "3680ad179ac869d12bb55b7976fc07effb2846da",
+      "sha256": "e4238ad7b69d3c3d713fdc2284c8fb20c04781afe0be445539ce4f904c0a0e47",
+      "bytes": 284
+    },
+    {
+      "path": "src/icons/lucide/panel-right.svg",
+      "upstreamPath": "icons/panel-right.svg",
+      "gitBlobSha": "53ba1e6120eb638530de38ca5b696741dfcaa6ad",
+      "sha256": "327d197328f9feb1f88c36c9db04e9b00fe717d877459f92fcd892f5e4c349fa",
+      "bytes": 285
+    },
+    {
+      "path": "src/icons/lucide/layout-grid.svg",
+      "upstreamPath": "icons/layout-grid.svg",
+      "gitBlobSha": "f8eca3a721201b652dbbc3b76c15e92fd271c9f9",
+      "sha256": "b8903f61d09b1d75e55c71158277d26570962f69c2099446a251871e0a2d6678",
+      "bytes": 416
+    }
+  ],
+  "semanticAliases": {
+    "waves": "waves-horizontal.svg",
+    "text-select": "scan-text.svg"
+  },
+  "sourceModifications": "None. Stored SVG and license bytes match the pinned upstream Git blobs.",
+  "runtimeRendering": "The application may substitute stroke color and stroke width in memory when rendering themed icons. Stored source files remain unchanged.",
+  "individualIconLicenseAttribution": "Not asserted separately. Upstream combined Lucide ISC and Feather MIT notices are preserved in full."
+}

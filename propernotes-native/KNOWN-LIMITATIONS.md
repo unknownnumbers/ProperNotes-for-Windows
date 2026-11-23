@@ -6,6 +6,27 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.12 icons and restored edge docking
+
+English (en): This source revision unifies vector icon scale, alignment and
+high-DPI rendering, and lays out favorite point-size badges independently of
+their glyphs. It preserves existing tool commands and saved document formats.
+Cloud compilation and portable packaging are pending at source preparation time.
+No local installation, application launch or test is performed. The user's
+acceptance of appearance, display scaling and device input remains pending.
+
+Edge docking uses child layout hosts, not a separate desktop window. Dragging
+shows a preview and changes parent/layout only on release. Docked bars preserve
+their separate floating geometry. Mouse, touch and pen dragging, cancellation,
+display/text scaling and restored dock state still need device acceptance. The
+Windows pen settings link is user initiated. It is not an embedded vendor driver
+control panel or device calibration, and advanced pressure curves and tilt remain
+outside the implemented scope.
+
+Traditional Chinese (zh-TC): 此修訂統一向量圖示的視覺尺寸、對齊及高 DPI 顯示，收藏的 pt 角標與圖形獨立排版。工具命令和文件儲存格式維持原有邏輯。源碼準備時仍待雲端編譯及便攜包打包，沒有在使用者 PC 安裝、啟動應用或測試。外觀、顯示縮放及裝置輸入仍待使用者驗收。
+
+Simplified Chinese (zh-SC): 此修订统一矢量图标的视觉尺寸、对齐和高 DPI 显示，收藏的 pt 角标与图形独立排版。工具命令和文档保存格式维持原有逻辑。源码准备时仍待云端编译和便携包打包，没有在用户 PC 安装、启动应用或测试。外观、显示缩放和设备输入仍待用户验收。
+
 ## 0.3.11 interface revision
 
 English (en): This source revision moves controls into the approved narrow left

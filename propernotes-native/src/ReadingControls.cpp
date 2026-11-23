@@ -24,7 +24,7 @@ ReadingControls::ReadingControls(QWidget* viewport, const QList<QAction*>& histo
         auto* row = new QHBoxLayout(m_panels[side]);
         row->setContentsMargins(5, 5, 5, 5); row->setSpacing(2);
         m_reveal[side] = new QToolButton(viewport);
-        m_reveal[side]->setFixedSize(44, 44);
+        configureReaderIconButton(m_reveal[side]);
         m_reveal[side]->setToolTip(side == 0 ? QStringLiteral("视角历史与撤销重做") : QStringLiteral("缩放与视图"));
         m_reveal[side]->setAccessibleName(m_reveal[side]->toolTip());
         connect(m_reveal[side], &QToolButton::clicked, this, [this, side] {
@@ -43,8 +43,7 @@ ReadingControls::ReadingControls(QWidget* viewport, const QList<QAction*>& histo
     }
     auto add = [](QFrame* panel, QAction* action) {
         auto* button = new QToolButton(panel);
-        button->setFixedSize(44, 44); button->setIconSize(QSize(22, 22));
-        button->setToolButtonStyle(Qt::ToolButtonIconOnly); button->setDefaultAction(action);
+        button->setDefaultAction(action);configureReaderIconButton(button);
         button->setAccessibleName(action->text());
         panel->layout()->addWidget(button);
     };
@@ -52,6 +51,7 @@ ReadingControls::ReadingControls(QWidget* viewport, const QList<QAction*>& histo
     add(m_panels[1], zoomOut);
     m_zoom = new QToolButton(m_panels[1]);
     m_zoom->setMinimumSize(72, 44); m_zoom->setPopupMode(QToolButton::InstantPopup);
+    m_zoom->setStyleSheet(QStringLiteral("QToolButton{padding:0 8px;border:0;border-radius:7px;}QToolButton::menu-indicator{width:0;height:0;}"));
     m_zoom->setMenu(viewMenu); m_zoom->setAccessibleName(QStringLiteral("缩放倍率与页面视图"));
     m_panels[1]->layout()->addWidget(m_zoom); add(m_panels[1], zoomIn);
     connect(viewMenu, &QMenu::aboutToShow, this, [this] { reveal(1); });

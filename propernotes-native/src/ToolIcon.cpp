@@ -1,91 +1,179 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "ToolIcon.h"
 #include <QCache>
-#include <QFont>
+#include <QFile>
+#include <QFontMetrics>
+#include <QHash>
+#include <QIconEngine>
+#include <QLabel>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPixmap>
+#include <QSvgRenderer>
+#include <QToolButton>
+#include <QtMath>
+#include <algorithm>
+#include <cmath>
+#include <utility>
 
 namespace propernotes {
 namespace {
-void drawSymbol(QPainter& p, const QString& name)
+// The source SVGs retain the Lucide / Feather notices in licenses/lucide.txt.
+// Keep vector geometry until Qt requests a size and screen pixel ratio.
+class SvgIconEngine final : public QIconEngine {
+public:
+    SvgIconEngine(QByteArray source,QColor foreground,QColor disabled,QString name,
+                  QByteArray overlay={})
+        : m_source(std::move(source)),m_overlaySource(std::move(overlay)),m_foreground(foreground),
+          m_disabledColor(disabled),m_name(std::move(name))
+    {
+        auto colored=[](QByteArray source,const QColor& color,const char* width) {
+            source.replace("currentColor",color.name(QColor::HexRgb).toUtf8());
+            source.replace("stroke-width=\"2\"",QByteArray("stroke-width=\"")+width+"\"");
+            return source;
+        };
+        m_normal.load(colored(m_source,m_foreground,"1.75"));
+        m_disabled.load(colored(m_source,m_disabledColor,"1.75"));
+        if(!m_overlaySource.isEmpty()){
+            m_overlay.load(colored(m_overlaySource,m_foreground,"2.8"));
+            m_overlayDisabled.load(colored(m_overlaySource,m_disabledColor,"2.8"));
+        }
+    }
+    QIconEngine* clone() const override {return new SvgIconEngine(m_source,m_foreground,m_disabledColor,m_name,m_overlaySource);}
+    QString key() const override {return QStringLiteral("ProperNotesLucideSvg");}
+    QString iconName() override {return m_name;}
+    bool isNull() override {return !m_normal.isValid();}
+    QSize actualSize(const QSize& size,QIcon::Mode,QIcon::State) override {return size;}
+    void paint(QPainter* painter,const QRect& rect,QIcon::Mode mode,QIcon::State) override
+    {
+        const qreal edge=std::min(rect.width(),rect.height());
+        const QRectF target(rect.x()+(rect.width()-edge)/2,rect.y()+(rect.height()-edge)/2,edge,edge);
+        painter->save();painter->setRenderHint(QPainter::Antialiasing);
+        if(m_overlay.isValid()){
+            // A toolbar outline plus a pin distinguishes this from tool lock.
+            const QRectF badge(target.x()+edge*.4,target.y()+edge*.38,edge*.6,edge*.62);
+            QPainterPath base,cutout;base.addRect(target);cutout.addRoundedRect(badge.adjusted(-1,-1,0,0),edge*.08,edge*.08);
+            painter->save();painter->setClipPath(base.subtracted(cutout),Qt::IntersectClip);
+            (mode==QIcon::Disabled?m_disabled:m_normal).render(painter,target);painter->restore();
+            (mode==QIcon::Disabled?m_overlayDisabled:m_overlay).render(painter,badge);
+        }else (mode==QIcon::Disabled?m_disabled:m_normal).render(painter,target);
+        painter->restore();
+    }
+    QPixmap pixmap(const QSize& size,QIcon::Mode mode,QIcon::State state) override {return scaledPixmap(size,mode,state,1);}
+    QPixmap scaledPixmap(const QSize& size,QIcon::Mode mode,QIcon::State state,qreal scale) override
+    {
+        if(size.isEmpty()||!std::isfinite(scale)||scale<=0)return {};
+        const QSize pixels(std::max(1,qCeil(size.width()*scale)),std::max(1,qCeil(size.height()*scale)));
+        QPixmap result(pixels);result.fill(Qt::transparent);result.setDevicePixelRatio(scale);
+        QPainter painter(&result);paint(&painter,QRect(QPoint(),size),mode,state);return result;
+    }
+private:
+    QByteArray m_source,m_overlaySource;
+    QColor m_foreground,m_disabledColor;
+    QString m_name;
+    QSvgRenderer m_normal,m_disabled,m_overlay,m_overlayDisabled;
+};
+QString assetName(const QString& name)
 {
-    const auto line = [&p](qreal x1, qreal y1, qreal x2, qreal y2) { p.drawLine(QPointF(x1,y1), QPointF(x2,y2)); };
-    if (name == "settings") {
-        p.drawEllipse(QRectF(8,8,12,12)); p.drawEllipse(QRectF(12,12,4,4));
-        for (int i=0;i<8;++i) { p.save(); p.translate(14,14); p.rotate(i*45); line(0,-8,0,-11); p.restore(); }
-    } else if (name == "fullscreen" || name == "restore") {
-        const bool restore=name=="restore";
-        for (int i=0;i<4;++i) { p.save();p.translate(14,14);p.rotate(i*90);
-            if (restore) {line(-9,-3,-3,-3);line(-3,-3,-3,-9);} else {line(-9,-3,-9,-9);line(-9,-9,-3,-9);}p.restore();}
-    } else if (name == "hand") {
-        QPainterPath path; path.moveTo(8,15);path.lineTo(8,7);path.cubicTo(8,4,11,4,11,7);path.lineTo(11,13);
-        path.lineTo(11,4);path.cubicTo(11,1,14,1,14,4);path.lineTo(14,13);path.lineTo(14,5);path.cubicTo(14,2,17,2,17,5);
-        path.lineTo(17,14);path.lineTo(17,8);path.cubicTo(17,5,20,5,20,8);path.lineTo(20,18);path.cubicTo(20,25,10,27,7,20);
-        path.lineTo(4,15);path.cubicTo(2,12,5,10,8,15);p.drawPath(path);
-    } else if (name == "pin" || name == "pin-off") {
-        p.save();if(name=="pin-off"){p.translate(14,14);p.rotate(35);p.translate(-14,-14);}
-        line(9,5,19,5);p.drawPolyline(QPolygonF{QPointF(10,5),QPointF(10,12),QPointF(7,16),QPointF(21,16),QPointF(18,12),QPointF(18,5)});line(14,16,14,25);p.restore();
-    } else if (name == "pages") {
-        p.drawRoundedRect(QRectF(6,3,17,21),1.5,1.5);line(3,7,3,26);line(3,26,19,26);line(10,8,19,8);line(10,13,19,13);
-    } else if (name == "annotations") {
-        p.drawRoundedRect(QRectF(4,3,20,18),2,2);line(9,21,9,26);line(9,26,15,21);line(8,8,20,8);line(8,13,17,13);
-    } else if (name == "search") {p.drawEllipse(QRectF(4,3,15,15));line(17,17,25,25);
-    } else if (name == "plus" || name == "minus" || name == "zoom-in") {line(5,14,23,14);if(name!="minus")line(14,5,14,23);
-    } else if (name == "move") {
-        line(14,3,14,25);line(3,14,25,14);
-        for (const auto& d : {QPointF(0,-1),QPointF(1,0),QPointF(0,1),QPointF(-1,0)}) {const auto tip=QPointF(14,14)+d*11;const QPointF side(-d.y(),d.x());p.drawLine(tip,tip-d*4+side*3);p.drawLine(tip,tip-d*4-side*3);}
-    } else if (name == "grip") {line(7,11,21,11);line(7,17,21,17);
-    } else if (name == "ellipsis") {for(int x:{6,14,22})p.drawEllipse(QPointF(x,14),1,1);
-    } else if (name == "select") {p.setPen(QPen(p.pen().color(),1.6,Qt::DashLine,Qt::RoundCap,Qt::RoundJoin));p.drawRect(QRectF(4,4,20,20));
-    } else if (name == "chevron-up" || name == "chevron-down") {const bool down=name=="chevron-down";p.drawPolyline(QPolygonF{QPointF(6,down?10:18),QPointF(14,down?18:10),QPointF(22,down?10:18)});
-    } else if (name == "back" || name == "forward") {const bool forward=name=="forward";line(4,14,24,14);p.drawPolyline(QPolygonF{QPointF(forward?16:12,6),QPointF(forward?24:4,14),QPointF(forward?16:12,22)});
-    } else if (name == "undo" || name == "redo") {p.save();if(name=="redo"){p.translate(28,0);p.scale(-1,1);}p.drawPolyline(QPolygonF{QPointF(10,4),QPointF(4,10),QPointF(11,15)});QPainterPath path;path.moveTo(4,10);path.cubicTo(24,4,30,23,14,24);p.drawPath(path);p.restore();
-    } else if (name == "save") {p.drawRoundedRect(QRectF(4,3,20,22),1,1);p.drawRect(QRectF(9,3,10,8));p.drawRect(QRectF(9,17,10,8));
-    } else if (name == "open") {p.drawPolyline(QPolygonF{QPointF(3,22),QPointF(3,5),QPointF(11,5),QPointF(14,9),QPointF(25,9)});p.drawPolygon(QPolygonF{QPointF(3,23),QPointF(7,12),QPointF(26,12),QPointF(22,23)});
-    } else {p.drawEllipse(QRectF(5,5,18,18));}
+    static const QHash<QString,QString> aliases{
+        {"fullscreen","maximize"},{"restore","minimize"},{"pages","files"},{"overview","layout-grid"},
+        {"annotations","list"},{"grip","grip-horizontal"},{"back","arrow-left"},{"forward","arrow-right"},
+        {"undo","undo-2"},{"redo","redo-2"},{"zoom-in","plus"},{"open","folder-open"},{"select","scan"},
+        {"pen","pen-line"},{"textbox","type"},{"textselect","text-cursor"},{"arrow","move-up-right"},
+        {"line","slash"},{"rectangle","square"},{"ellipse","circle"},{"squiggly","waves-horizontal"},
+        {"strike","strikethrough"},{"highlight","scan-text"},
+        {"pin-toolbar","panel-right"},{"unpin-toolbar","panel-right"}
+    };
+    return aliases.value(name,name);
 }
-void drawFavorite(QPainter& p, const FavoriteTool& favorite, const QPalette& palette)
+QByteArray sourceSvg(const QString& asset)
 {
-    QColor color=favorite.color;
-    if (const auto shape=InkCanvas::shapeKind(favorite.tool)) color=favorite.tools.shapeToolPreference(*shape).style.strokeColor;
-    if (favorite.tool==InkCanvas::Tool::ObjectEraser || favorite.tool==InkCanvas::Tool::Pan || favorite.tool==InkCanvas::Tool::Select || (favorite.tool==InkCanvas::Tool::TextSelect&&!favorite.markupKind)) color=palette.color(QPalette::WindowText);
-    color.setAlpha(255);p.setPen(QPen(color,1.8,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));p.setBrush(Qt::NoBrush);
-    if (const auto shape=InkCanvas::shapeKind(favorite.tool)) {
-        ShapeAnnotation sample;sample.kind=*shape;sample.style=favorite.tools.shapeToolPreference(*shape).style;sample.style.widthPt=1.7;sample.style.strokeColor=color;
-        sample.start=isAreaShape(*shape)?QPointF(4,6):QPointF(5,23);sample.end=isAreaShape(*shape)?QPointF(24,23):QPointF(23,5);paintShape(p,sample);
-    } else if(favorite.markupKind) {
-        if(*favorite.markupKind==TextMarkupKind::Highlight){auto fill=color;fill.setAlpha(100);p.fillRect(QRectF(3,5,22,16),fill);}
-        p.setPen(QPen(palette.color(QPalette::WindowText),1.4));p.drawLine(QPointF(5,8),QPointF(23,8));p.drawLine(QPointF(5,13),QPointF(21,13));
-        p.setPen(QPen(color,1.8,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));
-        if(*favorite.markupKind==TextMarkupKind::Underline)p.drawLine(QPointF(5,20),QPointF(23,20));
-        if(*favorite.markupKind==TextMarkupKind::StrikeOut)p.drawLine(QPointF(4,12),QPointF(24,12));
-        if(*favorite.markupKind==TextMarkupKind::Squiggly){QPolygonF wave;for(int x=5;x<=23;x+=3)wave<<QPointF(x,((x-5)/3)%2?18:21);p.drawPolyline(wave);}
-    } else if(favorite.tool==InkCanvas::Tool::Pen) {p.drawPolygon(QPolygonF{QPointF(6,24),QPointF(8,18),QPointF(21,5),QPointF(25,9),QPointF(12,22)});p.drawLine(QPointF(8,18),QPointF(12,22));
-    } else if(favorite.tool==InkCanvas::Tool::Highlighter) {p.setBrush(color);p.drawPolygon(QPolygonF{QPointF(5,18),QPointF(17,5),QPointF(24,12),QPointF(12,24),QPointF(5,24)});p.setPen(QPen(palette.color(QPalette::WindowText),1.3));p.drawLine(QPointF(5,18),QPointF(12,24));
-    } else if(favorite.tool==InkCanvas::Tool::ObjectEraser) {p.drawPolygon(QPolygonF{QPointF(4,17),QPointF(16,5),QPointF(25,14),QPointF(15,24),QPointF(10,24)});p.drawLine(QPointF(9,12),QPointF(20,23));
-    } else if(favorite.tool==InkCanvas::Tool::TextBox) {p.setPen(QPen(color,1.2,Qt::DashLine));p.drawRect(QRectF(3,3,22,22));p.setPen(QPen(color,1.8));p.drawLine(QPointF(8,8),QPointF(20,8));p.drawLine(QPointF(14,8),QPointF(14,22));
-    } else if(favorite.tool==InkCanvas::Tool::TextSelect) {p.drawLine(QPointF(14,4),QPointF(14,24));p.drawLine(QPointF(10,4),QPointF(18,4));p.drawLine(QPointF(10,24),QPointF(18,24));
-    } else drawSymbol(p,favorite.tool==InkCanvas::Tool::Select?QStringLiteral("select"):QStringLiteral("hand"));
+    QFile file(QStringLiteral(":/propernotes/icons/lucide/%1.svg").arg(asset));
+    return file.open(QIODevice::ReadOnly)?file.readAll():QByteArray{};
+}
+QString favoriteSymbol(const FavoriteTool& favorite)
+{
+    if(favorite.markupKind){
+        switch(*favorite.markupKind){
+        case TextMarkupKind::Highlight:return QStringLiteral("highlight");
+        case TextMarkupKind::Underline:return QStringLiteral("underline");
+        case TextMarkupKind::StrikeOut:return QStringLiteral("strike");
+        case TextMarkupKind::Squiggly:return QStringLiteral("squiggly");
+        }
+    }
+    switch(favorite.tool){
+    case InkCanvas::Tool::Pen:return QStringLiteral("pen");
+    case InkCanvas::Tool::Highlighter:return QStringLiteral("highlighter");
+    case InkCanvas::Tool::ObjectEraser:return QStringLiteral("eraser");
+    case InkCanvas::Tool::TextBox:return QStringLiteral("textbox");
+    case InkCanvas::Tool::TextSelect:return QStringLiteral("textselect");
+    case InkCanvas::Tool::Pan:return QStringLiteral("hand");
+    case InkCanvas::Tool::Select:return QStringLiteral("select");
+    case InkCanvas::Tool::Line:return QStringLiteral("line");
+    case InkCanvas::Tool::Arrow:return QStringLiteral("arrow");
+    case InkCanvas::Tool::Rectangle:return QStringLiteral("rectangle");
+    case InkCanvas::Tool::Ellipse:return QStringLiteral("ellipse");
+    }
+    return QStringLiteral("pen");
 }
 }
 QIcon uiIcon(const QString& name,const QPalette& palette,const QColor& color)
 {
-    static QCache<QString,QIcon> cache(128);
-    const QColor ink = color.isValid() ? color : palette.color(QPalette::WindowText);
-    const QString key = name + QLatin1Char('/') + ink.name(QColor::HexArgb);
-    if (const auto* icon=cache.object(key)) return *icon;
-    QPixmap pixels(64,64);pixels.fill(Qt::transparent);pixels.setDevicePixelRatio(2);
-    QPainter p(&pixels);p.setRenderHint(QPainter::Antialiasing);p.translate(2,2);p.setPen(QPen(ink,1.7,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));p.setBrush(Qt::NoBrush);drawSymbol(p,name);p.end();QIcon icon(pixels);cache.insert(key,new QIcon(icon));return icon;
+    static QCache<QString,QIcon> cache(256);
+    const auto asset=assetName(name);
+    const QColor ink=color.isValid()?color:palette.color(QPalette::ButtonText);
+    const QColor disabled=palette.color(QPalette::Disabled,QPalette::ButtonText);
+    const QString key=name+QLatin1Char('/')+ink.name(QColor::HexArgb)+QLatin1Char('/')+disabled.name(QColor::HexArgb);
+    if(const auto* icon=cache.object(key))return *icon;
+    const auto source=sourceSvg(asset);if(source.isEmpty())return {};
+    const auto overlay=name=="pin-toolbar"?sourceSvg(QStringLiteral("pin")):
+        name=="unpin-toolbar"?sourceSvg(QStringLiteral("pin-off")):QByteArray{};
+    QIcon icon(new SvgIconEngine(source,ink,disabled,name,overlay));cache.insert(key,new QIcon(icon));return icon;
 }
 QIcon favoriteIcon(const FavoriteTool& favorite,const QPalette& palette)
 {
-    QPixmap pixels(104,104);pixels.fill(Qt::transparent);pixels.setDevicePixelRatio(2);
-    QPainter p(&pixels);p.setRenderHint(QPainter::Antialiasing);p.save();p.translate(8,12);p.scale(1.2,1.2);drawFavorite(p,favorite,palette);p.restore();
+    QColor color=favorite.color;
+    if(const auto shape=InkCanvas::shapeKind(favorite.tool))color=favorite.tools.shapeToolPreference(*shape).style.strokeColor;
+    if(favorite.tool==InkCanvas::Tool::ObjectEraser||favorite.tool==InkCanvas::Tool::Pan||favorite.tool==InkCanvas::Tool::Select
+       ||(favorite.tool==InkCanvas::Tool::TextSelect&&!favorite.markupKind))color=palette.color(QPalette::ButtonText);
+    color.setAlpha(255);return uiIcon(favoriteSymbol(favorite),palette,color);
+}
+void configureReaderIconButton(QToolButton* button)
+{
+    button->setProperty("readerIcon",true);
+    button->setFixedSize(ReaderButtonSize,ReaderButtonSize);
+    button->setIconSize(QSize(ReaderGlyphSize,ReaderGlyphSize));
+    button->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    // Text-toolbar padding must never shrink an icon's content rectangle.
+    button->setStyleSheet(QStringLiteral("QToolButton{padding:0;margin:0;border:1px solid transparent;border-radius:7px;}"
+        "QToolButton:hover{background:palette(highlight);}QToolButton:checked{background:palette(highlight);border-color:palette(mid);}"
+        "QToolButton::menu-indicator{width:0;height:0;}"));
+}
+void configureFavoriteButton(QToolButton* button,const FavoriteTool& favorite)
+{
+    configureReaderIconButton(button);
+    button->setIcon(favoriteIcon(favorite,button->palette()));
+    auto* badge=button->findChild<QLabel*>(QStringLiteral("favoriteWidthBadge"),Qt::FindDirectChildrenOnly);
+    if(!badge){
+        badge=new QLabel(button);badge->setObjectName(QStringLiteral("favoriteWidthBadge"));
+        badge->setAttribute(Qt::WA_TransparentForMouseEvents);badge->setAlignment(Qt::AlignCenter);
+        auto font=badge->font();font.setPointSizeF(8.25);font.setBold(false);badge->setFont(font);
+        badge->setStyleSheet(QStringLiteral("QLabel{padding:0 2px;border:1px solid palette(mid);border-radius:4px;"
+                                           "color:palette(window-text);background:palette(window);}"));
+    }
     const auto shape=InkCanvas::shapeKind(favorite.tool);
-    const bool badge=!favorite.markupKind&&(shape || favorite.tool==InkCanvas::Tool::Pen || favorite.tool==InkCanvas::Tool::Highlighter || favorite.tool==InkCanvas::Tool::TextBox || favorite.tool==InkCanvas::Tool::ObjectEraser);
-    if(badge){const qreal width=shape?favorite.tools.shapeToolPreference(*shape).style.widthPt:favorite.tool==InkCanvas::Tool::TextBox?favorite.tools.textSizePt:favorite.tool==InkCanvas::Tool::ObjectEraser?favorite.tools.eraserRadiusPt:favorite.widthPt;
-        QFont font=p.font();font.setPointSizeF(8);font.setBold(false);p.setFont(font);const auto text=QString::number(width,'g',3);const qreal w=qMax(15.0,p.fontMetrics().horizontalAdvance(text)+5.0);QRectF r(51-w,1,w,15);p.setPen(QPen(palette.color(QPalette::Mid),0.7));p.setBrush(palette.color(QPalette::Window));p.drawRoundedRect(r,4,4);p.setPen(palette.color(QPalette::WindowText));p.drawText(r,Qt::AlignCenter,text);
-    }p.end();return QIcon(pixels);
+    // Reserve the same top band for every favorite, including badge-free tools.
+    // Font metrics keep the badge clear of the 24px glyph under text scaling.
+    const int badgeHeight=badge->fontMetrics().height()+2;
+    button->setFixedSize(52,std::max(52,badgeHeight+ReaderGlyphSize+10));
+    button->setStyleSheet(button->styleSheet()+QStringLiteral("QToolButton{padding-top:%1px;}").arg(badgeHeight));
+    const bool visible=!favorite.markupKind&&(shape||favorite.tool==InkCanvas::Tool::Pen||favorite.tool==InkCanvas::Tool::Highlighter
+        ||favorite.tool==InkCanvas::Tool::TextBox||favorite.tool==InkCanvas::Tool::ObjectEraser);
+    badge->setVisible(visible);
+    if(visible){
+        const qreal width=shape?favorite.tools.shapeToolPreference(*shape).style.widthPt:
+            favorite.tool==InkCanvas::Tool::TextBox?favorite.tools.textSizePt:
+            favorite.tool==InkCanvas::Tool::ObjectEraser?favorite.tools.eraserRadiusPt:favorite.widthPt;
+        badge->setText(QString::number(width,'g',3));badge->adjustSize();badge->move(button->width()-badge->width()-1,0);
+    }
 }
 }

@@ -6,6 +6,7 @@
 #include <QColorDialog>
 #include <QComboBox>
 #include <QCoreApplication>
+#include <QDesktopServices>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleSpinBox>
@@ -27,7 +28,9 @@
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QTreeWidget>
+#include <QUrl>
 #include <QVBoxLayout>
+#include <cmath>
 
 namespace propernotes {
 namespace {
@@ -152,15 +155,38 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     auto* inputHelp = new QLabel(QStringLiteral("关闭后，鼠标与手用于浏览、选择正文及框选和移动已有批注。手写笔始终使用当前工具，两指用于平移和缩放。"));
     inputHelp->setWordWrap(true);
     inputForm->addRow(inputHelp);
-    m_pressureEnabled = new QCheckBox(QStringLiteral("启用笔压"));
+    m_pressureEnabled = new QCheckBox(QStringLiteral("默认笔启用笔压"));
     m_pressureEnabled->setChecked(value.tools.pressureEnabled);
     inputForm->addRow(m_pressureEnabled);
     m_pressureSensitivity = new QSpinBox;
     m_pressureSensitivity->setRange(0, 100);
     m_pressureSensitivity->setValue(value.tools.pressureSensitivity);
     m_pressureSensitivity->setEnabled(value.tools.pressureEnabled);
-    inputForm->addRow(QStringLiteral("笔压灵敏度"), m_pressureSensitivity);
+    inputForm->addRow(QStringLiteral("默认笔的笔压灵敏度"), m_pressureSensitivity);
     connect(m_pressureEnabled, &QCheckBox::toggled, m_pressureSensitivity, &QWidget::setEnabled);
+    auto* pressureHelp = new QLabel(QStringLiteral("50 为线性响应。数值越大，轻压时越容易写粗；数值越小，需要更重的笔压。此数值调整本应用的响应曲线，不代表笔的硬件压力级数。"));
+    pressureHelp->setWordWrap(true);
+    inputForm->addRow(pressureHelp);
+    auto* pressureExample = new QLabel;
+    pressureExample->setWordWrap(true);
+    pressureExample->setTextFormat(Qt::PlainText);
+    inputForm->addRow(pressureExample);
+    const auto updatePressureExample = [this, pressureExample] {
+        if (!m_pressureEnabled->isChecked()) {
+            pressureExample->setText(QStringLiteral("默认笔已关闭笔压，新笔迹使用固定粗细。"));
+            return;
+        }
+        const qreal exponent = std::pow(2.0, (50.0 - m_pressureSensitivity->value()) / 50.0);
+        const qreal response = std::pow(0.25, exponent);
+        pressureExample->setText(QStringLiteral("默认笔响应示例：设备上报 25% 压力时，响应约为 %1%。这是响应示例，并非实际力度测量。")
+            .arg(QString::number(response * 100, 'f', 1)));
+    };
+    connect(m_pressureSensitivity, &QSpinBox::valueChanged, this, [updatePressureExample](int) { updatePressureExample(); });
+    connect(m_pressureEnabled, &QCheckBox::toggled, this, [updatePressureExample](bool) { updatePressureExample(); });
+    updatePressureExample();
+    auto* pressureScope = new QLabel(QStringLiteral("此处设置默认笔。当前收藏工具的笔压请在该工具的「···」中调整。设置只影响新笔迹，已有笔迹保持不变。自由荧光笔使用固定线宽。"));
+    pressureScope->setWordWrap(true);
+    inputForm->addRow(pressureScope);
     m_eraserMode = new QComboBox;
     m_eraserMode->addItem(QStringLiteral("整笔擦除"), QStringLiteral("whole"));
     m_eraserMode->addItem(QStringLiteral("局部擦除"), QStringLiteral("partial"));
@@ -173,6 +199,22 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     inputForm->addRow(QStringLiteral("擦除半径"), m_eraserRadius);
     input->setEnabled(preferencesWritable);
     inputPage->addWidget(input);
+#ifdef Q_OS_WIN
+    auto* systemPen = new QGroupBox(QStringLiteral("Windows 与设备设置"));
+    auto* systemPenLayout = new QVBoxLayout(systemPen);
+    auto* systemPenHelp = new QLabel(QStringLiteral("打开 Windows 的「笔与 Windows Ink」页面。设备厂商提供的其他选项可能需在其配套应用中设置。"));
+    systemPenHelp->setWordWrap(true);
+    systemPenLayout->addWidget(systemPenHelp);
+    auto* openSystemPen = new QPushButton(QStringLiteral("Windows 笔与 Windows Ink 设置"));
+    openSystemPen->setMinimumHeight(44);
+    systemPenLayout->addWidget(openSystemPen, 0, Qt::AlignLeft);
+    connect(openSystemPen, &QPushButton::clicked, this, [systemPenHelp] {
+        // Only an explicit click launches this documented Settings URI.
+        if (!QDesktopServices::openUrl(QUrl(QStringLiteral("ms-settings:pen"))))
+            systemPenHelp->setText(QStringLiteral("无法打开系统设置。可在 Windows 设置中查找「笔与 Windows Ink」。"));
+    });
+    inputPage->addWidget(systemPen);
+#endif
     inputPage->addStretch();
 
     auto* annotationPage = addPage(QStringLiteral("批注与工具"));

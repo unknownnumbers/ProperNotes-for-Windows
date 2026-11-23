@@ -4,6 +4,24 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.12 icons, docking and pen settings
+
+The sidebar, favorite tools and bottom controls use consistently scaled vector
+glyphs, with point-size badges positioned separately. High-DPI icon rendering
+and spacing are corrected without changing the existing tool commands or saved
+document format. Cloud compilation and packaging are pending at source
+preparation time. The package is not installed, started or tested on the
+recipient's PC. Follow its build provenance for the actual compilation result.
+
+Unlock the palette using the left-rail toolbar-and-pin button. Drag its bottom
+move handle toward the left or right reading edge and release when the docking
+preview appears. The dock occupies layout space. Drag the unlocked handle away
+from the edge to float again; its former floating size is retained. Pinning hides
+the move/resize handles in either mode. The follow-tool switch uses a mouse icon;
+Pan remains a hand. Settings > Pen and input explains the default pressure curve,
+while a saved pen's pressure is edited from that preset's options. The Windows
+settings button launches the system Pen & Windows Ink page only on user click.
+
 ### 0.3.11 compact native layout
 
 Use the narrow left rail for page/annotation navigation, the mouse-and-touch
@@ -174,6 +192,12 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.12 圖示、停靠及筆設定
+
+側邊欄、收藏工具與底角控件的向量圖示採統一尺寸，pt 角標獨立排版，並修正高 DPI 顯示和間距。工具命令及 PDF 儲存格式維持原有邏輯。源碼準備時仍待雲端編譯及打包，不在使用者 PC 安裝、啟動或測試，實際編譯結果以包內構建紀錄為準。
+
+左側「工具欄與圖釘」解除固定後，從底部把手拖到閱讀區左右邊緣，出現預覽後釋放即可停靠。停靠欄會留出版面空間；解鎖後拖離邊緣可恢復懸浮及原尺寸。跟隨工具使用滑鼠圖示，平移保留手形。「設定 → 筆與輸入」說明預設壓感，收藏筆的壓感在該預設選項中修改。Windows 筆設定入口僅在點擊後開啟系統頁。
+
 ### 0.3.11 精簡原生版面
 
 左側窄邊欄提供頁面／批注入口、滑鼠與手跟隨工具、工具框固定、全螢幕及完整軟體設定。浮動工具框頂部固定平移和框選，中間收藏區可用滾輪或單指上下捲動，底部「＋」始終可用。同一工具與選項窗口提供「加入工具欄」及「使用」，選中收藏預設後可開啟其選項，圖示反映顏色及適用的 pt 數值。
@@ -243,6 +267,12 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.12 图标、停靠及笔设置
+
+侧边栏、收藏工具和底角控件的矢量图标采用统一尺寸，pt 角标独立排版，并修正高 DPI 显示和间距。工具命令及 PDF 保存格式维持原有逻辑。源码准备时仍待云端编译和打包，不在用户 PC 安装、启动或测试，实际编译结果以包内构建记录为准。
+
+左侧「工具栏与图钉」解除固定后，从底部把手拖到阅读区左右边缘，出现预览后释放即可停靠。停靠栏会留出版面空间；解锁后拖离边缘可恢复悬浮和原尺寸。跟随工具使用鼠标图标，平移保留手形。「设置 → 笔与输入」说明默认压感，收藏笔的压感在该预设选项中修改。Windows 笔设置入口仅在点击后打开系统页。
 
 ### 0.3.11 紧凑原生布局
 

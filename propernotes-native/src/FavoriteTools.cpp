@@ -372,7 +372,7 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
 
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& p)
 {
-    return (!p.pinned || p.floating) && (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
+    return (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
         p.geometry.height()>=80 && p.geometry.height()<=1600 && p.geometry.x()>=-100000 && p.geometry.x()<=100000 && p.geometry.y()>=-100000 && p.geometry.y()<=100000;
 }
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& p)
@@ -401,6 +401,7 @@ bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result
         p.geometry = QRect(100000,72,80,std::clamp(p.geometry.height(),320,1200));
         p.side = QStringLiteral("right"); p.floating = true; p.collapsed = false;
     }
+    if (settingsVersion == 10) p.floating = true;
     result=p;return true;
 }
 } // namespace propernotes

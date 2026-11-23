@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-only
 cmake_minimum_required(VERSION 3.24)
-project(ProperNotesNative VERSION 0.3.11 LANGUAGES CXX)
+project(ProperNotesNative VERSION 0.3.12 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,7 @@ qt_add_executable(ProperNotesNative WIN32
     src/MainWindowUi.cpp src/MainWindowActions.cpp src/DocumentSession.h
     src/MainWindowChrome.cpp src/ReadingControls.h src/ReadingControls.cpp
     src/ToolIcon.h src/ToolIcon.cpp
+    src/resources.qrc
     src/MainWindowReview.cpp
     src/MainWindowWorkspace.cpp src/MainWindowState.h
     src/WorkspaceStore.h src/WorkspaceStore.cpp

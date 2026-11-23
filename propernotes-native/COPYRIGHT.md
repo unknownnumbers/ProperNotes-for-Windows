@@ -6,6 +6,8 @@ Original ProperNotes native application code and build scripts are offered under
 
 PDF4QT, Qt, fonts and all other third-party components retain their own copyrights, license texts, notices and source obligations. They are not relicensed as original ProperNotes material. The compiled package includes its actual dependency notices and matching source evidence.
 
+The application embeds an unchanged SVG subset from [Lucide](https://github.com/lucide-icons/lucide/tree/c26ce5515667640ca2753e095ba319d225fc0d8d), Copyright (c) 2026 Lucide Icons and Contributors. The complete upstream notice also identifies Feather-derived icons, Copyright (c) 2013-present Cole Bemis, under the MIT License. Both notices and all terms are retained in [licenses/lucide.txt](licenses/lucide.txt). These third-party icon sources retain their original licensing and are not claimed as original ProperNotes artwork. [licenses/lucide-source.json](licenses/lucide-source.json) records the pinned revision and individual source hashes. Application theming occurs during rendering and does not change the stored upstream SVG files.
+
 Developed through human and AI collaboration. Some AI-assisted code or text may not have received complete human review. The AI assistant and OpenAI are not named as copyright claimants for the original project contributions. This does not assert copyright eligibility or uniqueness for every AI-assisted element.
 
 原創程式及構建腳本在有權授權範圍內採 GPL-3.0-only, 原創說明文字採 CC BY-SA 4.0. 第三方程式、字型及原通知保留各自權利和條款. 人類與 AI 協作如實披露, AI 協作內容不保證已完整人工審查或具有唯一性.
