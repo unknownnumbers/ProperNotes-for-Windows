@@ -336,23 +336,28 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
 
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& p)
 {
-    return (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
+    return (!p.pinned || p.floating) && (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
         p.geometry.height()>=80 && p.geometry.height()<=1600 && p.geometry.x()>=-100000 && p.geometry.x()<=100000 && p.geometry.y()>=-100000 && p.geometry.y()<=100000;
 }
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& p)
 {
-    return {{"visible",p.visible},{"collapsed",p.collapsed},{"side",p.side},{"floating",p.floating},
+    return {{"visible",p.visible},{"collapsed",p.collapsed},{"side",p.side},{"floating",p.floating},{"pinned",p.pinned},
         {"geometry",QJsonObject{{"x",p.geometry.x()},{"y",p.geometry.y()},{"width",p.geometry.width()},{"height",p.geometry.height()}}}};
 }
-bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result)
+bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result, int settingsVersion)
 {
-    if(!exactKeys(object,{"visible","collapsed","side","floating","geometry"})||!object.value("visible").isBool()||
-        !object.value("collapsed").isBool()||!object.value("floating").isBool()||!object.value("side").isString()||!object.value("geometry").isObject())return false;
+    const bool hasPin = settingsVersion >= 7;
+    QStringList keys{"visible", "collapsed", "side", "floating", "geometry"};
+    if (hasPin) keys.append(QStringLiteral("pinned"));
+    if(!exactKeys(object,keys)||!object.value("visible").isBool()||
+        !object.value("collapsed").isBool()||!object.value("floating").isBool()||!object.value("side").isString()||
+        !object.value("geometry").isObject() || (hasPin && !object.value("pinned").isBool()))return false;
     const auto geometry=object.value("geometry").toObject();
     if(!exactKeys(geometry,{"x","y","width","height"})||!number(geometry,"x",-100000,100000,true)||
         !number(geometry,"y",-100000,100000,true)||!number(geometry,"width",80,1200,true)||!number(geometry,"height",80,1600,true))return false;
     FavoritesBarPreferences p;p.visible=object.value("visible").toBool();p.collapsed=object.value("collapsed").toBool();
     p.side=object.value("side").toString();p.floating=object.value("floating").toBool();p.geometry={geometry.value("x").toInt(),geometry.value("y").toInt(),geometry.value("width").toInt(),geometry.value("height").toInt()};
+    p.pinned = hasPin && object.value("pinned").toBool();
     if(!validFavoritesBarPreferences(p))return false;result=p;return true;
 }
 } // namespace propernotes

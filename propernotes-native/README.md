@@ -8,6 +8,11 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+0.3.8 adds proportional scaling and rotation for selected pen and freehand
+highlighter strokes. Cut, copy and paste work across pages of the same open PDF,
+with on-screen buttons and keyboard shortcuts. The floating favorites bar can be
+pinned at a position restored on restart.
+
 0.3.7 fixes canvas input routing. With Mouse & Touch Follow Tool off, a mouse or
 single finger can pan, manually select text, or select and move existing annotations.
 Drawing, erasing and automatic review marks still follow the pen.
@@ -98,6 +103,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.8 可等比縮放及旋轉選取的普通筆跡和自由螢光筆跡。按鈕及快捷鍵可在同一份開啟的 PDF 內跨頁剪貼。浮動收藏欄可以固定，重新開啟程式後會恢復位置和固定狀態。
+
 0.3.7 修正畫布輸入。關閉「鼠标与手跟随工具」時，滑鼠和單指可平移、手動選字、框選或移動既有批注。繪製、擦除和自動審閱仍由筆操作。
 
 0.3.6 可就地編輯選取的普通筆跡或自由螢光筆跡。顏色、粗細和不透明度可一次套用並復原，儲存後可重新開啟 PDF 繼續編輯。四種正文審閱工具可從收藏啟用，支援持續或單次使用。
@@ -150,6 +157,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.8 可等比缩放及旋转选中的普通笔迹和自由荧光笔迹。按钮及快捷键可在同一份已打开的 PDF 内跨页剪贴。浮动收藏栏可以固定，重启后恢复位置和固定状态。
 
 0.3.7 修复画布输入。关闭「鼠标与手跟随工具」时，鼠标和单指可平移、手动选字、框选或移动已有批注。绘写、擦除和自动审阅仍由笔操作。
 

@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cmath>
 #include <exception>
+#include <iterator>
 #include <utility>
 
 namespace propernotes {
@@ -206,6 +207,112 @@ void MainWindow::editHistory(bool redo)
     scheduleWorkspaceSave();
 }
 
+bool MainWindow::canUseInkClipboard() const
+{
+    return m_tool == InkCanvas::Tool::Select && m_pageCount > 0 && !m_readOnly && !m_fileBusy &&
+        !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog && !m_view->isTextEditing();
+}
+
+bool MainWindow::inkClipboardAvailable() const
+{
+    return !m_inkClipboard.strokes.isEmpty() && m_activeTab >= 0 && m_activeTab < m_tabs.size() &&
+        m_tabs[m_activeTab]->id == m_inkClipboard.tabId &&
+        m_inkClipboard.sourcePage >= 0 && m_inkClipboard.sourcePage < m_geometry.size();
+}
+
+void MainWindow::updateInkClipboardUi()
+{
+    const bool usable = canUseInkClipboard();
+    const bool selected = usable && m_view->hasSelectedInk();
+    m_cutInkAction->setEnabled(selected);
+    m_copyInkAction->setEnabled(selected);
+    m_pasteInkAction->setVisible(m_tool == InkCanvas::Tool::Select);
+    m_pasteInkAction->setEnabled(usable && inkClipboardAvailable());
+}
+
+void MainWindow::copySelectedInk(bool cut)
+{
+    if (!canUseInkClipboard() || m_view->hasActiveGesture() || m_activeTab < 0 || m_activeTab >= m_tabs.size()) return;
+    auto selection = m_view->selectedInk();
+    if (selection.strokes.isEmpty() || selection.page < 0 || selection.page >= m_geometry.size()) return;
+
+    if (cut) {
+        const auto before = m_pageAnnotations.value(selection.page);
+        QSet<QUuid> ids;
+        for (const auto& stroke : std::as_const(selection.strokes)) ids.insert(stroke.id);
+        auto after = before;
+        const auto last = std::remove_if(after.strokes.begin(), after.strokes.end(),
+            [&ids](const InkStroke& stroke) { return ids.contains(stroke.id); });
+        if (std::distance(last, after.strokes.end()) != selection.strokes.size()) return;
+        after.strokes.erase(last, after.strokes.end());
+        commitAnnotations(selection.page, before, after, QStringLiteral("ink-cut"), selection.strokes.front().id);
+        if (!std::exchange(m_lastCommitAccepted, false)) return;
+        m_view->updatePageAnnotations(selection.page, after);
+    }
+
+    const qsizetype count = selection.strokes.size();
+    m_inkClipboard = { m_tabs[m_activeTab]->id, selection.page, std::move(selection.strokes) };
+    updateInkClipboardUi();
+    statusBar()->showMessage((cut ? QStringLiteral("已剪切 %1 条笔迹，可粘贴到本 PDF 的其他页。")
+        : QStringLiteral("已复制 %1 条笔迹，可粘贴到本 PDF 的其他页。")).arg(count), 4500);
+}
+
+void MainWindow::pasteInk()
+{
+    if (!canUseInkClipboard() || m_view->hasActiveGesture() || !inkClipboardAvailable()) return;
+    const int page = m_view->currentPage();
+    if (page < 0 || page >= m_geometry.size()) return;
+    const auto& target = m_geometry[page];
+    const auto& source = m_geometry[m_inkClipboard.sourcePage];
+    bool invertible = false;
+    const QTransform displayToPdf = target.pdfToDisplay.inverted(&invertible);
+    const QRectF paper = target.pdfRect.normalized();
+    if (!invertible || !paper.isValid()) return;
+
+    auto strokes = m_inkClipboard.strokes;
+    QRectF bounds;
+    for (auto& stroke : strokes) {
+        for (auto& point : stroke.points) {
+            if (page != m_inkClipboard.sourcePage)
+                point.position = displayToPdf.map(source.pdfToDisplay.map(point.position));
+        }
+        bounds = bounds.united(inkStrokeBounds(stroke));
+    }
+    if (!bounds.isValid() || bounds.width() > paper.width() || bounds.height() > paper.height()) {
+        statusBar()->showMessage(QStringLiteral("剪贴板中的笔迹放不进当前页，笔迹仍可粘贴到其他页。"), 6500);
+        return;
+    }
+    const QPointF center = m_view->visiblePageCenterPdf(page);
+    const qreal right = std::max(paper.left(), paper.right() - bounds.width());
+    const qreal bottom = std::max(paper.top(), paper.bottom() - bounds.height());
+    const QPointF targetOrigin(
+        std::clamp(center.x() - bounds.width() / 2, paper.left(), right),
+        std::clamp(center.y() - bounds.height() / 2, paper.top(), bottom));
+    const QPointF offset = targetOrigin - bounds.topLeft();
+    QSet<QUuid> ids;
+    for (auto& stroke : strokes) {
+        stroke.id = QUuid::createUuid();
+        ids.insert(stroke.id);
+        for (auto& point : stroke.points) {
+            point.position += offset;
+            if (!(std::abs(point.position.x()) <= MaxInkCoordinate && std::abs(point.position.y()) <= MaxInkCoordinate)) {
+                statusBar()->showMessage(QStringLiteral("粘贴位置超出 PDF 坐标范围。"), 6500);
+                return;
+            }
+        }
+    }
+
+    const auto before = m_pageAnnotations.value(page);
+    auto after = before;
+    const QUuid focus = strokes.front().id;
+    after.strokes.append(strokes);
+    commitAnnotations(page, before, after, QStringLiteral("ink-paste"), focus);
+    if (!std::exchange(m_lastCommitAccepted, false)) return;
+    m_view->updatePageAnnotations(page, after);
+    m_view->selectPageInk(page, ids);
+    statusBar()->showMessage(QStringLiteral("已粘贴 %1 条笔迹。可拖动新选区。").arg(strokes.size()), 4500);
+}
+
 bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
 {
     if (tool == InkCanvas::Tool::TextSelect) {
@@ -315,6 +422,7 @@ void MainWindow::updateToolUi()
     m_lockAction->setChecked(!isSingleUse(m_tool));
     const auto* review = activeReviewTool();
     m_view->setTextReviewActive(review != nullptr);
+    updateInkClipboardUi();
     const bool lockableReview = review && m_pageCount > 0 && !m_readOnly && !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog;
     const bool lockableDrawingTool = m_preferencesWritable && (m_tool == InkCanvas::Tool::Pen ||
         m_tool == InkCanvas::Tool::Highlighter || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox);

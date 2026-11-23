@@ -31,9 +31,11 @@
 #include <QVariant>
 #include <QWheelEvent>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <memory>
+#include <numbers>
 #include <utility>
 
 namespace propernotes {
@@ -195,28 +197,22 @@ void paintTextQuads(QPainter& painter, const QVector<TextMarkupQuad>& quads, con
     }
 }
 
-QRectF strokeBounds(const InkStroke& stroke)
+std::array<QPointF, 4> rectCorners(const QRectF& rect)
 {
-    QRectF bounds;
-    // Each connecting segment lies within the union bounds of its two round caps.
-    for (const auto& point : stroke.points) {
-        const qreal width = strokeSampleWidth(stroke, point);
-        bounds = bounds.united(QRectF(point.position - QPointF(width / 2, width / 2), QSizeF(width, width)));
-    }
-    return bounds;
+    return {rect.topLeft(), rect.topRight(), rect.bottomRight(), rect.bottomLeft()};
 }
 
-class StrokeStyleButton final : public QToolButton {
+class SelectionActionButton final : public QToolButton {
 public:
-    explicit StrokeStyleButton(QWidget* parent) : QToolButton(parent)
+    SelectionActionButton(const QString& label, const QString& description, QWidget* parent) : QToolButton(parent)
     {
-        setAttribute(Qt::WA_AcceptTouchEvents);
         setCursor(Qt::ArrowCursor);
-        setText(QStringLiteral("样式"));
-        setToolTip(QStringLiteral("编辑笔迹的颜色、粗细和不透明度"));
-        setAccessibleName(QStringLiteral("编辑笔迹样式"));
+        setText(label);
+        setToolTip(description);
+        setAccessibleName(description);
         setMinimumSize(44, 32);
         setFocusPolicy(Qt::TabFocus);
+        hide();
     }
 
 protected:
@@ -224,7 +220,7 @@ protected:
     {
         event->accept();
         if (event->type() == QEvent::TabletPress)
-            m_penPressed = !m_touchPressed && event->button() == Qt::LeftButton
+            m_penPressed = event->button() == Qt::LeftButton
                 && event->pointingDevice()->pointerType() != QPointingDevice::PointerType::Eraser;
         if (event->type() == QEvent::TabletRelease) {
             const bool activate = std::exchange(m_penPressed, false) && rect().contains(event->position().toPoint());
@@ -234,37 +230,12 @@ protected:
 
     bool event(QEvent* event) override
     {
-        switch (event->type()) {
-        case QEvent::TouchBegin:
-        case QEvent::TouchUpdate:
-        case QEvent::TouchEnd:
-        case QEvent::TouchCancel: {
-            const auto* touch = static_cast<QTouchEvent*>(event);
-            const bool singleInside = touch->points().size() == 1 && rect().contains(touch->points().front().position().toPoint());
-            event->accept();
-            if (event->type() == QEvent::TouchBegin)
-                m_touchPressed = singleInside && !m_penPressed;
-            else if (event->type() == QEvent::TouchUpdate)
-                m_touchPressed &= singleInside;
-            else {
-                const bool activate = std::exchange(m_touchPressed, false) && event->type() == QEvent::TouchEnd && singleInside;
-                if (activate) click();
-            }
-            return true;
-        }
-        case QEvent::Hide:
-        case QEvent::WindowDeactivate:
-            m_penPressed = m_touchPressed = false;
-            break;
-        default:
-            break;
-        }
+        if (event->type() == QEvent::Hide || event->type() == QEvent::WindowDeactivate) m_penPressed = false;
         return QToolButton::event(event);
     }
 
 private:
     bool m_penPressed = false;
-    bool m_touchPressed = false;
 };
 } // namespace
 
@@ -274,9 +245,12 @@ InkCanvas::InkCanvas(QWidget* parent) : QWidget(parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setAccessibleName(QStringLiteral("PDF 页面和批注"));
-    m_strokeStyleButton = new StrokeStyleButton(this);
-    m_strokeStyleButton->hide();
+    m_strokeStyleButton = new SelectionActionButton(QStringLiteral("样式"), QStringLiteral("编辑笔迹的颜色、粗细和不透明度"), this);
+    m_inkCutButton = new SelectionActionButton(QStringLiteral("剪切"), QStringLiteral("剪切选中的笔迹"), this);
+    m_inkCopyButton = new SelectionActionButton(QStringLiteral("复制"), QStringLiteral("复制选中的笔迹"), this);
     connect(m_strokeStyleButton, &QToolButton::clicked, this, &InkCanvas::beginStrokeStyleEdit);
+    connect(m_inkCutButton, &QToolButton::clicked, this, &InkCanvas::inkCutRequested);
+    connect(m_inkCopyButton, &QToolButton::clicked, this, &InkCanvas::inkCopyRequested);
     qApp->installEventFilter(this);
     updateCursor();
 }
@@ -290,8 +264,10 @@ void InkCanvas::setPage(int pageIndex, const QImage& background, const QTransfor
                         const QRectF& pageRect, qreal rasterScale, const PageAnnotations& annotations)
 {
     finishActiveOperation();
-    if (pageIndex != m_pageIndex || annotations != m_annotations)
+    if (pageIndex != m_pageIndex || annotations != m_annotations) {
+        m_touchSelectionAction = nullptr;
         cancelStrokeStyleEdit();
+    }
     if (pageIndex != m_pageIndex) {
         clearSelection();
         m_textPage.reset();
@@ -321,6 +297,7 @@ void InkCanvas::setPage(int pageIndex, const QImage& background, const QTransfor
 void InkCanvas::setPageAnnotations(const PageAnnotations& annotations)
 {
     finishActiveOperation();
+    m_touchSelectionAction = nullptr;
     cancelStrokeStyleEdit();
     m_annotations = annotations;
     QSet<QUuid> valid;
@@ -329,13 +306,14 @@ void InkCanvas::setPageAnnotations(const PageAnnotations& annotations)
     for (const auto& markup : annotations.textMarkups) valid.insert(markup.id);
     m_selection.intersect(valid);
     rebuildInkCache();
-    updateStrokeStyleButton();
+    updateSelectionActions();
     Q_EMIT selectionChanged();
 }
 
 void InkCanvas::clearPage()
 {
     finishActiveOperation();
+    m_touchSelectionAction = nullptr;
     cancelStrokeStyleEdit();
     m_pageIndex = -1;
     m_background = {};
@@ -354,12 +332,13 @@ void InkCanvas::setTool(Tool tool)
 {
     if (m_tool == tool) return;
     finishActiveOperation();
+    m_touchSelectionAction = nullptr;
     cancelStrokeStyleEdit();
     m_tool = tool;
     if (tool == Tool::TextSelect)
         clearSelection();
     updateCursor();
-    updateStrokeStyleButton();
+    updateSelectionActions();
     update();
 }
 
@@ -395,12 +374,15 @@ void InkCanvas::setEditingEnabled(bool enabled)
     if (enabled == m_editingEnabled) return;
     if (!enabled && m_editingEnabled) finishActiveOperation();
     m_editingEnabled = enabled;
-    if (!enabled) cancelStrokeStyleEdit();
+    if (!enabled) {
+        m_touchSelectionAction = nullptr;
+        cancelStrokeStyleEdit();
+    }
     updateCursor();
-    updateStrokeStyleButton();
+    updateSelectionActions();
 }
 
-bool InkCanvas::hasActiveGesture() const { return m_gesture != Gesture::None || m_editor || m_strokeStyleDialog; }
+bool InkCanvas::hasActiveGesture() const { return m_gesture != Gesture::None || m_editor || m_strokeStyleDialog || m_touchSelectionAction; }
 
 void InkCanvas::setTextPage(const std::shared_ptr<const PdfTextPage>& text)
 {
@@ -434,7 +416,7 @@ void InkCanvas::setVisibleCanvasRect(const QRect& visibleRect)
     if (visibleRect == m_visibleCanvasRect) return;
     m_visibleCanvasRect = visibleRect;
     if (!m_visibleCanvasRect.intersects(rect())) cancelStrokeStyleEdit();
-    updateStrokeStyleButton();
+    updateSelectionActions();
 }
 
 QSizeF InkCanvas::imageSize() const
@@ -449,7 +431,7 @@ void InkCanvas::updateExtent()
     m_imageScale = m_zoom / m_rasterScale;
     resize(sizeHint());
     positionEditor();
-    updateStrokeStyleButton();
+    updateSelectionActions();
     updateGeometry();
     update();
 }
@@ -507,7 +489,11 @@ void InkCanvas::rebuildInkCache()
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setWorldTransform(m_pdfToImage);
     for (const auto& markup : m_annotations.textMarkups) paintTextMarkup(painter, markup);
-    for (const auto& stroke : m_annotations.strokes) paintInkStroke(painter, stroke);
+    qsizetype previewIndex = 0;
+    for (const auto& stroke : m_annotations.strokes) {
+        const bool preview = !m_inkTransformPreview.isEmpty() && m_selection.contains(stroke.id);
+        paintInkStroke(painter, preview ? m_inkTransformPreview[previewIndex++] : stroke);
+    }
     for (const auto& text : m_annotations.textBoxes) {
         if (!m_editor || text.id != m_editTextId) paintTextBox(painter, text);
     }
@@ -554,8 +540,21 @@ void InkCanvas::paintEvent(QPaintEvent*)
     if (m_gesture == Gesture::Marquee || m_gesture == Gesture::TextFrame)
         painter.drawRect(pdfToWidget().mapRect(QRectF(m_gestureStart, m_gestureEnd).normalized()));
     if (!m_selection.isEmpty()) {
-        painter.drawRect(pdfToWidget().mapRect(selectionBounds()));
-        if (m_selection.size() == 1) {
+        const bool inkHandles = hasInkSelection() && (m_gesture == Gesture::None ||
+            m_gesture == Gesture::InkScale || m_gesture == Gesture::InkRotate);
+        const QRectF frame = inkHandles ? inkTransformFrame() : pdfToWidget().mapRect(selectionBounds());
+        if (m_inkTransformRejected) painter.setPen(QPen(QColor("#b14838"), 1.3, Qt::DashLine));
+        painter.drawRect(frame);
+        if (inkHandles) {
+            painter.setPen(QPen(QColor("#2674d9"), 1.3));
+            painter.setBrush(Qt::white);
+            for (const auto& corner : rectCorners(frame))
+                painter.drawRect(QRectF(corner - QPointF(4.5, 4.5), QSizeF(9, 9)));
+            const QPointF handle = inkRotationHandle(frame);
+            const qreal edge = handle.y() < frame.top() ? frame.top() : frame.bottom();
+            painter.drawLine(QPointF(handle.x(), edge), handle);
+            painter.drawEllipse(handle, 6, 6);
+        } else if (m_selection.size() == 1) {
             for (const auto& text : m_annotations.textBoxes) {
                 if (!m_selection.contains(text.id)) continue;
                 painter.setBrush(Qt::white);
@@ -574,9 +573,46 @@ void InkCanvas::paintEvent(QPaintEvent*)
 void InkCanvas::clearSelection()
 {
     if (m_selection.isEmpty()) return;
+    m_touchSelectionAction = nullptr;
+    if (m_gesture == Gesture::InkScale || m_gesture == Gesture::InkRotate)
+        finishInkTransform(FinishReason::ForcedCommit);
     m_selection.clear();
     cancelStrokeStyleEdit();
-    updateStrokeStyleButton();
+    updateSelectionActions();
+    Q_EMIT selectionChanged();
+    update();
+}
+
+bool InkCanvas::hasInkSelection() const
+{
+    if (!m_editingEnabled || m_pageIndex < 0 || m_background.isNull() || m_tool != Tool::Select || m_selection.isEmpty())
+        return false;
+    return std::count_if(m_annotations.strokes.cbegin(), m_annotations.strokes.cend(), [this](const InkStroke& stroke) {
+        return m_selection.contains(stroke.id);
+    }) == m_selection.size();
+}
+
+QVector<InkStroke> InkCanvas::selectedInkStrokes() const
+{
+    QVector<InkStroke> result;
+    if (!hasInkSelection()) return result;
+    result.reserve(m_selection.size());
+    for (const auto& stroke : m_annotations.strokes) {
+        if (m_selection.contains(stroke.id)) result.append(stroke);
+    }
+    return result;
+}
+
+void InkCanvas::selectInkStrokes(const QSet<QUuid>& ids)
+{
+    if (!m_editingEnabled || m_pageIndex < 0 || m_background.isNull() || m_tool != Tool::Select || hasActiveGesture()) return;
+    QSet<QUuid> valid;
+    for (const auto& stroke : m_annotations.strokes) {
+        if (ids.contains(stroke.id)) valid.insert(stroke.id);
+    }
+    if (valid == m_selection) return;
+    m_selection = std::move(valid);
+    updateSelectionActions();
     Q_EMIT selectionChanged();
     update();
 }
@@ -591,31 +627,61 @@ const InkStroke* InkCanvas::selectedInkStroke() const
     return stroke == m_annotations.strokes.cend() ? nullptr : &*stroke;
 }
 
-void InkCanvas::updateStrokeStyleButton()
+void InkCanvas::updateSelectionActions()
 {
-    const InkStroke* stroke = selectedInkStroke();
-    if (!stroke || m_gesture != Gesture::None || m_editor || m_strokeStyleDialog || m_externalPenContact) {
+    const auto hideActions = [this] {
         m_strokeStyleButton->hide();
+        m_inkCutButton->hide();
+        m_inkCopyButton->hide();
+    };
+    if (m_gesture != Gesture::None || m_editor || m_strokeStyleDialog || m_externalPenContact || !hasInkSelection()) {
+        hideActions();
         return;
     }
 
     const QRect visible = m_visibleCanvasRect.intersected(rect());
     const QRect available = visible.adjusted(6, 6, -6, -6);
-    const QSize buttonSize = m_strokeStyleButton->sizeHint().expandedTo(m_strokeStyleButton->minimumSize());
-    const QRectF selection = pdfToWidget().mapRect(strokeBounds(*stroke));
-    const QRectF visibleSelection = selection.intersected(QRectF(visible));
-    if (available.width() < buttonSize.width() || available.height() < buttonSize.height() || visibleSelection.isEmpty()) {
-        m_strokeStyleButton->hide();
+    const QRectF frame = inkTransformFrame();
+    const QRectF visibleFrame = frame.intersected(QRectF(visible));
+    QVector<QToolButton*> actions{m_inkCutButton, m_inkCopyButton};
+    if (m_selection.size() == 1) actions.prepend(m_strokeStyleButton);
+    else m_strokeStyleButton->hide();
+
+    constexpr int gap = 3;
+    QSize buttonSize;
+    for (const auto* button : std::as_const(actions))
+        buttonSize = buttonSize.expandedTo(button->sizeHint().expandedTo(button->minimumSize()));
+    const int count = int(actions.size());
+    const int rowWidth = count * (buttonSize.width() + gap) - gap;
+    const bool horizontal = rowWidth <= available.width();
+    const QSize extent = horizontal ? QSize(rowWidth, buttonSize.height()) : QSize(buttonSize.width(), count * (buttonSize.height() + gap) - gap);
+    if (extent.width() > available.width() || extent.height() > available.height() || visibleFrame.isEmpty()) {
+        hideActions();
         return;
     }
 
-    const int maxX = available.x() + available.width() - buttonSize.width();
-    const int maxY = available.y() + available.height() - buttonSize.height();
-    const int x = std::clamp(qRound(visibleSelection.right()) - buttonSize.width(), available.x(), maxX);
-    const int above = qRound(visibleSelection.top()) - buttonSize.height() - 5;
-    const int y = above >= available.y() ? above : std::clamp(qRound(visibleSelection.bottom()) + 5, available.y(), maxY);
-    m_strokeStyleButton->setGeometry(QRect(QPoint(x, y), buttonSize));
-    m_strokeStyleButton->show();
+    const int maxX = available.x() + available.width() - extent.width();
+    const int maxY = available.y() + available.height() - extent.height();
+    const auto rotate = inkRotationHandle(frame);
+    const int below = qRound(std::max(visibleFrame.bottom(), rotate.y())) + 14;
+    const int above = qRound(std::min(visibleFrame.top(), rotate.y())) - extent.height() - 14;
+    const int x = std::clamp(qRound(visibleFrame.right()) - extent.width(), available.x(), maxX);
+    const int y = below <= maxY ? std::max(below, available.y()) : std::clamp(above, available.y(), maxY);
+    QPoint position(x, y);
+    const QPoint step = horizontal ? QPoint(buttonSize.width() + gap, 0) : QPoint(0, buttonSize.height() + gap);
+    for (auto* button : std::as_const(actions)) {
+        button->setGeometry(QRect(position, buttonSize));
+        button->show();
+        position += step;
+    }
+}
+
+QToolButton* InkCanvas::selectionActionAt(const QPointF& position) const
+{
+    for (auto* button : {m_strokeStyleButton, m_inkCutButton, m_inkCopyButton}) {
+        if (button->isVisible() && button->isEnabled() && button->geometry().contains(position.toPoint())) return button;
+    }
+    return nullptr;
 }
 
 void InkCanvas::beginStrokeStyleEdit()
@@ -703,11 +769,11 @@ void InkCanvas::beginStrokeStyleEdit()
                 return;
             }
         }
-        updateStrokeStyleButton();
+        updateSelectionActions();
         Q_EMIT operationFinished();
     });
 
-    const QRectF strokeRect = pdfToWidget().mapRect(strokeBounds(original));
+    const QRectF strokeRect = pdfToWidget().mapRect(inkStrokeBounds(original));
     const QRectF visible = strokeRect.intersected(QRectF(m_visibleCanvasRect));
     const QPoint anchor = m_strokeStyleButton->isVisible() ? m_strokeStyleButton->mapToGlobal(QPoint(0, m_strokeStyleButton->height()))
         : mapToGlobal((visible.isEmpty() ? strokeRect.center() : visible.center()).toPoint());
@@ -721,7 +787,7 @@ void InkCanvas::beginStrokeStyleEdit()
         dialog->move(std::clamp(anchor.x(), area.x(), maxX), std::clamp(anchor.y() + 8, area.y(), maxY));
     }
     m_strokeStyleDialog = dialog;
-    updateStrokeStyleButton();
+    updateSelectionActions();
     dialog->open();
 }
 
@@ -733,7 +799,7 @@ void InkCanvas::cancelStrokeStyleEdit()
 QRectF InkCanvas::objectBounds(const QUuid& id) const
 {
     for (const auto& stroke : m_annotations.strokes)
-        if (stroke.id == id) return strokeBounds(stroke);
+        if (stroke.id == id) return inkStrokeBounds(stroke);
     for (const auto& text : m_annotations.textBoxes)
         if (text.id == id) return text.rect;
     for (const auto& markup : m_annotations.textMarkups)
@@ -744,8 +810,126 @@ QRectF InkCanvas::objectBounds(const QUuid& id) const
 QRectF InkCanvas::selectionBounds() const
 {
     QRectF result;
-    for (const auto& id : m_selection) result = result.united(objectBounds(id));
+    if (!m_inkTransformPreview.isEmpty()) {
+        for (const auto& stroke : m_inkTransformPreview) result = result.united(inkStrokeBounds(stroke));
+        return result;
+    }
+    for (const auto& stroke : m_annotations.strokes) {
+        if (m_selection.contains(stroke.id)) result = result.united(inkStrokeBounds(stroke));
+    }
+    for (const auto& text : m_annotations.textBoxes) {
+        if (m_selection.contains(text.id)) result = result.united(text.rect);
+    }
+    for (const auto& markup : m_annotations.textMarkups) {
+        if (m_selection.contains(markup.id)) result = result.united(textMarkupBounds(markup));
+    }
     return result;
+}
+
+QRectF InkCanvas::inkTransformFrame() const
+{
+    const QRectF frame = pdfToWidget().mapRect(selectionBounds());
+    const qreal padX = std::max(qreal(3), (40 - frame.width()) / 2);
+    const qreal padY = std::max(qreal(3), (40 - frame.height()) / 2);
+    return frame.adjusted(-padX, -padY, padX, padY);
+}
+
+QPointF InkCanvas::inkRotationHandle(const QRectF& frame) const
+{
+    constexpr qreal offset = 23;
+    const QRect visible = m_visibleCanvasRect.intersected(rect());
+    const qreal above = frame.top() - offset;
+    return {frame.center().x(), above >= visible.top() + 8 ? above : frame.bottom() + offset};
+}
+
+bool InkCanvas::beginInkTransform(const QPointF& position, Source source)
+{
+    if (!hasInkSelection()) return false;
+    const QRectF frame = inkTransformFrame();
+    const qreal targetRadius = source == Source::Touch ? 15 : 9;
+    const QRectF bounds = selectionBounds();
+    if (QLineF(position, inkRotationHandle(frame)).length() <= targetRadius) {
+        m_gesture = Gesture::InkRotate;
+        m_inkTransformPivot = bounds.center();
+    } else {
+        const auto handles = rectCorners(frame);
+        const auto hit = std::find_if(handles.begin(), handles.end(), [&position, targetRadius](const QPointF& point) {
+            return QLineF(position, point).length() <= targetRadius;
+        });
+        if (hit == handles.end()) return false;
+        const auto corners = rectCorners(pdfToWidget().mapRect(bounds));
+        const size_t opposite = (size_t(hit - handles.begin()) + 2) % corners.size();
+        m_gesture = Gesture::InkScale;
+        m_inkTransformPivot = pdfPointAt(corners[opposite]);
+    }
+
+    m_inkTransformStart = pdfPointAt(position) - m_inkTransformPivot;
+    m_beforeGesture = m_annotations;
+    m_selectionBeforeGesture = m_selection;
+    for (const auto& stroke : m_annotations.strokes) {
+        if (!m_selection.contains(stroke.id)) continue;
+        m_focusId = stroke.id;
+        break;
+    }
+    return true;
+}
+
+void InkCanvas::updateInkTransform(const QPointF& position, Qt::KeyboardModifiers modifiers)
+{
+    const QPointF direction = pdfPointAt(position) - m_inkTransformPivot;
+    const qreal dot = QPointF::dotProduct(m_inkTransformStart, direction);
+    qreal scale = 1;
+    qreal angle = 0;
+    if (m_gesture == Gesture::InkScale) {
+        const qreal distanceSquared = QPointF::dotProduct(m_inkTransformStart, m_inkTransformStart);
+        scale = distanceSquared > 0 ? dot / distanceSquared : 0;
+    } else {
+        const qreal cross = m_inkTransformStart.x() * direction.y() - m_inkTransformStart.y() * direction.x();
+        angle = std::atan2(cross, dot);
+        if (modifiers.testFlag(Qt::ShiftModifier)) {
+            constexpr qreal step = std::numbers::pi_v<qreal> / 12;
+            angle = std::round(angle / step) * step;
+        }
+    }
+
+    m_inkTransformRejected = !std::isfinite(scale) || scale <= 0 || !std::isfinite(angle);
+    QVector<InkStroke> candidate;
+    const bool changed = std::abs(scale - 1) > 1e-9 || std::abs(angle) > 1e-9;
+    if (changed && !m_inkTransformRejected) {
+        const qreal sine = std::sin(angle);
+        const qreal cosine = std::cos(angle);
+        const QRectF allowed = m_pageRect.adjusted(-1e-7, -1e-7, 1e-7, 1e-7);
+        candidate.reserve(m_selection.size());
+        for (const auto& original : m_beforeGesture.strokes) {
+            if (!m_selection.contains(original.id)) continue;
+            InkStroke stroke = original;
+            stroke.widthPt *= scale;
+            if (stroke.widthPt < MinInkStrokeWidthPt || stroke.widthPt > MaxInkStrokeWidthPt) {
+                m_inkTransformRejected = true;
+                break;
+            }
+            for (auto& point : stroke.points) {
+                const QPointF delta = (point.position - m_inkTransformPivot) * scale;
+                point.position = m_inkTransformPivot + QPointF(cosine * delta.x() - sine * delta.y(),
+                    sine * delta.x() + cosine * delta.y());
+                if (!std::isfinite(point.position.x()) || !std::isfinite(point.position.y()) ||
+                    std::abs(point.position.x()) > MaxInkCoordinate || std::abs(point.position.y()) > MaxInkCoordinate) {
+                    m_inkTransformRejected = true;
+                    break;
+                }
+            }
+            if (m_inkTransformRejected || !allowed.contains(inkStrokeBounds(stroke))) {
+                m_inkTransformRejected = true;
+                break;
+            }
+            candidate.append(std::move(stroke));
+        }
+    }
+
+    if (m_inkTransformRejected) candidate.clear();
+    if (candidate == m_inkTransformPreview) return;
+    m_inkTransformPreview = std::move(candidate);
+    rebuildInkCache();
 }
 
 QUuid InkCanvas::textAt(const QPointF& point) const
@@ -801,7 +985,14 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     if (forcePan || (!followsTool && m_tool != Tool::Select) || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
         m_gesture = Gesture::Pan;
         updateCursor();
-        updateStrokeStyleButton();
+        updateSelectionActions();
+        return;
+    }
+    if (followsTool && !tailEraser && beginInkTransform(position, source)) {
+        setFocus(Qt::MouseFocusReason);
+        updateCursor();
+        updateSelectionActions();
+        update();
         return;
     }
     if (!insidePaper(position)) { m_source = Source::None; return; }
@@ -862,7 +1053,7 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
         m_gesture = Gesture::TextFrame;
     }
     updateCursor();
-    updateStrokeStyleButton();
+    updateSelectionActions();
     update();
 }
 
@@ -930,7 +1121,7 @@ void InkCanvas::addPoint(const QPointF& position, qreal pressure)
     m_pendingStroke.points.append(point);
 }
 
-void InkCanvas::pointerMove(const QPointF& position, const QPointF& global, qreal pressure)
+void InkCanvas::pointerMove(const QPointF& position, const QPointF& global, qreal pressure, Qt::KeyboardModifiers modifiers)
 {
     m_hoverPosition = position;
     if (m_gesture == Gesture::Pan) {
@@ -948,11 +1139,13 @@ void InkCanvas::pointerMove(const QPointF& position, const QPointF& global, qrea
         m_previousErasePoint = next;
     } else if (m_gesture == Gesture::TextSelection) {
         updateTextSelection(position);
+    } else if (m_gesture == Gesture::InkScale || m_gesture == Gesture::InkRotate) {
+        updateInkTransform(position, modifiers);
     } else if (m_gesture == Gesture::Move) {
         const QRectF bounds = [&] {
             QRectF result;
             for (const auto& stroke : m_beforeGesture.strokes)
-                if (m_selection.contains(stroke.id)) result = result.united(inkStrokeOutline(stroke).boundingRect());
+                if (m_selection.contains(stroke.id)) result = result.united(inkStrokeBounds(stroke));
             for (const auto& text : m_beforeGesture.textBoxes)
                 if (m_selection.contains(text.id)) result = result.united(text.rect);
             return result;
@@ -1022,13 +1215,15 @@ void InkCanvas::resetGesture()
     m_tailEraser = false;
     m_resizeCorner = -1;
     m_pendingStroke = {};
+    m_inkTransformPreview.clear();
+    m_inkTransformRejected = false;
     m_beforeGesture = {};
     m_selectionBeforeGesture.clear();
     m_textFirstGlyph = -1;
     m_textLastGlyph = -1;
     m_textPreview = {};
     updateCursor();
-    updateStrokeStyleButton();
+    updateSelectionActions();
 }
 
 void InkCanvas::commit(const PageAnnotations& before, const QString& reason, const QUuid& focusId,
@@ -1047,23 +1242,50 @@ void InkCanvas::commit(const PageAnnotations& before, const QString& reason, con
         Q_EMIT annotationsCommitted(m_pageIndex, before, after, reason, focusId);
         if (normalCompletion) Q_EMIT normalToolCompleted(completedTool, reason);
     }
-    updateStrokeStyleButton();
+    updateSelectionActions();
     Q_EMIT operationFinished();
     update();
 }
 
-void InkCanvas::pointerRelease(const QPointF& position, qreal pressure)
+void InkCanvas::pointerRelease(const QPointF& position, qreal pressure, Qt::KeyboardModifiers modifiers)
 {
     if (m_gesture == Gesture::Ink) addPoint(position, pressure);
     else if (m_gesture != Gesture::Pan && m_gesture != Gesture::None)
-        pointerMove(position, m_previousPanGlobal, pressure);
+        pointerMove(position, m_previousPanGlobal, pressure, modifiers);
     finishActiveOperation(FinishReason::NormalRelease);
 }
 
 void InkCanvas::finishGesture()
 {
+    m_touchSelectionAction = nullptr;
     cancelStrokeStyleEdit();
     finishActiveOperation(FinishReason::ForcedCommit);
+}
+
+void InkCanvas::finishInkTransform(FinishReason reason)
+{
+    const auto before = m_beforeGesture;
+    const auto focus = m_focusId;
+    const bool scaling = m_gesture == Gesture::InkScale;
+    const bool hadPreview = !m_inkTransformPreview.isEmpty();
+    const bool normalRelease = reason == FinishReason::NormalRelease;
+    const bool rejected = m_inkTransformRejected;
+    const bool changed = normalRelease && !rejected && hadPreview;
+    if (changed) {
+        qsizetype index = 0;
+        for (auto& stroke : m_annotations.strokes) {
+            if (m_selection.contains(stroke.id)) stroke = std::move(m_inkTransformPreview[index++]);
+        }
+    }
+    resetGesture();
+    if (changed) {
+        commit(before, scaling ? QStringLiteral("ink-scale") : QStringLiteral("ink-rotate"), focus, false, Tool::Select);
+        return;
+    }
+    if (hadPreview) rebuildInkCache();
+    if (normalRelease && rejected) Q_EMIT activity(QStringLiteral("变换超出页面边界或可保存粗细范围，未应用。"));
+    Q_EMIT operationFinished();
+    update();
 }
 
 void InkCanvas::finishActiveOperation(FinishReason finishReason)
@@ -1071,6 +1293,10 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
     if (m_editor) { finishTextEdit(false); return; }
     if (m_gesture == Gesture::None) return;
     const Gesture gesture = m_gesture;
+    if (gesture == Gesture::InkScale || gesture == Gesture::InkRotate) {
+        finishInkTransform(finishReason);
+        return;
+    }
     if (gesture == Gesture::TextSelection) {
         auto selected = std::move(m_textPreview);
         const auto releasedAt = m_textDragEnd;
@@ -1109,9 +1335,14 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
 
 void InkCanvas::cancelActiveOperation()
 {
+    m_touchSelectionAction = nullptr;
     if (m_strokeStyleDialog) { cancelStrokeStyleEdit(); return; }
     if (m_editor) { finishTextEdit(true); return; }
     if (m_gesture == Gesture::None) return;
+    if (m_gesture == Gesture::InkScale || m_gesture == Gesture::InkRotate) {
+        finishInkTransform(FinishReason::ForcedCommit);
+        return;
+    }
     if (m_gesture == Gesture::TextSelection) {
         resetGesture();
         update();
@@ -1131,6 +1362,7 @@ void InkCanvas::cancelActiveOperation()
 void InkCanvas::cancelTouchOperation()
 {
     if (m_source == Source::Touch) cancelActiveOperation();
+    m_touchSelectionAction = nullptr;
     m_touchActive = false;
     m_previousTouchCount = 0;
     m_touchNavigationOnly = false;
@@ -1145,7 +1377,7 @@ void InkCanvas::setExternalPenContact(bool down)
         m_suppressedTouch = true;
         if (m_source == Source::Touch || m_touchActive) cancelTouchOperation();
     }
-    updateStrokeStyleButton();
+    updateSelectionActions();
 }
 
 void InkCanvas::beginTextEdit(const QUuid& id, const QRectF& newRect)
@@ -1269,6 +1501,8 @@ void InkCanvas::updateCursor()
 {
     if (m_gesture == Gesture::Pan)
         setCursor(Qt::ClosedHandCursor);
+    else if (m_gesture == Gesture::InkScale || m_gesture == Gesture::InkRotate)
+        setCursor(Qt::SizeAllCursor);
     else if (m_tool == Tool::TextSelect && !m_hoverEraser)
         setCursor(Qt::IBeamCursor);
     else
@@ -1293,12 +1527,12 @@ void InkCanvas::tabletEvent(QTabletEvent* event)
         if (event->button() == Qt::LeftButton || eraser)
             pointerPress(event->position(), event->globalPosition(), pressure, Source::Pen, eraser);
     } else if (event->type() == QEvent::TabletMove) {
-        if (m_source == Source::Pen) pointerMove(event->position(), event->globalPosition(), pressure);
+        if (m_source == Source::Pen) pointerMove(event->position(), event->globalPosition(), pressure, event->modifiers());
     } else if (event->type() == QEvent::TabletRelease) {
         if (m_source == Source::Pen) {
             const qreal last = m_gesture == Gesture::Ink && !m_pendingStroke.points.isEmpty()
                 ? m_pendingStroke.points.back().pressure : pressure;
-            pointerRelease(event->position(), last);
+            pointerRelease(event->position(), last, event->modifiers());
         }
         m_tabletActive = false;
         Q_EMIT penContactChanged(false);
@@ -1322,7 +1556,7 @@ void InkCanvas::mouseMoveEvent(QMouseEvent* event)
     event->accept();
     if (m_tabletActive || m_touchActive || event->source() != Qt::MouseEventNotSynthesized) return;
     m_hoverEraser = false;
-    if (m_source == Source::Mouse) pointerMove(event->position(), event->globalPosition(), 0.6);
+    if (m_source == Source::Mouse) pointerMove(event->position(), event->globalPosition(), 0.6, event->modifiers());
     else { m_hoverPosition = event->position(); update(); }
 }
 
@@ -1331,7 +1565,7 @@ void InkCanvas::mouseReleaseEvent(QMouseEvent* event)
     event->accept();
     if (!m_tabletActive && !m_touchActive && event->source() == Qt::MouseEventNotSynthesized &&
         m_source == Source::Mouse && (event->button() == Qt::LeftButton || event->button() == Qt::MiddleButton))
-        pointerRelease(event->position(), 0.6);
+        pointerRelease(event->position(), 0.6, event->modifiers());
 }
 
 void InkCanvas::mouseDoubleClickEvent(QMouseEvent* event)
@@ -1356,7 +1590,7 @@ void InkCanvas::contextMenuEvent(QContextMenuEvent* event)
     const InkStroke* selected = selectedInkStroke();
     if (!selected || hasActiveGesture() || hasPointerContact() || m_externalPenContact
         || (!keyboard &&
-            !pdfToWidget().mapRect(strokeBounds(*selected)).adjusted(-4, -4, 4, 4).contains(event->pos()))) {
+            !pdfToWidget().mapRect(inkStrokeBounds(*selected)).adjusted(-4, -4, 4, 4).contains(event->pos()))) {
         event->ignore();
         return;
     }
@@ -1382,6 +1616,7 @@ bool InkCanvas::event(QEvent* event)
         if (event->type() == QEvent::TouchBegin && !m_externalPenContact && !m_tabletActive)
             m_suppressedTouch = false;
         if (m_externalPenContact || m_tabletActive || m_suppressedTouch) {
+            m_touchSelectionAction = nullptr;
             m_suppressedTouch = event->type() != QEvent::TouchEnd && event->type() != QEvent::TouchCancel;
             if (!m_suppressedTouch) {
                 m_touchActive = false;
@@ -1391,32 +1626,35 @@ bool InkCanvas::event(QEvent* event)
             return true;
         }
         if (event->type() == QEvent::TouchCancel) {
-            if (m_source == Source::Touch) cancelActiveOperation();
-            m_touchActive = false;
-            m_previousTouchCount = 0;
-            m_touchNavigationOnly = false;
-            Q_EMIT operationFinished();
+            cancelTouchOperation();
             return true;
         }
         if (m_tabletActive || m_source == Source::Pen) return true;
         QVector<QPointF> globals;
         QPointF released;
+        QPointF releasedGlobal;
         for (const auto& point : touch->points()) {
             released = point.position();
+            releasedGlobal = point.globalPosition();
             if (point.state() != QEventPoint::State::Released) globals.append(point.globalPosition());
             if (globals.size() == 2) break;
         }
         if (event->type() == QEvent::TouchEnd || globals.isEmpty()) {
-            if (m_source == Source::Touch) pointerRelease(released, 0.6);
+            auto* action = std::exchange(m_touchSelectionAction, nullptr);
+            const bool tap = action && touch->points().size() == 1 && action == selectionActionAt(released)
+                && QLineF(m_touchSelectionStart, releasedGlobal).length() <= QApplication::startDragDistance();
+            if (m_source == Source::Touch) pointerRelease(released, 0.6, touch->modifiers());
             m_touchActive = false;
             m_previousTouchCount = 0;
             m_touchNavigationOnly = false;
+            if (tap) action->click();
             Q_EMIT operationFinished();
             return true;
         }
         const QPointF center = globals.size() == 2 ? (globals[0] + globals[1]) / 2 : globals[0];
         const qreal distance = globals.size() == 2 ? QLineF(globals[0], globals[1]).length() : 0;
         if (globals.size() >= 2) {
+            m_touchSelectionAction = nullptr;
             if (m_source == Source::Touch) cancelActiveOperation();
             m_touchNavigationOnly = true;
             if (m_touchActive && m_previousTouchCount == 2) {
@@ -1425,10 +1663,21 @@ bool InkCanvas::event(QEvent* event)
                     Q_EMIT zoomRequested(distance / m_previousTouchDistance, mapFromGlobal(center));
             }
         } else if (!m_touchActive || m_previousTouchCount != 1) {
-            pointerPress(mapFromGlobal(center), center, 0.6, Source::Touch, false,
-                         m_touchNavigationOnly);
+            const QPointF local = mapFromGlobal(center);
+            if (event->type() == QEvent::TouchBegin && !hasActiveGesture()) {
+                // Let the canvas own the touch stream so adding a second finger still pinches.
+                m_touchSelectionAction = selectionActionAt(local);
+                m_touchSelectionStart = center;
+            }
+            if (!m_touchSelectionAction) pointerPress(local, center, 0.6, Source::Touch, false, m_touchNavigationOnly);
+        } else if (m_touchSelectionAction) {
+            if (QLineF(m_touchSelectionStart, center).length() > QApplication::startDragDistance()) {
+                m_touchSelectionAction = nullptr;
+                m_touchNavigationOnly = true;
+                pointerPress(mapFromGlobal(center), center, 0.6, Source::Touch, false, true);
+            }
         } else if (m_source == Source::Touch) {
-            pointerMove(mapFromGlobal(center), center, 0.6);
+            pointerMove(mapFromGlobal(center), center, 0.6, touch->modifiers());
         }
         m_touchActive = true;
         m_previousTouchGlobal = center;
@@ -1437,12 +1686,14 @@ bool InkCanvas::event(QEvent* event)
         return true;
     }
     if (event->type() == QEvent::WindowDeactivate) {
+        m_touchSelectionAction = nullptr;
         if (!m_editor) finishActiveOperation();
         m_tabletActive = false;
         m_touchActive = false;
         Q_EMIT penContactChanged(false);
         Q_EMIT operationFinished();
     } else if (event->type() == QEvent::UngrabMouse) {
+        m_touchSelectionAction = nullptr;
         if (m_gesture != Gesture::None) cancelActiveOperation();
         m_tabletActive = false;
         m_touchActive = false;

@@ -166,7 +166,7 @@ bool AppPreferences::load()
     if (parse.error != QJsonParseError::NoError || !document.isObject())
         return fail(&m_error, QStringLiteral("设置文件已损坏；采用临时默认值，不覆盖原文件。"));
     const QJsonObject root = document.object();
-    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 6))
+    if (!integer(root.value(QStringLiteral("schemaVersion")), 1, 7))
         return fail(&m_error, QStringLiteral("设置版本不受支持；采用临时默认值，不覆盖原文件。"));
     QStringList rootKeys{QStringLiteral("schemaVersion"), QStringLiteral("theme"), QStringLiteral("sidebarVisible"), QStringLiteral("sidebarWidth"),
                         QStringLiteral("penColor"), QStringLiteral("penWidthPt"), QStringLiteral("backup")};
@@ -191,7 +191,7 @@ bool AppPreferences::load()
     if (schemaVersion >= 3 &&
         (!root.value(QStringLiteral("favorites")).isArray() || !root.value(QStringLiteral("favoritesBar")).isObject() ||
          !readFavoriteTools(root.value(QStringLiteral("favorites")).toArray(), candidate.favorites, schemaVersion) ||
-         !readFavoritesBar(root.value(QStringLiteral("favoritesBar")).toObject(),candidate.favoritesBar)))
+         !readFavoritesBar(root.value(QStringLiteral("favoritesBar")).toObject(), candidate.favoritesBar, schemaVersion)))
         return fail(&m_error, QStringLiteral("工具收藏或收藏栏设置无效，原设置文件保留。"));
     candidate.theme = root.value(QStringLiteral("theme")).toString();
     candidate.sidebarVisible = root.value(QStringLiteral("sidebarVisible")).toBool();
@@ -255,7 +255,7 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                        {QStringLiteral("retainCount"), candidate.backupRetainCount},
                        {QStringLiteral("directory"), candidate.backupDirectory},
                        {QStringLiteral("knownDirectories"), directories}};
-    const QJsonObject root{{QStringLiteral("schemaVersion"), 6}, {QStringLiteral("theme"), candidate.theme},
+    const QJsonObject root{{QStringLiteral("schemaVersion"), 7}, {QStringLiteral("theme"), candidate.theme},
                            {QStringLiteral("sidebarVisible"), candidate.sidebarVisible}, {QStringLiteral("sidebarWidth"), candidate.sidebarWidth},
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
                            {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)},

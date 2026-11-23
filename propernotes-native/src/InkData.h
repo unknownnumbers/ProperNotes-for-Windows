@@ -30,6 +30,10 @@ struct InkPoint {
 
 enum class InkStrokeKind { Pen, Highlighter };
 
+inline constexpr qreal MinInkStrokeWidthPt = 0.05;
+inline constexpr qreal MaxInkStrokeWidthPt = 1000;
+inline constexpr qreal MaxInkCoordinate = 1e8;
+
 struct InkStroke {
     QUuid id = QUuid::createUuid();
     QColor color = QColor(25, 55, 95);
@@ -315,6 +319,17 @@ inline qreal strokeSampleWidth(const InkStroke& stroke, const InkPoint& point)
     const qreal pressure = std::isfinite(point.pressure)
         ? qBound(qreal(0), point.pressure, qreal(1)) : qreal(0.6);
     return stroke.widthPt * (qreal(0.25) + qreal(1.25) * pressure);
+}
+
+inline QRectF inkStrokeBounds(const InkStroke& stroke)
+{
+    QRectF bounds;
+    // A connecting segment stays inside the combined bounds of its round caps.
+    for (const auto& point : stroke.points) {
+        const qreal width = strokeSampleWidth(stroke, point);
+        bounds = bounds.united(QRectF(point.position - QPointF(width / 2, width / 2), QSizeF(width, width)));
+    }
+    return bounds;
 }
 
 // Shared by the live overlay and the PDF appearance writer. One winding fill

@@ -28,6 +28,7 @@ struct FavoritesBarPreferences {
     QString side = QStringLiteral("left");
     bool floating = false;
     QRect geometry = QRect(100, 100, 160, 480);
+    bool pinned = false;
 };
 
 FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& tools,
@@ -45,7 +46,7 @@ QJsonArray favoriteToolsJson(const QVector<FavoriteTool>& favorites);
 bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, int settingsVersion);
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& preferences);
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& preferences);
-bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& preferences);
+bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& preferences, int settingsVersion);
 
 } // namespace propernotes
 Q_DECLARE_METATYPE(propernotes::FavoriteTool)

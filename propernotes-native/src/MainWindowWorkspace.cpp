@@ -191,6 +191,7 @@ void MainWindow::closeTab(int index) {
     resolveUnsaved([this,tab]{
         const int position=int(m_tabs.indexOf(tab));if(position<0)return;
         stashActiveTab();scheduleWorkspaceSave();cancelActiveRenders();
+        if (m_inkClipboard.tabId == tab->id) m_inkClipboard = {};
         m_tabs.removeAt(position);m_activeTab=-1;clearActiveDocument();m_session=m_services;++m_documentGeneration;
         if(tab->session){const auto session=tab->session;QMetaObject::invokeMethod(m_workerContext,[session]{session->document.reset();},Qt::QueuedConnection);}
         if(!m_tabs.isEmpty())activateTab(std::min(position,int(m_tabs.size())-1));

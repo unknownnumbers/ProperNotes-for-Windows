@@ -102,6 +102,28 @@ QIcon toolIcon(const FavoriteTool& favorite)
 }
 QString literalButtonText(QString text){return text.replace(QChar('&'),QStringLiteral("&&"));}
 QString tooltip(const QString& text){return QStringLiteral("<qt>")+text.toHtmlEscaped().replace(QLatin1Char('\n'),QStringLiteral("<br>"))+QStringLiteral("</qt>");}
+QIcon positionPinIcon()
+{
+    QIcon icon;
+    for (const bool pinned : {false, true}) {
+        QPixmap pixmap(28, 28);
+        pixmap.setDevicePixelRatio(2);
+        pixmap.fill(Qt::transparent);
+        QPainter painter(&pixmap);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.translate(7, 7);
+        if (!pinned) painter.rotate(34);
+        painter.setPen(QPen(QColor(pinned ? "#387bc5" : "#718096"), 1.35,
+                            Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+        painter.drawLine(QPointF(-2.5, -4.5), QPointF(2.5, -4.5));
+        painter.drawPolyline(QPolygonF{QPointF(-1.5, -4.5), QPointF(-1.7, -1.8), QPointF(-3.1, 0.5),
+                                       QPointF(3.1, 0.5), QPointF(1.7, -1.8), QPointF(1.5, -4.5)});
+        painter.drawLine(QPointF(0, 0.5), QPointF(0, 5.2));
+        painter.end();
+        icon.addPixmap(pixmap, QIcon::Normal, pinned ? QIcon::On : QIcon::Off);
+    }
+    return icon;
+}
 bool sameRecipe(const FavoriteTool& a,const FavoriteTool& b)
 {
     if (a.markupKind || b.markupKind)
@@ -238,6 +260,12 @@ FavoritesBar::FavoritesBar(QMainWindow* parent):QDockWidget(QStringLiteral("工�
     auto* title=new QWidget;auto* titleLayout=new QHBoxLayout(title);titleLayout->setContentsMargins(4,2,4,2);
     m_collapse=new QToolButton;m_collapse->setText(QStringLiteral("▾"));m_collapse->setToolTip(QStringLiteral("折叠工具收藏"));titleLayout->addWidget(m_collapse);
     auto* label=new QLabel(QStringLiteral("收藏"));titleLayout->addWidget(label);titleLayout->addStretch();
+    m_pin = new QToolButton(title);
+    m_pin->setAutoRaise(true);
+    m_pin->setCheckable(true);
+    m_pin->setIcon(positionPinIcon());
+    m_pin->setIconSize(QSize(14, 14));
+    titleLayout->addWidget(m_pin);
     m_menu=new QToolButton;m_menu->setText(QStringLiteral("⋮"));m_menu->setToolTip(QStringLiteral("管理收藏栏"));titleLayout->addWidget(m_menu);
     auto* closeButton = new QToolButton(title);
     closeButton->setAutoRaise(true);
@@ -257,8 +285,19 @@ FavoritesBar::FavoritesBar(QMainWindow* parent):QDockWidget(QStringLiteral("工�
     setWidget(m_contents);setMinimumWidth(84);resize(160,480);
     m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
     connect(m_collapse,&QToolButton::clicked,this,[this]{auto p=m_preferences;p.collapsed=!p.collapsed;proposeLayout(p);});
+    connect(m_pin, &QToolButton::clicked, this, [this](bool pinned) {
+        m_pin->setChecked(m_preferences.pinned);
+        if (!m_writable || !m_hostAvailable || !isFloating()) return;
+        auto preferences = currentLayout();
+        preferences.pinned = pinned;
+        m_layoutTimer.stop();
+        proposeLayout(preferences);
+    });
     connect(m_menu,&QToolButton::clicked,this,[this]{showMenu(m_menu->mapToGlobal(QPoint(0,m_menu->height())));});
-    connect(this,&QDockWidget::topLevelChanged,this,[this](bool){if(!m_applying)m_layoutTimer.start();});
+    connect(this, &QDockWidget::topLevelChanged, this, [this](bool) {
+        syncPlacementControls();
+        if (!m_applying) m_layoutTimer.start();
+    });
     connect(this,&QDockWidget::dockLocationChanged,this,[this](Qt::DockWidgetArea){if(!m_applying)m_layoutTimer.start();});
     m_visibilityAction = new QAction(windowTitle(), this);
     m_visibilityAction->setCheckable(true);
@@ -293,8 +332,25 @@ void FavoritesBar::setWritable(bool writable)
 {
     if(m_writable&&!writable&&m_layoutTimer.isActive()){m_layoutTimer.stop();recordLayout();}
     m_writable=writable;m_collapse->setEnabled(writable);
-    setFeatures(writable ? DockWidgetFeatures(DockWidgetMovable|DockWidgetFloatable|DockWidgetClosable)
-                         : DockWidgetFeatures(DockWidgetClosable));
+    syncPlacementControls();
+}
+void FavoritesBar::syncPlacementControls()
+{
+    const bool floating = isFloating();
+    const bool pinned = floating && m_preferences.pinned;
+    setFeatures(m_writable && !pinned ? DockWidgetFeatures(DockWidgetMovable | DockWidgetFloatable | DockWidgetClosable)
+                                     : DockWidgetFeatures(DockWidgetClosable));
+    m_pin->setVisible(floating);
+    m_pin->setEnabled(m_writable && floating);
+    m_pin->setChecked(pinned);
+    m_pin->setToolTip(pinned ? QStringLiteral("解锁收藏栏位置") : QStringLiteral("固定收藏栏位置"));
+    m_pin->setAccessibleName(m_pin->toolTip());
+
+    // A floating QDockWidget can still move without DockWidgetMovable.
+    // Filter its chrome before Qt's drag and resize handlers. Child controls
+    // receive their events normally, and programmatic geometry is unaffected.
+    if (pinned) installEventFilter(this);
+    else removeEventFilter(this);
 }
 void FavoritesBar::setActivationEnabled(bool enabled)
 {m_activationEnabled=enabled;for(auto* button:m_buttons)button->setEnabled(enabled);}
@@ -333,8 +389,9 @@ void FavoritesBar::showMenu(const QPoint& global,const QUuid& id)
     }
     menu.addSeparator();auto* fold=menu.addAction(m_preferences.collapsed?QStringLiteral("展开收藏栏"):QStringLiteral("折叠收藏栏"));fold->setEnabled(m_writable);
     connect(fold,&QAction::triggered,this,[this]{auto p=m_preferences;p.collapsed=!p.collapsed;proposeLayout(p);});
-    for(const auto& side:QStringList{QStringLiteral("left"),QStringLiteral("right")}){auto* action=menu.addAction(side==QStringLiteral("left")?QStringLiteral("停靠左侧"):QStringLiteral("停靠右侧"));action->setEnabled(m_writable);connect(action,&QAction::triggered,this,[this,side]{auto p=m_preferences;p.side=side;p.floating=false;p.visible=true;proposeLayout(p);});}
-    auto* floating=menu.addAction(QStringLiteral("浮动收藏栏"));floating->setEnabled(m_writable);connect(floating,&QAction::triggered,this,[this]{auto p=m_preferences;p.floating=true;p.visible=true;proposeLayout(p);});
+    const bool movable = m_writable && !m_preferences.pinned;
+    for(const auto& side:QStringList{QStringLiteral("left"),QStringLiteral("right")}){auto* action=menu.addAction(side==QStringLiteral("left")?QStringLiteral("停靠左侧"):QStringLiteral("停靠右侧"));action->setEnabled(movable);connect(action,&QAction::triggered,this,[this,side]{auto p=m_preferences;p.side=side;p.floating=false;p.visible=true;proposeLayout(p);});}
+    auto* floating=menu.addAction(QStringLiteral("浮动收藏栏"));floating->setEnabled(movable);connect(floating,&QAction::triggered,this,[this]{auto p=m_preferences;p.floating=true;p.visible=true;proposeLayout(p);});
     auto* hide=menu.addAction(QStringLiteral("隐藏收藏栏"));connect(hide,&QAction::triggered,this,[this]{close();});
     menu.exec(global);
 }
@@ -388,6 +445,7 @@ void FavoritesBar::setBarPreferences(const FavoritesBarPreferences& preferences)
         m_collapse->setText(preferences.collapsed ? QStringLiteral("▸") : QStringLiteral("▾"));
         m_collapse->setToolTip(preferences.collapsed ? QStringLiteral("展开工具收藏") : QStringLiteral("折叠工具收藏"));
     }
+    syncPlacementControls();
     syncVisibility();
 }
 void FavoritesBar::proposeLayout(FavoritesBarPreferences preferences)
@@ -402,6 +460,7 @@ FavoritesBarPreferences FavoritesBar::currentLayout()
     p.visible = requestedVisible();
     if (!m_hostAvailable) return p;
     p.floating=isFloating();
+    p.pinned = p.floating && p.pinned;
     const auto area=m_mainWindow->dockWidgetArea(this);if(area==Qt::LeftDockWidgetArea)p.side=QStringLiteral("left");else if(area==Qt::RightDockWidgetArea)p.side=QStringLiteral("right");
     if(p.floating){const QRect actual=geometry();p.geometry=QRect(std::clamp(actual.x(),-100000,100000),std::clamp(actual.y(),-100000,100000),std::clamp(actual.width(),80,1200),std::clamp(actual.height(),80,1600));}
     return p;
@@ -446,6 +505,24 @@ void FavoritesBar::prepareForHostClose()
 
 bool FavoritesBar::eventFilter(QObject* watched, QEvent* event)
 {
+    if (watched == this && m_preferences.pinned && isFloating()) {
+        switch (event->type()) {
+        case QEvent::MouseButtonPress:
+        case QEvent::MouseButtonRelease:
+        case QEvent::MouseButtonDblClick:
+            if (static_cast<QMouseEvent*>(event)->button() != Qt::LeftButton) break;
+            [[fallthrough]];
+        case QEvent::MouseMove:
+        case QEvent::NonClientAreaMouseButtonPress:
+        case QEvent::NonClientAreaMouseButtonRelease:
+        case QEvent::NonClientAreaMouseButtonDblClick:
+        case QEvent::NonClientAreaMouseMove:
+            event->accept();
+            return true;
+        default:
+            break;
+        }
+    }
     if (watched == m_mainWindow && !m_hostClosing) {
         const auto type = event->type();
         if (type == QEvent::Hide || type == QEvent::Show || type == QEvent::WindowStateChange) {

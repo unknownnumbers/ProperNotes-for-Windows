@@ -4,6 +4,21 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+In **Select / Move** (框选 / 移动), select one or more pen or freehand highlighter
+strokes. Drag a corner to scale the selection and its stroke widths together.
+Drag the rotation handle to rotate about the selection center. Hold Shift to snap
+to 15° increments. Use the pen, or enable **Mouse & Touch Follow Tool** to drag
+these handles with a mouse or one finger.
+
+Use **Cut** or **Copy** beside the selection and **Paste Ink** (粘贴笔迹) in the tools
+toolbar. Ctrl+X, Ctrl+C and Ctrl+V are also available. Paste into the current page
+of the same open PDF. The new selection keeps its size and appears near the middle
+of the visible page, adjusted to stay within the page. Each completed transform,
+cut or paste can be undone. Save the PDF and reopen it to keep editing.
+
+The floating favorites bar has a pin button. Pin it where you want it, and unlock
+it before dragging it again. The position and pin state are restored on restart.
+
 With **Mouse & Touch Follow Tool** off, use the mouse or one finger to pan,
 drag in **Select Text** for manual selection, or drag in **Select / Move** to select and
 move existing annotations. Turn on the switch to draw, erase or apply a review tool
@@ -112,6 +127,10 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+在「框选 / 移动」中選取普通筆跡或自由螢光筆跡，拖曳角點可等比縮放並同步調整線寬，拖曳旋轉把手可繞選區中心旋轉，按住 Shift 可每 15° 吸附。可用手寫筆拖曳，滑鼠或單指拖曳需開啟「鼠标与手跟随工具」。
+
+可點選區旁的「剪切」「复制」，再於同一份 PDF 的目標頁點工具列上的「粘贴笔迹」。也支援 Ctrl+X、Ctrl+C、Ctrl+V。副本保留大小並置於目前頁面可見區域附近，完成後仍選取副本。變換、剪下和貼上各可復原，儲存後重開 PDF 可繼續編輯。浮動收藏欄可按圖釘固定，重啟後恢復位置和固定狀態。
+
 關閉「鼠标与手跟随工具」時，可用滑鼠左鍵或單指平移、在「选文字」模式手動選字，或在「框选 / 移动」模式選取和移動既有批注。若要用滑鼠或單指繪製、擦除或拖選後自動加審閱標記，請開啟開關。工具列、收藏欄及選區旁的「样式」按鈕可直接點擊。
 
 點「選文字」後在同一頁拖選，Ctrl+C 複製。0.3.3 在頁面上方顯示高亮、底線、
@@ -161,6 +180,10 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+在「框选 / 移动」中选中普通笔迹或自由荧光笔迹，拖动角点可等比缩放并同步调整线宽，拖动旋转手柄可绕选区中心旋转，按住 Shift 可每 15° 吸附。可用手写笔拖动，鼠标或单指拖动需打开「鼠标与手跟随工具」。
+
+可点选区旁的「剪切」「复制」，再到同一份 PDF 的目标页点工具栏上的「粘贴笔迹」。也支持 Ctrl+X、Ctrl+C、Ctrl+V。副本保留大小并放在当前页可见区域中央附近，粘贴后选中新副本。变换、剪切和粘贴各可撤销，保存后重开 PDF 可继续编辑。浮动收藏栏可点图钉固定，重启后恢复位置和固定状态。
 
 关闭「鼠标与手跟随工具」时，可用鼠标左键或单指平移、在「选文字」模式手动选字，或在「框选 / 移动」模式框选和移动已有批注。要用鼠标或单指画、擦，或在拖选后自动加审阅标记，请打开开关。工具栏、收藏栏和选区旁的「样式」按钮可以直接点击。
 

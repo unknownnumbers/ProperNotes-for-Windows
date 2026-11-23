@@ -66,6 +66,17 @@ void MainWindow::buildUi() {
     m_highlighterAction->setToolTip(QStringLiteral("直接在 PDF 页面上划线，扫描页也可用。"));
     m_eraserAction=addTool(QStringLiteral("橡皮"),InkCanvas::Tool::ObjectEraser);
     m_selectAction=addTool(QStringLiteral("框选 / 移动"),InkCanvas::Tool::Select);
+    m_pasteInkAction = tools->addAction(QStringLiteral("粘贴笔迹"));
+    m_pasteInkAction->setShortcut(QKeySequence::Paste);
+    m_pasteInkAction->setToolTip(QStringLiteral("粘贴笔迹到当前页（Ctrl+V）"));
+    connect(m_pasteInkAction, &QAction::triggered, this, &MainWindow::pasteInk);
+    m_cutInkAction = new QAction(QStringLiteral("剪切笔迹"), this);
+    m_copyInkAction = new QAction(QStringLiteral("复制笔迹"), this);
+    m_cutInkAction->setShortcut(QKeySequence::Cut);
+    m_copyInkAction->setShortcut(QKeySequence::Copy);
+    addActions({m_cutInkAction, m_copyInkAction});
+    connect(m_cutInkAction, &QAction::triggered, this, [this] { copySelectedInk(true); });
+    connect(m_copyInkAction, &QAction::triggered, this, [this] { copySelectedInk(false); });
     m_textAction=addTool(QStringLiteral("文字框"),InkCanvas::Tool::TextBox);
     m_panAction=addTool(QStringLiteral("平移"),InkCanvas::Tool::Pan);
     m_penAction->setChecked(true);
@@ -180,6 +191,8 @@ void MainWindow::buildUi() {
     connect(m_view,&DocumentView::currentPageChanged,this,[this](int p){m_currentPage=p;m_targetPage=p;updateUi();m_sidebarPreviewTimer->start();});
     connect(m_view,&DocumentView::viewStateChanged,this,&MainWindow::viewChanged);
     connect(m_view,&DocumentView::textEditingChanged,this,[this](bool){updateUi();});connect(m_view,&DocumentView::selectionChanged,this,[this]{updateUi();});
+    connect(m_view, &DocumentView::inkCutRequested, this, [this] { copySelectedInk(true); });
+    connect(m_view, &DocumentView::inkCopyRequested, this, [this] { copySelectedInk(false); });
     connect(m_view,&DocumentView::activity,this,[this](const QString& s){statusBar()->showMessage(s,8000);});
     applyPreferences(m_preferences);
 }

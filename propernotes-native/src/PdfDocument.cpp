@@ -204,7 +204,7 @@ void validateStroke(const InkStroke& stroke)
 {
     if (stroke.id.isNull() || !stroke.color.isValid()
         || (stroke.kind != InkStrokeKind::Pen && stroke.kind != InkStrokeKind::Highlighter)
-        || !std::isfinite(stroke.widthPt) || stroke.widthPt < 0.05 || stroke.widthPt > 1000
+        || !std::isfinite(stroke.widthPt) || stroke.widthPt < MinInkStrokeWidthPt || stroke.widthPt > MaxInkStrokeWidthPt
         || stroke.points.isEmpty() || stroke.points.size() > MaxStrokePoints)
         fail(QStringLiteral("笔迹包含无效 ID, 颜色, 笔宽或采样数量."));
     for (const auto& point : stroke.points) {

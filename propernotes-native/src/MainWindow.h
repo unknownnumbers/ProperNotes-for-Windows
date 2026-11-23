@@ -82,6 +82,11 @@ private:
     void fitWidth();
     void commitAnnotations(int page, const PageAnnotations& before, const PageAnnotations& after, const QString& reason, const QUuid& focus);
     void editHistory(bool redo);
+    void copySelectedInk(bool cut);
+    void pasteInk();
+    void updateInkClipboardUi();
+    bool inkClipboardAvailable() const;
+    bool canUseInkClipboard() const;
     void chooseTool(InkCanvas::Tool tool, bool userChoice = true);
     void toolCompleted(InkCanvas::Tool tool, const QString& reason);
     void updateToolUi();
@@ -157,6 +162,9 @@ private:
     QAction* m_forwardAction = nullptr;
     QAction* m_overviewAction = nullptr;
     QAction* m_selectAction = nullptr;
+    QAction* m_cutInkAction = nullptr;
+    QAction* m_copyInkAction = nullptr;
+    QAction* m_pasteInkAction = nullptr;
     QAction* m_textAction = nullptr;
     QAction* m_followAction = nullptr;
     QAction* m_lockAction = nullptr;
@@ -201,6 +209,12 @@ private:
     struct EditRecord { int page; PageAnnotations before; PageAnnotations after; QString reason; QUuid focus; qsizetype bytes; };
     QVector<EditRecord> m_editUndo;
     QVector<EditRecord> m_editRedo;
+    struct InkClipboard {
+        quint64 tabId = 0;
+        int sourcePage = -1;
+        QVector<InkStroke> strokes;
+    };
+    InkClipboard m_inkClipboard;
     struct TabState {
         quint64 id = 0;
         std::shared_ptr<DocumentSession> session;

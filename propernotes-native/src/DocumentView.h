@@ -33,6 +33,10 @@ public:
         ZoomMode zoomMode = ZoomMode::FitWidth;
         bool valid = false;
     };
+    struct InkSelection {
+        int page = -1;
+        QVector<InkStroke> strokes;
+    };
 
     explicit DocumentView(QWidget* parent = nullptr);
     void setDocument(const QVector<PageGeometry>& pages, const QMap<int, PageAnnotations>& annotations);
@@ -72,6 +76,10 @@ public:
     bool hasActiveGesture() const;
     bool isTextEditing() const;
     void clearSelection();
+    bool hasSelectedInk() const;
+    InkSelection selectedInk() const;
+    QPointF visiblePageCenterPdf(int page) const;
+    void selectPageInk(int page, const QSet<QUuid>& ids);
     void deliverTextPage(int page, const std::shared_ptr<const PdfTextPage>& text);
     PdfTextSelection textSelection() const { return m_textSelection; }
     int textSelectionPage() const { return m_textSelectionPage; }
@@ -90,6 +98,8 @@ signals:
                               const propernotes::PageAnnotations& after, const QString& reason, const QUuid& focusId);
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
+    void inkCutRequested();
+    void inkCopyRequested();
     void textEditingChanged(bool editing);
     void textPageRequested(int page);
     void textSelectionChanged();
@@ -113,6 +123,9 @@ private:
     void planRasterScales();
     void requestNext();
     void applyImage(int page);
+    int inkSelectionPage() const;
+    void applyPendingInkSelection(int page);
+    void clearPendingInkSelection();
     void configureCanvas(InkCanvas* canvas);
     void updatePenContactGate();
     void trimCache();
@@ -136,6 +149,9 @@ private:
     QVector<int> m_visible;
     QMap<int, PageAnnotations> m_annotations;
     QHash<int, InkCanvas*> m_canvases;
+    int m_inkActionPage = -1;
+    int m_pendingInkPage = -1;
+    QSet<QUuid> m_pendingInkIds;
     QHash<int, CachedPage> m_cache;
     QHash<int, QString> m_errors;
     QSet<int> m_wanted;

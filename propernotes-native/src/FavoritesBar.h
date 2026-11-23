@@ -47,6 +47,7 @@ private:
     void proposeLayout(FavoritesBarPreferences preferences);
     void recordLayout();
     FavoritesBarPreferences currentLayout();
+    void syncPlacementControls();
     bool requestedVisible() const;
     void setUserVisible(bool visible);
     void syncVisibility();
@@ -57,6 +58,7 @@ private:
     QVBoxLayout* m_entriesLayout = nullptr;
     QToolButton* m_current = nullptr;
     QToolButton* m_collapse = nullptr;
+    QToolButton* m_pin = nullptr;
     QToolButton* m_menu = nullptr;
     QAction* m_visibilityAction = nullptr;
     QHash<QUuid, QToolButton*> m_buttons;

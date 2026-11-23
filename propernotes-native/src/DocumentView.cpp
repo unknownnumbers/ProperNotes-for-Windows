@@ -82,6 +82,7 @@ void DocumentView::setDocument(const QVector<PageGeometry>& pages, const QMap<in
 void DocumentView::clearDocument()
 {
     finishGesture();
+    clearPendingInkSelection();
     invalidateRequest();
     m_refreshTimer.stop();
     m_rasterRefreshTimer.stop();
@@ -117,6 +118,13 @@ void DocumentView::updatePageAnnotations(int page, const PageAnnotations& annota
     if (page < 0 || page >= m_pages.size())
         return;
     m_annotations[page] = annotations;
+    if (m_pendingInkPage == page) {
+        QSet<QUuid> surviving;
+        for (const auto& stroke : annotations.strokes)
+            if (m_pendingInkIds.contains(stroke.id)) surviving.insert(stroke.id);
+        m_pendingInkIds = std::move(surviving);
+        if (m_pendingInkIds.isEmpty()) clearPendingInkSelection();
+    }
     if (auto* canvas = m_canvases.value(page, nullptr)) {
         if (canvas->pageAnnotations() != annotations)
             canvas->setPageAnnotations(annotations);
@@ -368,6 +376,22 @@ DocumentView::ViewState DocumentView::captureAt(const QPointF& viewportPoint) co
 DocumentView::ViewState DocumentView::captureViewState() const
 { return captureAt(QPointF(viewport()->width() / 2.0, viewport()->height() / 2.0)); }
 
+QPointF DocumentView::visiblePageCenterPdf(int page) const
+{
+    if (page < 0 || page >= m_pages.size() || page >= m_pagePositions.size()) return {};
+    const auto& geometry = m_pages[page];
+    const QRectF crop = geometry.pdfRect.normalized();
+    constexpr int margin = InkCanvas::PageMargin;
+    const QRectF paper = m_pagePositions[page].adjusted(margin, margin, -margin, -margin);
+    const QRectF visible = paper.intersected(QRectF(offset(), QSizeF(viewport()->size())));
+    bool invertible = false;
+    const QTransform inverse = geometry.pdfToDisplay.inverted(&invertible);
+    if (visible.isEmpty() || !invertible) return crop.center();
+    const QPointF center = inverse.map((visible.center() - paper.topLeft()) / m_zoom);
+    return {std::clamp(center.x(), crop.left(), crop.right()),
+            std::clamp(center.y(), crop.top(), crop.bottom())};
+}
+
 void DocumentView::restoreAnchor(const ViewState& state)
 {
     if (!state.valid || state.page < 0 || state.page >= m_pagePositions.size())
@@ -532,6 +556,7 @@ void DocumentView::refreshVisible()
     if (row != m_rows.cend())
         for (int page = row->first; page <= row->last; ++page)
             desired.insert(page);
+    if (m_pendingInkPage >= 0 && !m_visible.contains(m_pendingInkPage)) clearPendingInkSelection();
     QVector<int> ordered(desired.cbegin(), desired.cend());
     const QPointF center = viewportRect.center();
     std::sort(ordered.begin(), ordered.end(), [this, center](int a, int b) {
@@ -576,7 +601,22 @@ void DocumentView::refreshVisible()
                     Q_EMIT annotationsCommitted(index, before, after, reason, focus);
                 });
             connect(canvas, &InkCanvas::normalToolCompleted, this, &DocumentView::normalToolCompleted);
-            connect(canvas, &InkCanvas::selectionChanged, this, &DocumentView::selectionChanged);
+            connect(canvas, &InkCanvas::selectionChanged, this, [this, canvas, page] {
+                if (m_canvases.value(page) != canvas) return;
+                if (m_pendingInkPage >= 0 && canvas->hasFocus() && !canvas->selectionIds().isEmpty())
+                    clearPendingInkSelection();
+                Q_EMIT selectionChanged();
+            });
+            connect(canvas, &InkCanvas::inkCutRequested, this, [this, canvas, page] {
+                if (m_canvases.value(page) != canvas) return;
+                const QScopedValueRollback<int> sourcePage(m_inkActionPage, page);
+                Q_EMIT inkCutRequested();
+            });
+            connect(canvas, &InkCanvas::inkCopyRequested, this, [this, canvas, page] {
+                if (m_canvases.value(page) != canvas) return;
+                const QScopedValueRollback<int> sourcePage(m_inkActionPage, page);
+                Q_EMIT inkCopyRequested();
+            });
             connect(canvas, &InkCanvas::textEditingChanged, this, &DocumentView::textEditingChanged);
             connect(canvas, &InkCanvas::textPageRequested, this, &DocumentView::requestTextPage);
             connect(canvas, &InkCanvas::textSelectionStarted, this, &DocumentView::clearTextSelection);
@@ -763,6 +803,7 @@ void DocumentView::applyImage(int page)
         canvas->setZoom(m_zoom);
     }
     canvas->setEditingEnabled(m_editing);
+    applyPendingInkSelection(page);
 }
 
 void DocumentView::trimCache()
@@ -937,15 +978,79 @@ bool DocumentView::isTextEditing() const
 }
 void DocumentView::clearSelection()
 {
+    clearPendingInkSelection();
     for (auto* canvas : std::as_const(m_canvases))
         canvas->clearSelection();
     clearTextSelection();
+}
+
+int DocumentView::inkSelectionPage() const
+{
+    if (!m_editing || m_tool != InkCanvas::Tool::Select) return -1;
+    if (m_inkActionPage >= 0) {
+        const auto* canvas = m_canvases.value(m_inkActionPage, nullptr);
+        return canvas && m_visible.contains(m_inkActionPage) && canvas->hasInkSelection() ? m_inkActionPage : -1;
+    }
+
+    const auto* focus = QApplication::focusWidget();
+    int selectedPage = -1;
+    bool ambiguous = false;
+    for (int page : m_visible) {
+        const auto* canvas = m_canvases.value(page, nullptr);
+        if (!canvas) continue;
+        if (canvas == focus || (focus && canvas->isAncestorOf(focus)))
+            return canvas->hasInkSelection() ? page : -1;
+        if (!canvas->selectionIds().isEmpty()) {
+            ambiguous = ambiguous || selectedPage >= 0;
+            selectedPage = page;
+        }
+    }
+    return !ambiguous && selectedPage >= 0 && m_canvases.value(selectedPage)->hasInkSelection() ? selectedPage : -1;
+}
+
+bool DocumentView::hasSelectedInk() const { return inkSelectionPage() >= 0; }
+
+DocumentView::InkSelection DocumentView::selectedInk() const
+{
+    const int page = inkSelectionPage();
+    return page < 0 ? InkSelection{} : InkSelection{page, m_canvases.value(page)->selectedInkStrokes()};
+}
+
+void DocumentView::clearPendingInkSelection()
+{
+    m_pendingInkPage = -1;
+    m_pendingInkIds.clear();
+}
+
+void DocumentView::selectPageInk(int page, const QSet<QUuid>& ids)
+{
+    if (!m_editing || m_tool != InkCanvas::Tool::Select || page < 0 || page >= m_pages.size()) return;
+    clearSelection();
+    if (ids.isEmpty() || !m_visible.contains(page)) return;
+    m_pendingInkPage = page;
+    m_pendingInkIds = ids;
+    applyPendingInkSelection(page);
+}
+
+void DocumentView::applyPendingInkSelection(int page)
+{
+    if (page != m_pendingInkPage || !m_editing || m_tool != InkCanvas::Tool::Select
+        || !m_cache.contains(page) || !m_visible.contains(page) || hasActiveGesture()) return;
+    auto* canvas = m_canvases.value(page, nullptr);
+    if (!canvas || canvas->pageIndex() != page || !canvas->property("propernotesRenderId").toULongLong()
+        || canvas->hasPointerContact()) return;
+    const auto ids = std::exchange(m_pendingInkIds, QSet<QUuid>{});
+    m_pendingInkPage = -1;
+    const QWidget* focus = QApplication::focusWidget();
+    if (focus && (focus == this || isAncestorOf(focus))) canvas->setFocus(Qt::OtherFocusReason);
+    canvas->selectInkStrokes(ids);
 }
 
 void DocumentView::setTool(InkCanvas::Tool tool)
 {
     if (m_tool == tool)
         return;
+    clearPendingInkSelection();
     m_tool = tool;
     for (auto* canvas : std::as_const(m_canvases))
         canvas->setTool(tool);
@@ -997,6 +1102,7 @@ void DocumentView::setEditingEnabled(bool enabled)
     m_editing = enabled;
     for (auto it = m_canvases.cbegin(); it != m_canvases.cend(); ++it)
         it.value()->setEditingEnabled(enabled && m_cache.contains(it.key()));
+    if (enabled && m_pendingInkPage >= 0) applyPendingInkSelection(m_pendingInkPage);
 }
 
 } // namespace propernotes

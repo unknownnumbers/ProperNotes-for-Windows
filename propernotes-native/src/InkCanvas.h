@@ -64,6 +64,9 @@ public:
     void setExternalPenContact(bool down);
     bool isTextEditing() const { return m_editor != nullptr; }
     QSet<QUuid> selectionIds() const { return m_selection; }
+    bool hasInkSelection() const;
+    QVector<InkStroke> selectedInkStrokes() const;
+    void selectInkStrokes(const QSet<QUuid>& ids);
     void clearSelection();
     void setTextPage(const std::shared_ptr<const PdfTextPage>& text);
     void setTextSelection(const QVector<TextMarkupQuad>& quads);
@@ -81,6 +84,8 @@ signals:
                               const propernotes::PageAnnotations& after, const QString& reason, const QUuid& focusId);
     void normalToolCompleted(propernotes::InkCanvas::Tool tool, const QString& reason);
     void selectionChanged();
+    void inkCutRequested();
+    void inkCopyRequested();
     void textEditingChanged(bool editing);
     void textPageRequested(int pageIndex);
     void textSelectionStarted();
@@ -107,12 +112,12 @@ protected:
     void keyPressEvent(QKeyEvent* event) override;
 
 private:
-    enum class Gesture { None, Ink, Erase, Pan, Marquee, Move, TextFrame, TextResize, TextSelection };
+    enum class Gesture { None, Ink, Erase, Pan, Marquee, Move, InkScale, InkRotate, TextFrame, TextResize, TextSelection };
     enum class Source { None, Pen, Mouse, Touch };
     void pointerPress(const QPointF& position, const QPointF& global, qreal pressure, Source source,
                       bool tailEraser = false, bool forcePan = false);
-    void pointerMove(const QPointF& position, const QPointF& global, qreal pressure);
-    void pointerRelease(const QPointF& position, qreal pressure);
+    void pointerMove(const QPointF& position, const QPointF& global, qreal pressure, Qt::KeyboardModifiers modifiers);
+    void pointerRelease(const QPointF& position, qreal pressure, Qt::KeyboardModifiers modifiers);
     void addPoint(const QPointF& position, qreal pressure);
     void eraseBetween(const QPointF& from, const QPointF& to);
     void rebuildInkCache();
@@ -127,9 +132,15 @@ private:
     void updateTextSelection(const QPointF& position);
     void positionEditor();
     const InkStroke* selectedInkStroke() const;
-    void updateStrokeStyleButton();
+    void updateSelectionActions();
+    QToolButton* selectionActionAt(const QPointF& position) const;
     void beginStrokeStyleEdit();
     void cancelStrokeStyleEdit();
+    QRectF inkTransformFrame() const;
+    QPointF inkRotationHandle(const QRectF& frame) const;
+    bool beginInkTransform(const QPointF& position, Source source);
+    void updateInkTransform(const QPointF& position, Qt::KeyboardModifiers modifiers);
+    void finishInkTransform(FinishReason reason);
     QUuid textAt(const QPointF& pdfPoint) const;
     QSet<QUuid> objectsIn(const QRectF& pdfRect) const;
     QRectF selectionBounds() const;
@@ -197,8 +208,16 @@ private:
     QSet<QUuid> m_selection;
     QSet<QUuid> m_selectionBeforeGesture;
     InkStroke m_pendingStroke;
+    QVector<InkStroke> m_inkTransformPreview;
+    QPointF m_inkTransformPivot;
+    QPointF m_inkTransformStart;
+    bool m_inkTransformRejected = false;
     QPlainTextEdit* m_editor = nullptr;
     QToolButton* m_strokeStyleButton = nullptr;
+    QToolButton* m_inkCutButton = nullptr;
+    QToolButton* m_inkCopyButton = nullptr;
+    QToolButton* m_touchSelectionAction = nullptr;
+    QPointF m_touchSelectionStart;
     QPointer<QDialog> m_strokeStyleDialog;
     QRect m_visibleCanvasRect;
     QUuid m_editTextId;
