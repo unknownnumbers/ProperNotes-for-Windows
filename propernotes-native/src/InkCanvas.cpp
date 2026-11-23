@@ -785,12 +785,13 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     m_source = source;
     m_tailEraser = tailEraser;
     m_previousPanGlobal = global;
-    if (!forcePan && !tailEraser && m_tool == Tool::TextSelect) {
+    const bool navigate = forcePan || (source != Source::Pen && !m_touchAndMouseAnnotate);
+    if (!navigate && !tailEraser && m_tool == Tool::TextSelect) {
         setFocus(Qt::MouseFocusReason);
         beginTextSelection(position);
         return;
     }
-    if (forcePan || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
+    if (navigate || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
         m_gesture = Gesture::Pan;
         updateCursor();
         updateStrokeStyleButton();
@@ -1306,7 +1307,7 @@ void InkCanvas::mousePressEvent(QMouseEvent* event)
     m_hoverEraser = false;
     if (event->button() == Qt::MiddleButton || event->button() == Qt::LeftButton)
         pointerPress(event->position(), event->globalPosition(), 0.6, Source::Mouse, false,
-                     event->button() == Qt::MiddleButton || (!m_touchAndMouseAnnotate && m_tool != Tool::TextSelect));
+                     event->button() == Qt::MiddleButton);
 }
 
 void InkCanvas::mouseMoveEvent(QMouseEvent* event)
@@ -1340,9 +1341,14 @@ void InkCanvas::mouseDoubleClickEvent(QMouseEvent* event)
 
 void InkCanvas::contextMenuEvent(QContextMenuEvent* event)
 {
+    const bool keyboard = event->reason() == QContextMenuEvent::Keyboard;
+    if (!keyboard && !m_touchAndMouseAnnotate) {
+        event->ignore();
+        return;
+    }
     const InkStroke* selected = selectedInkStroke();
     if (!selected || hasActiveGesture() || hasPointerContact() || m_externalPenContact
-        || (event->reason() != QContextMenuEvent::Keyboard &&
+        || (!keyboard &&
             !pdfToWidget().mapRect(strokeBounds(*selected)).adjusted(-4, -4, 4, 4).contains(event->pos()))) {
         event->ignore();
         return;
@@ -1413,7 +1419,7 @@ bool InkCanvas::event(QEvent* event)
             }
         } else if (!m_touchActive || m_previousTouchCount != 1) {
             pointerPress(mapFromGlobal(center), center, 0.6, Source::Touch, false,
-                         !m_touchAndMouseAnnotate || m_touchNavigationOnly);
+                         m_touchNavigationOnly);
         } else if (m_source == Source::Touch) {
             pointerMove(mapFromGlobal(center), center, 0.6);
         }

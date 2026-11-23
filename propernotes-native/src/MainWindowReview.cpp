@@ -67,7 +67,7 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     auto& review = *m_review;
     review.select = toolbar->addAction(QStringLiteral("选文字"));
     review.select->setCheckable(true);
-    review.select->setToolTip(QStringLiteral("拖选这一页的 PDF 正文，可复制或添加审阅标记"));
+    review.select->setToolTip(QStringLiteral("拖选本页 PDF 正文，可复制或标记。使用鼠标或单指拖选前，先开启“鼠标与手跟随工具”。"));
     connect(review.select, &QAction::triggered, this, [this](bool enabled) {
         chooseTool(enabled ? InkCanvas::Tool::TextSelect : InkCanvas::Tool::Pan);
     });
@@ -257,14 +257,16 @@ void MainWindow::updateTextReviewUi()
     // Visibility follows the tool, not individual input updates. In particular,
     // clearing an old selection must not resize the viewport midway through a drag.
     review.selectionBar->setVisible(m_pageCount > 0 && m_tool == InkCanvas::Tool::TextSelect);
+    const QString dragText = m_preferences.tools.inputFollowsTool
+        ? QStringLiteral("拖选本页正文") : QStringLiteral("用笔拖选本页正文");
     QString hint;
     if (!readable) hint = QStringLiteral("正在处理文档…");
     else if (!review.reviewFeedback.isEmpty()) hint = review.reviewFeedback;
     else if (!editable) hint = QStringLiteral("此 PDF 只读，可选字和复制。");
     else if (!hasSelection && tool)
-        hint = QStringLiteral("%1工具 · %2 · 拖选本页正文后松开即可标记。")
-                   .arg(textMarkupKindName(*tool->markupKind), tool->reviewSingleUse ? QStringLiteral("单次") : QStringLiteral("持续"));
-    else if (!hasSelection) hint = QStringLiteral("拖选本页正文，再点一种标记。");
+        hint = QStringLiteral("%1工具 · %2 · %3，松开即可标记。")
+                   .arg(textMarkupKindName(*tool->markupKind), tool->reviewSingleUse ? QStringLiteral("单次") : QStringLiteral("持续"), dragText);
+    else if (!hasSelection) hint = QStringLiteral("%1，再点一种标记。").arg(dragText);
     else if (!selection.reviewSupported) hint = selection.reviewIssue.isEmpty()
         ? QStringLiteral("此选区可复制，几何不适合标记。") : selection.reviewIssue;
     else if (selection.skippedReviewGlyphs > 0)

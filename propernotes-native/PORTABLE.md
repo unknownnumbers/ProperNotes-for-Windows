@@ -4,6 +4,11 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+Turn on **Mouse & Touch Follow Tool** to select text, apply a review tool or
+edit annotations using a left-button drag or one-finger gesture. With the switch
+off, these gestures navigate the canvas and the pen uses the selected tool.
+Toolbar, favorites and visible style controls remain clickable.
+
 For an existing pen or freehand highlighter stroke, use **Select / Move**
 (框选 / 移动), select one stroke and click **Style** (样式) by the selection.
 Apply color, width and opacity together. Ctrl+Z undoes the style change in one
@@ -106,6 +111,8 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+要用滑鼠左鍵或單指在頁面上選字、審閱或編輯批注，請開啟「鼠标与手跟随工具」。關閉時這些畫布手勢只用來瀏覽，筆仍使用所選工具。工具列、收藏欄及選區旁的「样式」按鈕可直接點擊。
+
 點「選文字」後在同一頁拖選，Ctrl+C 複製。0.3.3 在頁面上方顯示高亮、底線、
 波浪線及刪除線按鈕，也顯示套用結果。從「正文审阅」開啟「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏欄。啟用後拖選正文，放開時套用。關閉「持续使用」後，成功標記一次即回到上一個持續工具。取消或未成功時保留目前工具。編輯收藏可儲存其持續或單次模式。
 Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結果跳轉，上限 1,000 筆。
@@ -153,6 +160,8 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+要用鼠标左键或单指在页面上选字、审阅或编辑批注，请打开「鼠标与手跟随工具」。关闭时这些画布手势只负责浏览，笔仍使用选定工具。工具栏、收藏栏和选区旁的「样式」按钮可以直接点击。
 
 点「选文字」后在同一页拖选，Ctrl+C 复制。0.3.3 在页面上方显示高亮、下划线、
 波浪线及删除线按钮，也显示应用结果。从「正文审阅」打开「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏栏。启用后拖选正文，松开时应用。关闭「持续使用」后，成功标记一次就回到上一个持续工具。取消或未成功时保留当前工具。编辑收藏可保存其持续或单次模式。

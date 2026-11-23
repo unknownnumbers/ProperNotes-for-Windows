@@ -70,7 +70,7 @@ void MainWindow::buildUi() {
     m_panAction=addTool(QStringLiteral("平移"),InkCanvas::Tool::Pan);
     m_penAction->setChecked(true);
     m_followAction=tools->addAction(QStringLiteral("鼠标与手跟随工具"));m_followAction->setCheckable(true);
-    m_followAction->setToolTip(QStringLiteral("关闭：鼠标左键/单指浏览，笔保持工具；开启：鼠标左键/单指使用当前工具。两指始终浏览。"));
+    m_followAction->setToolTip(QStringLiteral("关闭时，鼠标和单指在画布上只浏览。开启后，鼠标左键和单指可操作当前工具，包括选字和审阅。笔始终使用当前工具，两指始终浏览。"));
     m_lockAction=tools->addAction(QStringLiteral("持续使用"));m_lockAction->setCheckable(true);
     m_lockAction->setToolTip(QStringLiteral("选中为持续使用；取消后，成功完成一次操作回到上一个持续工具。"));
     m_undoAction=tools->addAction(QStringLiteral("撤销"));m_undoAction->setShortcut(QKeySequence::Undo);

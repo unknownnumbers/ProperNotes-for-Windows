@@ -8,6 +8,9 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+0.3.7 fixes canvas input routing. With Mouse & Touch Follow Tool off, mouse and
+single-finger gestures only navigate the page, including when a text review tool is active.
+
 0.3.6 adds an in-place style editor for a selected pen or freehand highlighter stroke.
 Change color, width and opacity in one undoable edit, and reopen the saved PDF to
 continue editing. The four text review tools can be activated from favorites and
@@ -93,6 +96,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.7 修正畫布輸入。關閉「鼠标与手跟随工具」時，滑鼠和單指手勢只瀏覽頁面，正文審閱工具啟用時也一樣。
+
 0.3.6 可就地編輯選取的普通筆跡或自由螢光筆跡。顏色、粗細和不透明度可一次套用並復原，儲存後可重新開啟 PDF 繼續編輯。四種正文審閱工具可從收藏啟用，支援持續或單次使用。
 
 0.3.5 新增獨立的自由螢光筆，可直接在 PDF 頁面上劃線，掃描頁也能使用。顏色、粗細和不透明度可收藏。筆跡可復原、重做，儲存後重新開啟 PDF 仍可編輯。操作見 PORTABLE.md。
@@ -143,6 +148,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.7 修复画布输入。关闭「鼠标与手跟随工具」时，鼠标和单指手势只浏览页面，正文审阅工具启用时也一样。
 
 0.3.6 可就地编辑选中的普通笔迹或自由荧光笔迹。颜色、粗细和不透明度可一次应用并撤销，保存后可重新打开 PDF 继续编辑。四种正文审阅工具可从收藏启用，支持持续或单次使用。
 

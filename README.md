@@ -33,6 +33,8 @@ The 0.3.5 revision adds Freehand Highlighter to draw directly on PDF pages, incl
 
 The 0.3.6 revision adds an in-place style editor for a selected pen or freehand highlighter stroke and review tools that can be activated from favorites for continuous or single use. 原生 0.3.6 加入筆跡就地樣式編輯和可持續或單次使用的正文審閱工具收藏。原生 0.3.6 加入笔迹就地样式编辑和可持续或单次使用的正文审阅工具收藏。
 
+The 0.3.7 revision aligns mouse and single-finger canvas gestures when Mouse & Touch Follow Tool is off. Gestures navigate the page even when a text review tool is active. 原生 0.3.7 修正關閉跟隨時的畫布手勢。原生 0.3.7 修复关闭跟随时的画布手势。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.
