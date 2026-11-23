@@ -268,13 +268,21 @@ void MainWindow::pasteInk()
     const QTransform displayToPdf = target.pdfToDisplay.inverted(&invertible);
     const QRectF paper = target.pdfRect.normalized();
     if (!invertible || !paper.isValid()) return;
+    const QTransform sourceToTarget = page == m_inkClipboard.sourcePage
+        ? QTransform() : source.pdfToDisplay * displayToPdf;
+    // Coordinates and pen widths share the PDF page's user-space units.
+    const qreal widthScale = std::hypot(sourceToTarget.m11(), sourceToTarget.m12());
 
     auto strokes = m_inkClipboard.strokes;
     QRectF bounds;
     for (auto& stroke : strokes) {
+        stroke.widthPt *= widthScale;
+        if (!(stroke.widthPt >= MinInkStrokeWidthPt && stroke.widthPt <= MaxInkStrokeWidthPt)) {
+            statusBar()->showMessage(QStringLiteral("换算后的线宽超出当前页可编辑范围。剪贴板仍保留原笔迹。"), 6500);
+            return;
+        }
         for (auto& point : stroke.points) {
-            if (page != m_inkClipboard.sourcePage)
-                point.position = displayToPdf.map(source.pdfToDisplay.map(point.position));
+            point.position = sourceToTarget.map(point.position);
         }
         bounds = bounds.united(inkStrokeBounds(stroke));
     }
