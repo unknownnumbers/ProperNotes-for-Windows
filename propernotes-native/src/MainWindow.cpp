@@ -175,8 +175,12 @@ void MainWindow::loadPreferences(bool reopenSettings)
             window->m_preferencesWarning = result.ok ? QString() : result.error;
             if (!result.ok && window->m_preferencesWarning.isEmpty())
                 window->m_preferencesWarning = QStringLiteral("无法读取设置，原设置文件保留。");
-            if (result.ok || firstLoad)
+            if (result.ok || firstLoad) {
+                // An explicit settings load replaces local unsaved placement;
+                // ordinary tool activation keeps it until the debounce saves.
+                window->m_favoritesBar->setBarPreferences(result.values.favoritesBar, true);
                 window->applyPreferences(result.values);
+            }
             window->updateUi();
             window->scheduleBackup();
             if (std::exchange(window->m_resumeRenderAfterPreferences, false) && window->m_pageCount > 0)
@@ -373,6 +377,7 @@ void MainWindow::persistPreferences(AppPreferenceValues values, bool migrate)
                 window->statusBar()->showMessage(QStringLiteral("设置已保存。"), 5000);
             } else {
                 window->m_preferencesWarning = result.error.isEmpty() ? QStringLiteral("设置保存失败，原状态保留。") : result.error;
+                window->m_favoritesBar->setBarPreferences(window->m_preferences.favoritesBar, true);
                 window->applyPreferences(window->m_preferences);
             }
             window->updateUi();
@@ -434,7 +439,14 @@ void MainWindow::openSettings(bool backupManager)
         }
         auto values = dialog.values();
         if (m_liveFavorite->queuedBar) {
-            values.favoritesBar.geometry = m_liveFavorite->queuedBar->geometry;
+            const auto& placement = *m_liveFavorite->queuedBar;
+            values.favoritesBar.geometry = placement.geometry;
+            values.favoritesBar.floating = placement.floating;
+            values.favoritesBar.side = placement.side;
+            values.favoritesBar.floatingAnchor = placement.floatingAnchor;
+            values.favoritesBar.floatingEdgeOffset = placement.floatingEdgeOffset;
+            values.favoritesBar.floatingVerticalRatio = placement.floatingVerticalRatio;
+            values.favoritesBar.floatingPositionInitialized = placement.floatingPositionInitialized;
             m_liveFavorite->queuedBar.reset();
         }
         persistPreferences(values, dialog.migrateRequested());

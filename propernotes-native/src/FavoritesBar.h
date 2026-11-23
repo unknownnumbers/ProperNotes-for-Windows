@@ -22,7 +22,7 @@ public:
     explicit FavoritesBar(QWidget* parent);
     void setDockHosts(QWidget* viewport, QWidget* leftHost, QWidget* rightHost);
     void setFavorites(const QVector<FavoriteTool>& favorites);
-    void setBarPreferences(const FavoritesBarPreferences& preferences);
+    void setBarPreferences(const FavoritesBarPreferences& preferences, bool forcePlacement = false);
     void setCurrentTool(const FavoriteTool& liveSnapshot);
     void setCurrentTool(InkCanvas::Tool tool, const ToolPreferences& tools, const QColor& color, qreal widthPt);
     void setActiveFavoriteId(const QUuid& id);
@@ -58,6 +58,9 @@ private:
     void placeResizeEdges();
     void constrainGeometry();
     QRect boundedFloatingGeometry(const QRect& geometry) const;
+    bool initializeFloatingPosition();
+    QRect relativeFloatingGeometry() const;
+    void rememberFloatingGeometry(bool resizeHeight);
     void applyPlacement(bool floating, const QString& side);
     void syncDockHosts();
     void showDockPreview(const QPointF& global, const QRect& proposed);
@@ -98,7 +101,12 @@ private:
     bool m_floating = true;
     QString m_side = QStringLiteral("right");
     QString m_dockCandidate;
+    // Desired placement is independent of the temporarily clamped widget.
     QRect m_floatingGeometry = QRect(100000,72,80,420);
+    QString m_floatingAnchor = QStringLiteral("right");
+    int m_floatingEdgeOffset = 8;
+    qreal m_floatingVerticalRatio = 0;
+    bool m_floatingPositionInitialized = false;
     std::optional<bool> m_visibilityOverride;
     struct Gesture {
         int kind;

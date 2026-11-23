@@ -4,6 +4,20 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.15 relative floating-palette placement
+
+Unlock the floating palette and move it with its bottom handle. On release, the
+app remembers the nearer left or right reading edge and the logical-pixel gap.
+Its vertical placement is saved as a ratio of the available space between the
+top margin and reserved bottom controls. Resizing the window follows this anchor
+and ratio, even while pinned. A smaller viewport temporarily constrains the
+displayed size and position; expanding restores the saved placement. Docking
+retains its separate saved floating placement. Settings v12 migrates old pixel
+coordinates when the reading viewport is available. Cloud compilation and
+packaging are pending at source preparation time. No installation, application
+launch or test is performed on the recipient's PC. Actual dragging, docking and
+resize behavior require user acceptance.
+
 ### 0.3.14 page-field display correction
 
 The upper-right page field uses integer-validated text input with an explicit
@@ -213,6 +227,10 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.15 懸浮工具框相對定位
+
+解除固定後從底部把手移動懸浮工具框，放開時記住較近的左／右閱讀邊及邏輯像素間距。上下位置按頂部留白與底角控件保留區之間的可移動空間比例保存。視窗變化時依錨點與比例排放，固定時同樣跟隨視窗；暫時變小只限制顯示尺寸和位置，重新放大會恢復保存的定位。停靠資訊與懸浮定位分開保留，設定 v12 在閱讀區可用後遷移舊像素座標。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。拖動、停靠及視窗縮放仍待實際驗收。
+
 ### 0.3.14 頁碼框顯示修正
 
 右上頁碼改用整數校驗的文字輸入框，明確設定字寬和居中對齊；頁碼、總頁數及展開頁面入口共用不透明的主題背景。此做法避開目前 Qt 樣式與 NoButtons 數字框造成的內部文字區過窄問題。顯示刷新會保留輸入草稿，提交另行處理。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際顯示縮放和輸入仍待驗收。
@@ -296,6 +314,10 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.15 悬浮工具框相对定位
+
+解除固定后从底部把手移动悬浮工具框，放开时记住较近的左／右阅读边和逻辑像素间距。上下位置按顶部留白与底角控件保留区之间的可移动空间比例保存。窗口变化时依锚点与比例摆放，固定时同样跟随窗口；暂时变小只限制显示尺寸和位置，重新放大会恢复保存的定位。停靠信息与悬浮定位分开保留，设置 v12 在阅读区可用后迁移旧像素坐标。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试。拖动、停靠和窗口缩放仍待实际验收。
 
 ### 0.3.14 页码框显示修正
 

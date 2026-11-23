@@ -31,9 +31,15 @@ struct FavoritesBarPreferences {
     bool collapsed = false;
     QString side = QStringLiteral("right");
     bool floating = true;
-    // Last floating geometry, viewport-relative since v10. Docking never
-    // overwrites it with the sidebar's full-height layout rectangle.
+    // Legacy position fallback and desired floating size. Docking and a small
+    // viewport never replace the desired height with a clipped layout height.
     QRect geometry = QRect(100000, 72, 80, 420);
+    // Floating placement is independent of docking side. Before migration the
+    // viewport resolves geometry's old pixel position into an edge and ratio.
+    QString floatingAnchor = QStringLiteral("right");
+    int floatingEdgeOffset = 8;
+    qreal floatingVerticalRatio = 0.0;
+    bool floatingPositionInitialized = false;
     bool pinned = true;
 };
 

@@ -8,6 +8,17 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The 0.3.15 source positions the floating vertical palette relative to the reading
+viewport. A deliberate move remembers the nearer left or right edge and its gap
+in logical pixels; the vertical position is a ratio of the available travel space.
+Window resizing reflows the palette using those values. A temporarily small
+viewport can limit its displayed position and height without replacing the saved
+placement. Settings v12 preserves docking separately and migrates older pixel
+coordinates when the reading viewport is available. Cloud compilation and
+packaging are pending at source preparation time. No installation, application
+launch or test is performed on the recipient's PC; actual input and resize
+behavior remain subject to user acceptance.
+
 The 0.3.14 source corrects the blank upper-right page field. It uses an independent
 text field with integer validation instead of a styled NoButtons spin box, whose
 internal edit area can collapse under the pinned Qt style implementation. Digit
@@ -163,6 +174,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.15 源碼改為相對閱讀區定位垂直懸浮工具框。主動移動後記住較近的左／右邊及邏輯像素間距，上下位置按可移動空間的比例保存；視窗縮放時依此重新排放。閱讀區暫時變小只限制顯示位置和高度，不覆寫已保存的定位。設定 v12 獨立保留停靠資訊，舊像素座標待閱讀區可用後遷移。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際輸入和視窗縮放仍待驗收。
+
 0.3.14 源碼修正右上頁碼空白框，改用整數校驗的獨立文字輸入框，避開目前 Qt 自訂樣式與 NoButtons 數字框導致內部編輯區過窄的問題。頁數字寬、文字居中及不透明主題背景明確設定，刷新時保留正在輸入的草稿，提交與顯示更新分開處理。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際顯示和輸入仍待驗收。
 
 0.3.13 源碼移除浮動工具框上下兩排大型拉伸圖示，解鎖且懸浮時可直接拖動上、下邊緣調整高度。鎖定時不能拉伸，停靠時維持側欄整高。底部移動把手、原有 PDF 操作及文件格式保留。源碼準備時仍待雲端編譯及打包，不在使用者 PC 安裝、啟動應用或執行測試。
@@ -229,6 +242,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.15 源码改为相对阅读区定位垂直悬浮工具框。主动移动后记住较近的左／右边和逻辑像素间距，上下位置按可移动空间的比例保存；窗口缩放时依此重新摆放。阅读区暂时变小只限制显示位置和高度，不覆盖已保存的定位。设置 v12 独立保留停靠信息，旧像素坐标待阅读区可用后迁移。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际输入和窗口缩放仍待验收。
 
 0.3.14 源码修正右上页码空白框，改用整数校验的独立文字输入框，避开当前 Qt 自定义样式与 NoButtons 数字框导致内部编辑区过窄的问题。页数字宽、文字居中和不透明主题背景明确设置，刷新时保留正在输入的草稿，提交与显示更新分开处理。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际显示和输入仍待验收。
 

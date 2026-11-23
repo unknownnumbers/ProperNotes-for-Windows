@@ -6,6 +6,24 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.15 relative floating-palette placement
+
+English (en): The vertical floating palette remembers a left/right reading-edge
+anchor, its logical-pixel gap and a vertical ratio within the available travel
+space. Window reflow and temporary viewport constraints do not replace these
+saved values or the requested height. Settings v12 migrates old absolute pixel
+coordinates when a reading viewport is available; docking retains its separate
+floating placement. Cloud compilation and packaging are pending at source
+preparation time. No installation, application launch or test is performed on
+the user's PC. Actual window resizing, display scaling, gesture cancellation,
+pinning and dock/undock behavior still require user acceptance. This is the
+project's confirmed interaction rule, not a claim about unverified Drawboard
+behavior.
+
+Traditional Chinese (zh-TC): 垂直懸浮工具框記住閱讀區左／右邊錨點、邏輯像素間距及可移動空間內的垂直比例。視窗排放與暫時的閱讀區限制不覆寫保存的定位及要求高度。設定 v12 待閱讀區可用後遷移舊絕對像素座標，停靠時保留獨立懸浮定位。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。視窗縮放、顯示比例、取消手勢、固定及停靠／拖出仍待驗收；此為本專案確認規則，不代表已核實的 Drawboard 行為。
+
+Simplified Chinese (zh-SC): 垂直悬浮工具框记住阅读区左／右边锚点、逻辑像素间距和可移动空间内的垂直比例。窗口排放与暂时的阅读区限制不覆盖保存的定位及要求高度。设置 v12 待阅读区可用后迁移旧绝对像素坐标，停靠时保留独立悬浮定位。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试。窗口缩放、显示比例、取消手势、固定和停靠／拖出仍待验收；这是本项目确认规则，不代表已核实的 Drawboard 行为。
+
 ## 0.3.14 page-field display correction
 
 English (en): The page picker now uses a separate integer-validated text field,

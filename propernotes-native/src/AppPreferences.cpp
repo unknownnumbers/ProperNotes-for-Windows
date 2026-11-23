@@ -20,7 +20,7 @@ namespace propernotes {
 namespace {
 constexpr qint64 MaximumSettingsBytes = 256 * 1024;
 constexpr int MaximumRoots = 32;
-constexpr int SettingsSchemaVersion = 11;
+constexpr int SettingsSchemaVersion = 12;
 
 bool fail(QString* error, const QString& message)
 {

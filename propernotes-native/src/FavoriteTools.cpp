@@ -373,18 +373,25 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& p)
 {
     return (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
-        p.geometry.height()>=80 && p.geometry.height()<=1600 && p.geometry.x()>=-100000 && p.geometry.x()<=100000 && p.geometry.y()>=-100000 && p.geometry.y()<=100000;
+        p.geometry.height()>=80 && p.geometry.height()<=1600 && p.geometry.x()>=-100000 && p.geometry.x()<=100000 && p.geometry.y()>=-100000 && p.geometry.y()<=100000 &&
+        (p.floatingAnchor==QStringLiteral("left")||p.floatingAnchor==QStringLiteral("right")) &&
+        p.floatingEdgeOffset>=8 && p.floatingEdgeOffset<=100000 &&
+        std::isfinite(p.floatingVerticalRatio) && p.floatingVerticalRatio>=0.0 && p.floatingVerticalRatio<=1.0;
 }
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& p)
 {
     return {{"visible",p.visible},{"collapsed",p.collapsed},{"side",p.side},{"floating",p.floating},{"pinned",p.pinned},
-        {"geometry",QJsonObject{{"x",p.geometry.x()},{"y",p.geometry.y()},{"width",p.geometry.width()},{"height",p.geometry.height()}}}};
+        {"geometry",QJsonObject{{"x",p.geometry.x()},{"y",p.geometry.y()},{"width",p.geometry.width()},{"height",p.geometry.height()}}},
+        {"floatingPosition",QJsonObject{{"anchor",p.floatingAnchor},{"edgeOffset",p.floatingEdgeOffset},
+            {"verticalRatio",p.floatingVerticalRatio},{"initialized",p.floatingPositionInitialized}}}};
 }
 bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result, int settingsVersion)
 {
     const bool hasPin = settingsVersion >= 7;
+    const bool hasRelativePosition = settingsVersion >= 12;
     QStringList keys{"visible", "collapsed", "side", "floating", "geometry"};
     if (hasPin) keys.append(QStringLiteral("pinned"));
+    if (hasRelativePosition) keys.append(QStringLiteral("floatingPosition"));
     if(!exactKeys(object,keys)||!object.value("visible").isBool()||
         !object.value("collapsed").isBool()||!object.value("floating").isBool()||!object.value("side").isString()||
         !object.value("geometry").isObject() || (hasPin && !object.value("pinned").isBool()))return false;
@@ -394,6 +401,17 @@ bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result
     FavoritesBarPreferences p;p.visible=object.value("visible").toBool();p.collapsed=object.value("collapsed").toBool();
     p.side=object.value("side").toString();p.floating=object.value("floating").toBool();p.geometry={geometry.value("x").toInt(),geometry.value("y").toInt(),geometry.value("width").toInt(),geometry.value("height").toInt()};
     p.pinned = hasPin && object.value("pinned").toBool();
+    if (hasRelativePosition) {
+        if (!object.value("floatingPosition").isObject()) return false;
+        const auto position = object.value("floatingPosition").toObject();
+        if (!exactKeys(position,{"anchor","edgeOffset","verticalRatio","initialized"}) ||
+            !position.value("anchor").isString() || !position.value("initialized").isBool() ||
+            !number(position,"edgeOffset",8,100000,true) || !number(position,"verticalRatio",0,1)) return false;
+        p.floatingAnchor = position.value("anchor").toString();
+        p.floatingEdgeOffset = position.value("edgeOffset").toInt();
+        p.floatingVerticalRatio = position.value("verticalRatio").toDouble();
+        p.floatingPositionInitialized = position.value("initialized").toBool();
+    }
     if(!validFavoritesBarPreferences(p))return false;
     if (settingsVersion < 10) {
         // Old dock widgets stored desktop coordinates. Do not interpret them

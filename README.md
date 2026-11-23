@@ -49,6 +49,8 @@ The 0.3.13 revision removes the large top and bottom palette resize buttons. Dra
 
 The 0.3.14 revision fixes the blank current-page field in the upper-right picker. An independent numeric editor avoids the pinned Qt styled NoButtons spin-box path, with explicit digit width, readable centered text and an opaque group background. View refreshes preserve input drafts; Enter or leaving the editor commits a valid page, and Escape cancels. Cloud compilation and packaging do not start or test the application. 原生 0.3.14 修正右上頁碼白框，顯示目前頁並保留輸入跳頁。原生 0.3.14 修正右上页码白框，显示当前页并保留输入跳页。實際顯示與操作仍待用戶驗收。实际显示与操作仍待用户验收。
 
+The 0.3.15 source adds relative placement for the vertical floating palette: the nearer reading edge and logical-pixel gap anchor it horizontally, and a ratio of available travel space positions it vertically. Window resizing follows those saved values; temporary size constraints do not replace its requested placement or height. Settings v12 preserves docking separately and migrates older pixel coordinates when a reading viewport is available. Cloud compilation and packaging are pending at source preparation time. No installation, application launch or test is performed on the user's PC. 原生 0.3.15 記住懸浮工具框左右錨點及邊距、上下可移動空間比例，隨視窗大小調整。原生 0.3.15 记住悬浮工具框左右锚点和边距、上下可移动空间比例，随窗口大小调整。實際輸入、停靠及縮放仍待驗收。实际输入、停靠和缩放仍待验收。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.
