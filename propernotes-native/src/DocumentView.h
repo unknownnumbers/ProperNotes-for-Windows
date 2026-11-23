@@ -92,6 +92,7 @@ signals:
     void textEditingChanged(bool editing);
     void textPageRequested(int page);
     void textSelectionChanged();
+    void textSelectionCompleted();
     void activity(const QString& message);
 
 protected:

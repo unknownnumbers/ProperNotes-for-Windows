@@ -31,10 +31,10 @@ struct MainWindow::ReviewState {
     QAction* copyShortcut = nullptr;
     QAction* clearShortcut = nullptr;
     QAction* find = nullptr;
-    QAction* apply = nullptr;
     QAction* style = nullptr;
     QAction* favorite = nullptr;
     std::array<QAction*, 4> kinds{};
+    std::array<QAction*, 4> tools{};
     QToolButton* menuButton = nullptr;
     QWidget* selectionBar = nullptr;
     QLabel* selectionStatus = nullptr;
@@ -63,6 +63,7 @@ struct MainWindow::ReviewState {
     bool capped = false;
     bool caseSensitive = false;
     TextMarkupKind kind = TextMarkupKind::Highlight;
+    std::array<bool, 4> singleUse{};
     std::array<QColor, 4> colors{QColor(248, 203, 33, 112), QColor("#2564bc"),
                                   QColor("#ba3434"), QColor("#ac580f")};
 };

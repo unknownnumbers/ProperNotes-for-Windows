@@ -370,23 +370,20 @@ ToolPreferences MainWindow::effectiveToolPreferences() const {
 void MainWindow::clearFavoriteSelection() {if(m_liveFavorite)m_liveFavorite->active.reset();}
 void MainWindow::applyFavorite(const FavoriteTool& favorite) {
     if(m_fileBusy||m_backupBusy||m_preferencesBusy||m_thumbnailBrowser||m_settingsDialog||m_closingAll)return;
+    if (favorite.markupKind && (m_pageCount < 1 || m_readOnly)) return;
+    m_view->finishGesture();
+    rememberPersistentTool();
     if (favorite.markupKind) {
-        if (m_pageCount < 1 || m_readOnly) return;
-        m_view->finishGesture();
-        rememberPersistentTool();
-        m_liveFavorite->active = favorite;
+        m_view->clearTextSelection();
         m_review->kind = *favorite.markupKind;
-        applyPreferences(m_preferences);
-        chooseTool(InkCanvas::Tool::TextSelect, false);
-        updateTextReviewUi();
-        statusBar()->showMessage(QStringLiteral("先选正文，再点“%1”。").arg(textMarkupKindName(m_review->kind)), 4500);
-        m_view->setFocus();
-        return;
+        m_review->reviewFeedback.clear();
     }
-    m_view->finishGesture();rememberPersistentTool();m_liveFavorite->active=favorite;applyPreferences(m_preferences);
+    m_liveFavorite->active=favorite;
+    applyPreferences(m_preferences);
     chooseTool(favorite.tool,false);
     rememberPersistentTool();
     updateToolUi();
+    if (favorite.markupKind) m_view->setFocus();
 }
 void MainWindow::addCurrentFavorite() {
     if(!m_preferencesWritable||m_preferencesBusy||m_fileBusy||m_backupBusy||m_closingAll)return;

@@ -31,6 +31,8 @@ The floating favorites bar now has a close button and hides with the main window
 
 The 0.3.5 revision adds Freehand Highlighter to draw directly on PDF pages, including scans. Favorite presets store color, width and opacity. Freehand strokes support undo and redo and stay editable when saved to PDF and reopened in this version. 原生 0.3.5 新增自由螢光筆，可直接在掃描頁上劃線，收藏樣式，儲存重開後繼續編輯。原生 0.3.5 新增自由荧光笔，可直接在扫描页上划线，收藏样式，保存重开后继续编辑。
 
+The 0.3.6 revision adds an in-place style editor for a selected pen or freehand highlighter stroke and review tools that can be activated from favorites for continuous or single use. 原生 0.3.6 加入筆跡就地樣式編輯和可持續或單次使用的正文審閱工具收藏。原生 0.3.6 加入笔迹就地样式编辑和可持续或单次使用的正文审阅工具收藏。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

@@ -8,6 +8,11 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+0.3.6 adds an in-place style editor for a selected pen or freehand highlighter stroke.
+Change color, width and opacity in one undoable edit, and reopen the saved PDF to
+continue editing. The four text review tools can be activated from favorites and
+used continuously or for a single completed mark.
+
 0.3.5 adds Freehand Highlighter, a separate tool for drawing directly on PDF pages,
 including scans. Save color, width and opacity as a favorite. Strokes support
 undo, redo and editing after saving and reopening the PDF. See PORTABLE.md for the controls.
@@ -24,7 +29,7 @@ strip exposes each review action and reports why a mark could not be applied.
 The 0.3.2 source adds selection and copying from the existing PDF text layer,
 page-by-page literal search with cancellation and jump-to-result, and Highlight,
 Underline, Squiggly and StrikeOut. Review favorite presets store kind, color and
-opacity. Apply them after selecting text. Hold Shift while turning the wheel to
+opacity. Hold Shift while turning the wheel to
 pan the PDF horizontally. Ctrl + wheel zooms. See PORTABLE.md for the controls.
 
 The source for `0.3.1-native-preview.1` integrates up to 32 horizontal document tabs,
@@ -88,6 +93,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.6 可就地編輯選取的普通筆跡或自由螢光筆跡。顏色、粗細和不透明度可一次套用並復原，儲存後可重新開啟 PDF 繼續編輯。四種正文審閱工具可從收藏啟用，支援持續或單次使用。
+
 0.3.5 新增獨立的自由螢光筆，可直接在 PDF 頁面上劃線，掃描頁也能使用。顏色、粗細和不透明度可收藏。筆跡可復原、重做，儲存後重新開啟 PDF 仍可編輯。操作見 PORTABLE.md。
 
 0.3.4 在混合選區中為有可靠座標的正文加標記，並顯示略過數量。複製保留整段選字，一次標記可一併撤銷。
@@ -97,7 +104,7 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 頁邊裁切字形和具有可靠字寬的 Type 3 字型。選字工具列顯示四種標記及套用結果。
 
 0.3.2 源碼加入 PDF 既有文字的拖選、複製、逐頁搜尋與結果跳轉，以及高亮、
-底線、波浪線和刪除線。審閱收藏儲存類型、顏色及不透明度，選好文字後再套用。
+底線、波浪線和刪除線。審閱收藏儲存類型、顏色及不透明度。
 正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。含本版審閱標記的 PDF 使用原生格式 v3，仍可讀原生 v1/v2。
 
 `0.3.1-native-preview.1` 源碼已接入最多 32 個橫向文件標籤, 各自保留未儲存內容、
@@ -137,6 +144,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 
 ## Simplified Chinese (zh-SC)
 
+0.3.6 可就地编辑选中的普通笔迹或自由荧光笔迹。颜色、粗细和不透明度可一次应用并撤销，保存后可重新打开 PDF 继续编辑。四种正文审阅工具可从收藏启用，支持持续或单次使用。
+
 0.3.5 新增独立的自由荧光笔，可直接在 PDF 页面上划线，扫描页也能使用。颜色、粗细和不透明度可收藏。笔迹可撤销、重做，保存后重新打开 PDF 仍可编辑。操作见 PORTABLE.md。
 
 0.3.4 在混合选区中为有可靠坐标的正文添加标记，并显示跳过数量。复制保留整段选字，一次标记可一并撤销。
@@ -146,7 +155,7 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 页边裁切字形和具有可靠字宽的 Type 3 字体。选字工具栏显示四种标记及应用结果。
 
 0.3.2 源码加入 PDF 既有文字的拖选、复制、逐页搜索与结果跳转，以及高亮、
-下划线、波浪线和删除线。审阅收藏保存类型、颜色和不透明度，选好文字后再应用。
+下划线、波浪线和删除线。审阅收藏保存类型、颜色和不透明度。
 正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。含本版审阅标记的 PDF 使用原生格式 v3，仍可读原生 v1/v2。
 
 `0.3.1-native-preview.1` 源码已接入最多 32 个横向文档标签, 各自保留未保存内容、

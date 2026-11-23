@@ -3,6 +3,7 @@
 #include "MainWindowState.h"
 #include "FavoritesBar.h"
 #include "DocumentSession.h"
+#include "SettingsDialog.h"
 #include "ThumbnailBrowser.h"
 #include <QAction>
 #include <QApplication>
@@ -207,6 +208,10 @@ void MainWindow::editHistory(bool redo)
 
 bool MainWindow::isSingleUse(InkCanvas::Tool tool) const
 {
+    if (tool == InkCanvas::Tool::TextSelect) {
+        const auto* review = activeReviewTool();
+        return review && review->reviewSingleUse;
+    }
     const auto preferences=effectiveToolPreferences();
     if (tool == InkCanvas::Tool::Pen) return preferences.penSingleUse;
     if (tool == InkCanvas::Tool::Highlighter) return preferences.highlighterSingleUse;
@@ -230,23 +235,24 @@ void MainWindow::beginPendingDefaultChange()
 bool MainWindow::finishPendingDefaultChange(bool success)
 {
     const bool pending=std::exchange(m_liveFavorite->pendingDefaultChange,false);
-    if(pending&&success){clearFavoriteSelection();return true;}
+    if(pending&&success&&!activeReviewTool()){clearFavoriteSelection();return true;}
     return false;
 }
 
 void MainWindow::rememberPersistentTool()
 {
-    if(!m_liveFavorite||m_tool==InkCanvas::Tool::TextSelect||isSingleUse(m_tool))return;
+    const auto* review = activeReviewTool();
+    if (!m_liveFavorite || (m_tool == InkCanvas::Tool::TextSelect && !review) || isSingleUse(m_tool)) return;
     FavoriteState::RuntimeTool state;
     state.tool=m_tool;
-    state.snapshot=captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));
+    state.snapshot=review ? *review : captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));
     state.snapshot.id=QUuid(); // Runtime default snapshots are not stored favorites.
     if(m_liveFavorite->active&&m_liveFavorite->active->tool==m_tool&&!m_liveFavorite->active->id.isNull())state.favorite=m_liveFavorite->active;
     auto& history=m_liveFavorite->persistent;
     for(qsizetype index=history.size();index>0;--index){
         const auto& old=history[index-1];
         const bool samePreset=(!old.favorite&&!state.favorite)||(old.favorite&&state.favorite&&old.favorite->id==state.favorite->id);
-        if(old.tool==state.tool&&samePreset)history.removeAt(index-1);
+        if(old.tool==state.tool&&samePreset&&old.snapshot.markupKind==state.snapshot.markupKind)history.removeAt(index-1);
     }
     history.append(std::move(state));
     if(history.size()>64)history.removeFirst();
@@ -256,7 +262,7 @@ void MainWindow::chooseTool(InkCanvas::Tool tool, bool userChoice)
 {
     ++m_toolSerial;
     m_view->finishGesture();
-    if (m_review && m_tool != tool) m_review->reviewFeedback.clear();
+    if (m_review && (m_tool != tool || (userChoice && activeReviewTool()))) m_review->reviewFeedback.clear();
     if(userChoice&&m_liveFavorite->active){clearFavoriteSelection();applyPreferences(m_preferences);}
     m_tool = tool;
     syncStrokeStyleControls(effectiveToolPreferences(), effectivePenWidth());
@@ -273,18 +279,25 @@ void MainWindow::toolCompleted(InkCanvas::Tool tool, const QString&)
     const quint64 serial = m_toolSerial;
     QTimer::singleShot(0, this, [this, tool, serial] {
         if (m_toolSerial != serial || m_tool != tool || !isSingleUse(tool)) return;
-        auto current=captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));current.id=QUuid();
+        const auto* review = activeReviewTool();
+        auto current=review ? *review : captureFavorite(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth(),favoriteToolName(m_tool));
+        current.id=QUuid();
         const auto activeId=m_liveFavorite->active?m_liveFavorite->active->id:QUuid();
         std::optional<FavoriteState::RuntimeTool> previous;
         for(auto it=m_liveFavorite->persistent.crbegin();it!=m_liveFavorite->persistent.crend();++it){
             const auto presetId=it->favorite?it->favorite->id:QUuid();
-            if(it->tool==tool&&presetId==activeId&&favoriteToolsJson({it->snapshot})==favoriteToolsJson({current}))continue;
+            if (it->tool == tool && presetId == activeId) {
+                const bool sameTool = review ? it->snapshot.markupKind == review->markupKind
+                    : favoriteToolsJson({it->snapshot}) == favoriteToolsJson({current});
+                if (sameTool) continue;
+            }
             previous=*it;break;
         }
         ++m_toolSerial;m_view->finishGesture();
         if(previous){m_liveFavorite->active=previous->favorite?previous->favorite:std::optional<FavoriteTool>(previous->snapshot);m_tool=previous->tool;}
         else{m_liveFavorite->active.reset();m_tool=InkCanvas::Tool::Pan;}
-        applyPreferences(m_preferences);m_view->setTool(m_tool);updateToolUi();
+        if (const auto* restored = activeReviewTool()) m_review->kind = *restored->markupKind;
+        applyPreferences(m_preferences);m_view->setTool(m_tool);updateToolUi();updateTextReviewUi();
     });
 }
 
@@ -300,13 +313,15 @@ void MainWindow::updateToolUi()
     m_panAction->setChecked(m_tool == InkCanvas::Tool::Pan);
     m_followAction->setChecked(m_preferences.tools.inputFollowsTool);
     m_lockAction->setChecked(!isSingleUse(m_tool));
-    m_lockAction->setEnabled(!m_preferencesBusy && !m_backupBusy && !m_fileBusy && m_preferencesWritable &&
-        (m_tool == InkCanvas::Tool::Pen || m_tool == InkCanvas::Tool::Highlighter ||
-         m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox));
+    const auto* review = activeReviewTool();
+    const bool lockableReview = review && m_pageCount > 0 && !m_readOnly && !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog;
+    const bool lockableDrawingTool = m_preferencesWritable && (m_tool == InkCanvas::Tool::Pen ||
+        m_tool == InkCanvas::Tool::Highlighter || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox);
+    m_lockAction->setEnabled(!m_preferencesBusy && !m_backupBusy && !m_fileBusy && (lockableReview || lockableDrawingTool));
     m_updatingUi = wasUpdating;
     if(m_favoritesBar){
-        if (m_tool == InkCanvas::Tool::TextSelect && m_liveFavorite->active && m_liveFavorite->active->markupKind)
-            m_favoritesBar->setCurrentTool(*m_liveFavorite->active);
+        if (review)
+            m_favoritesBar->setCurrentTool(*review);
         else
             m_favoritesBar->setCurrentTool(m_tool,effectiveToolPreferences(),m_color,effectivePenWidth());
         m_favoritesBar->setActiveFavoriteId(m_liveFavorite->active&&m_liveFavorite->active->tool==m_tool?m_liveFavorite->active->id:QUuid());

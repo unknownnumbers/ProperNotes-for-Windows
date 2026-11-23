@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "MainWindowState.h"
 #include "DocumentSession.h"
+#include "SettingsDialog.h"
 #include "ThumbnailBrowser.h"
 
 #include <QAction>
@@ -73,11 +74,17 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
 
     review.menuButton = new QToolButton(toolbar);
     review.menuButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-    review.menuButton->setPopupMode(QToolButton::MenuButtonPopup);
-    review.apply = new QAction(this);
-    connect(review.apply, &QAction::triggered, this, [this] { applyTextReview(m_review->kind); });
-    review.menuButton->setDefaultAction(review.apply);
+    review.menuButton->setPopupMode(QToolButton::InstantPopup);
+    review.menuButton->setText(QStringLiteral("正文审阅"));
     auto* menu = new QMenu(review.menuButton);
+    auto* toolMenu = menu->addMenu(QStringLiteral("选用审阅工具"));
+    for (auto kind : reviewKinds) {
+        auto* action = toolMenu->addAction(textMarkupKindName(kind));
+        action->setCheckable(true);
+        review.tools[kindIndex(kind)] = action;
+        connect(action, &QAction::triggered, this, [this, kind] { chooseReviewTool(kind); });
+    }
+    menu->addSeparator();
     for (auto kind : reviewKinds) {
         auto* action = menu->addAction(textMarkupKindName(kind));
         review.kinds[kindIndex(kind)] = action;
@@ -87,15 +94,21 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     review.style = menu->addAction(QStringLiteral("当前审阅颜色与不透明度…"));
     connect(review.style, &QAction::triggered, this, [this] {
         const auto kind = m_review->kind;
+        const auto serial = m_toolSerial;
         const auto color = QColorDialog::getColor(reviewColor(kind), this,
             textMarkupKindName(kind), QColorDialog::ShowAlphaChannel);
-        if (!color.isValid() || color.alpha() == 0) return;
-        if (m_liveFavorite->active && m_liveFavorite->active->markupKind) clearFavoriteSelection();
+        if (!color.isValid() || color.alpha() == 0 || m_toolSerial != serial || color == reviewColor(kind)) return;
         m_review->colors[kindIndex(kind)] = color;
+        if (const auto* tool = activeReviewTool()) {
+            auto edited = captureReviewFavorite(kind, color, textMarkupKindName(kind), tool->reviewSingleUse);
+            edited.id = {};
+            m_liveFavorite->active = std::move(edited);
+            rememberPersistentTool();
+        }
         updateToolUi();
         updateTextReviewUi();
     });
-    review.favorite = menu->addAction(QStringLiteral("收藏当前审阅样式…"));
+    review.favorite = menu->addAction(QStringLiteral("收藏当前审阅工具…"));
     connect(review.favorite, &QAction::triggered, this, &MainWindow::favoriteTextReview);
     review.copy = menu->addAction(QStringLiteral("复制所选正文"));
     connect(review.copy, &QAction::triggered, this, &MainWindow::copyBodySelection);
@@ -211,6 +224,9 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
         m_review->reviewFeedback.clear();
         updateTextReviewUi();
     });
+    connect(m_view, &DocumentView::textSelectionCompleted, this, [this] {
+        if (const auto* tool = activeReviewTool()) applyTextReview(*tool->markupKind);
+    });
     updateTextReviewUi();
 }
 
@@ -222,17 +238,20 @@ void MainWindow::updateTextReviewUi()
     const auto selection = m_view->textSelection();
     const bool hasSelection = readable && !selection.text.isEmpty();
     const bool editable = readable && !m_readOnly;
+    const auto* tool = activeReviewTool();
     review.select->setEnabled(readable);
-    review.select->setChecked(m_tool == InkCanvas::Tool::TextSelect);
+    review.select->setChecked(m_tool == InkCanvas::Tool::TextSelect && !tool);
     review.find->setEnabled(readable);
     review.copy->setEnabled(hasSelection);
     review.copyShortcut->setEnabled(hasSelection && !m_view->isTextEditing());
-    review.clearShortcut->setEnabled(hasSelection && m_tool == InkCanvas::Tool::TextSelect && !m_view->isTextEditing());
-    review.apply->setText(QStringLiteral("应用%1").arg(textMarkupKindName(review.kind)));
-    review.apply->setToolTip(QStringLiteral("对所选正文应用%1").arg(textMarkupKindName(review.kind)));
-    review.apply->setEnabled(editable);
+    review.clearShortcut->setEnabled(readable && m_tool == InkCanvas::Tool::TextSelect && !m_view->isTextEditing());
     review.menuButton->setEnabled(readable);
     for (auto* action : review.kinds) action->setEnabled(editable);
+    for (auto kind : reviewKinds) {
+        auto* action = review.tools[kindIndex(kind)];
+        action->setEnabled(editable && !m_preferencesBusy && !m_backupBusy && !m_settingsDialog);
+        action->setChecked(tool && tool->markupKind == kind);
+    }
     review.style->setEnabled(editable);
     review.favorite->setEnabled(editable && m_preferencesWritable && !m_preferencesBusy && !m_backupBusy);
     // Visibility follows the tool, not individual input updates. In particular,
@@ -242,6 +261,9 @@ void MainWindow::updateTextReviewUi()
     if (!readable) hint = QStringLiteral("正在处理文档…");
     else if (!review.reviewFeedback.isEmpty()) hint = review.reviewFeedback;
     else if (!editable) hint = QStringLiteral("此 PDF 只读，可选字和复制。");
+    else if (!hasSelection && tool)
+        hint = QStringLiteral("%1工具 · %2 · 拖选本页正文后松开即可标记。")
+                   .arg(textMarkupKindName(*tool->markupKind), tool->reviewSingleUse ? QStringLiteral("单次") : QStringLiteral("持续"));
     else if (!hasSelection) hint = QStringLiteral("拖选本页正文，再点一种标记。");
     else if (!selection.reviewSupported) hint = selection.reviewIssue.isEmpty()
         ? QStringLiteral("此选区可复制，几何不适合标记。") : selection.reviewIssue;
@@ -394,12 +416,42 @@ void MainWindow::copyBodySelection()
     if (!selection.text.isEmpty()) QApplication::clipboard()->setText(selection.text);
 }
 
+const FavoriteTool* MainWindow::activeReviewTool() const
+{
+    if (m_tool != InkCanvas::Tool::TextSelect || !m_liveFavorite || !m_liveFavorite->active ||
+        !m_liveFavorite->active->markupKind)
+        return nullptr;
+    return &*m_liveFavorite->active;
+}
+
+void MainWindow::chooseReviewTool(TextMarkupKind kind)
+{
+    auto tool = captureReviewFavorite(kind, m_review->colors.at(kindIndex(kind)),
+        textMarkupKindName(kind), m_review->singleUse.at(kindIndex(kind)));
+    tool.id = {};
+    applyFavorite(tool);
+}
+
+void MainWindow::setActiveReviewSingleUse(bool singleUse)
+{
+    if (!activeReviewTool() || m_pageCount < 1 || m_readOnly || m_fileBusy || m_preferencesBusy || m_backupBusy ||
+        m_closingAll || m_thumbnailBrowser || m_settingsDialog) return;
+    auto& tool = *m_liveFavorite->active;
+    ++m_toolSerial;
+    tool.reviewSingleUse = singleUse;
+    if (tool.id.isNull()) m_review->singleUse.at(kindIndex(*tool.markupKind)) = singleUse;
+    if (!singleUse) rememberPersistentTool();
+    m_review->reviewFeedback.clear();
+    updateToolUi();
+    updateTextReviewUi();
+}
+
 QColor MainWindow::reviewColor(TextMarkupKind kind) const
 {
-    const auto& active = m_liveFavorite->active;
-    if (active && active->markupKind == kind) {
-        QColor color = active->color;
-        color.setAlphaF(float(active->tools.opacity));
+    const auto* tool = activeReviewTool();
+    if (tool && tool->markupKind == kind) {
+        QColor color = tool->color;
+        color.setAlphaF(float(tool->tools.opacity));
         return color;
     }
     return m_review->colors.at(kindIndex(kind));
@@ -408,9 +460,10 @@ QColor MainWindow::reviewColor(TextMarkupKind kind) const
 void MainWindow::applyTextReview(TextMarkupKind kind)
 {
     if (m_fileBusy || m_readOnly || m_pageCount < 1 || m_closingAll || m_thumbnailBrowser) return;
-    m_review->kind = kind;
-    if (m_liveFavorite->active && m_liveFavorite->active->markupKind &&
-        m_liveFavorite->active->markupKind != kind) clearFavoriteSelection();
+    const auto* tool = activeReviewTool();
+    const bool completeActiveTool = tool && tool->markupKind == kind;
+    const bool returnAfterMark = completeActiveTool && tool->reviewSingleUse;
+    if (!tool) m_review->kind = kind;
     if (m_tool != InkCanvas::Tool::TextSelect) chooseTool(InkCanvas::Tool::TextSelect);
     updateToolUi();
     updateTextReviewUi();
@@ -436,17 +489,20 @@ void MainWindow::applyTextReview(TextMarkupKind kind)
     auto after = before;
     after.textMarkups.append(markup);
     commitAnnotations(page, before, after, QStringLiteral("text-review"), markup.id);
-    if (!std::exchange(m_lastCommitAccepted, false)) {
+    if (!m_lastCommitAccepted) {
         m_review->reviewFeedback = QStringLiteral("标记未应用，选区仍保留。");
         updateTextReviewUi();
         return;
     }
+    if (completeActiveTool) toolCompleted(InkCanvas::Tool::TextSelect, QStringLiteral("text-review"));
+    else m_lastCommitAccepted = false;
     m_view->updatePageAnnotations(page, m_pageAnnotations.value(page));
     m_view->clearTextSelection();
     m_review->reviewFeedback = selection.skippedReviewGlyphs > 0
         ? QStringLiteral("已对可用正文添加%1，跳过 %2 个字形。按 Ctrl+S 保存。")
               .arg(textMarkupKindName(kind)).arg(selection.skippedReviewGlyphs)
         : QStringLiteral("已添加%1。按 Ctrl+S 保存到 PDF。").arg(textMarkupKindName(kind));
+    if (returnAfterMark) statusBar()->showMessage(m_review->reviewFeedback, 4500);
     updateTextReviewUi();
     m_view->setFocus();
 }
@@ -456,11 +512,14 @@ void MainWindow::favoriteTextReview()
     if (!m_preferencesWritable || m_preferencesBusy || m_fileBusy || m_backupBusy || m_closingAll) return;
     const auto kind = m_review->kind;
     bool accepted = false;
-    const QString name = QInputDialog::getText(this, QStringLiteral("收藏审阅样式"), QStringLiteral("预设名称"),
+    const auto color = reviewColor(kind);
+    const auto* active = activeReviewTool();
+    const bool singleUse = active ? active->reviewSingleUse : m_review->singleUse.at(kindIndex(kind));
+    const QString name = QInputDialog::getText(this, QStringLiteral("收藏审阅工具"), QStringLiteral("预设名称"),
         QLineEdit::Normal, textMarkupKindName(kind), &accepted).trimmed();
     if (!accepted || name.isEmpty()) return;
     auto values = m_preferences;
-    values.favorites.append(captureReviewFavorite(kind, reviewColor(kind), name));
+    values.favorites.append(captureReviewFavorite(kind, color, name, singleUse));
     persistPreferences(values);
 }
 } // namespace propernotes

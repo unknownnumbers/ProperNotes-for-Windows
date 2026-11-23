@@ -19,6 +19,7 @@ struct FavoriteTool {
     qreal widthPt = 2.5;
     ToolPreferences tools;
     std::optional<TextMarkupKind> markupKind;
+    bool reviewSingleUse = false;
 };
 
 struct FavoritesBarPreferences {
@@ -31,7 +32,8 @@ struct FavoritesBarPreferences {
 
 FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& tools,
                              const QColor& color, qreal widthPt, const QString& name = {});
-FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color, const QString& name = {});
+FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color,
+                                   const QString& name = {}, bool singleUse = false);
 QString textMarkupKindName(TextMarkupKind kind);
 // Merge into a runtime snapshot. Calling this never mutates any other preset.
 void applyFavorite(const FavoriteTool& favorite, ToolPreferences& tools, QColor& color, qreal& widthPt);
@@ -40,7 +42,7 @@ QString favoriteDescription(const FavoriteTool& favorite);
 QVector<FavoriteTool> defaultFavoriteTools();
 bool validFavoriteTools(const QVector<FavoriteTool>& favorites, QString* error = nullptr);
 QJsonArray favoriteToolsJson(const QVector<FavoriteTool>& favorites);
-bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, bool allowHighlighter = true);
+bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, int settingsVersion);
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& preferences);
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& preferences);
 bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& preferences);

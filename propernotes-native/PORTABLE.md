@@ -4,6 +4,11 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+For an existing pen or freehand highlighter stroke, use **Select / Move**
+(框选 / 移动), select one stroke and click **Style** (样式) by the selection.
+Apply color, width and opacity together. Ctrl+Z undoes the style change in one
+step. Save the PDF and reopen it to keep editing the stroke.
+
 Select **Freehand Highlighter** (自由荧光笔) and draw directly on the PDF page.
 Image-only scans work too. Turn on **Mouse & Touch Follow Tool** to draw with
 the left mouse button or one finger. Adjust color, width and opacity in the
@@ -15,8 +20,12 @@ Click **Select Text** (选文字), then drag over the PDF text on one page. In 0
 the strip above the page shows the four review buttons and what happened to the selection.
 Use Ctrl+C to copy or click a review button to mark the selection. The review
 menu lets you choose Highlight, Underline, Squiggly or StrikeOut, change color and
-opacity, and save the style as a favorite. Click a review favorite, select text,
-then apply the mark. Search with Ctrl+F, Enter to start, and click a result to jump.
+opacity, and save the tool as a favorite. Activate a tool under **Text Review →
+Choose Review Tool** (正文审阅 → 选用审阅工具) or from the favorites bar, then drag
+across text to mark it on release. With **Keep Tool Active**
+(持续使用) off, one successful mark returns to the previous persistent tool. Cancelled
+and unsuccessful selections keep the tool active. Set a favorite's saved mode in its editor.
+Search with Ctrl+F, Enter to start, and click a result to jump.
 Search supports a case option, cancellation, and up to 1,000 matches. It reads the
 existing PDF text layer. Hold Shift + wheel to pan horizontally in the document.
 Ctrl + wheel zooms the document or resizes previews in the full-screen page grid.
@@ -98,9 +107,11 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 ## Traditional Chinese (zh-TC)
 
 點「選文字」後在同一頁拖選，Ctrl+C 複製。0.3.3 在頁面上方顯示高亮、底線、
-波浪線及刪除線按鈕，也顯示套用結果。可從審閱選單設定顏色與不透明度並收藏。
+波浪線及刪除線按鈕，也顯示套用結果。從「正文审阅」開啟「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏欄。啟用後拖選正文，放開時套用。關閉「持续使用」後，成功標記一次即回到上一個持續工具。取消或未成功時保留目前工具。編輯收藏可儲存其持續或單次模式。
 Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結果跳轉，上限 1,000 筆。
 正文 Shift + 滾輪左右平移，Ctrl + 滾輪縮放。全螢幕縮圖的 Ctrl + 滾輪調整預覽尺寸。
+用「框选 / 移动」選取一條普通筆跡或自由螢光筆跡，再點選區旁的「样式」。套用顏色、粗細和不透明度後，可按 Ctrl+Z 一次復原。儲存並重開 PDF 後仍可編輯該筆跡。
+
 選「自由荧光笔」可直接在 PDF 頁面上劃線，掃描頁也能使用。要用滑鼠左鍵或單指劃線，先開啟「鼠标与手跟随工具」。在屬性列調整顏色、粗細和不透明度，再用「收藏当前工具」存成預設。Ctrl+Z/Ctrl+Y 復原或重做。儲存 PDF 後用本版重開，可選取、移動或擦除螢光筆跡。
 
 0.3.4 可針對混合選區中有可靠座標的正文加標記，並顯示略過的字形數。複製保留整段文字。
@@ -144,9 +155,11 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 ## Simplified Chinese (zh-SC)
 
 点「选文字」后在同一页拖选，Ctrl+C 复制。0.3.3 在页面上方显示高亮、下划线、
-波浪线及删除线按钮，也显示应用结果。可从审阅菜单设置颜色与不透明度并收藏。
+波浪线及删除线按钮，也显示应用结果。从「正文审阅」打开「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏栏。启用后拖选正文，松开时应用。关闭「持续使用」后，成功标记一次就回到上一个持续工具。取消或未成功时保留当前工具。编辑收藏可保存其持续或单次模式。
 Ctrl+F 搜索已有文字层，Enter 开始，可选大小写、停止，点结果跳转，上限 1,000 条。
 正文 Shift + 滚轮左右平移，Ctrl + 滚轮缩放。全屏缩略图的 Ctrl + 滚轮调整预览尺寸。
+用「框选 / 移动」选中一条普通笔迹或自由荧光笔迹，再点选区旁的「样式」。应用颜色、粗细和不透明度后，可按 Ctrl+Z 一次撤销。保存并重开 PDF 后仍可编辑该笔迹。
+
 选「自由荧光笔」可直接在 PDF 页面上划线，扫描页也能使用。要用鼠标左键或单指划线，先打开「鼠标与手跟随工具」。在属性栏调颜色、粗细和不透明度，再用「收藏当前工具」存成预设。Ctrl+Z/Ctrl+Y 撤销或重做。保存 PDF 后用本版重开，可选取、移动或擦除荧光笔迹。
 
 0.3.4 可对混合选区中有可靠坐标的正文添加标记，并提示跳过的字形数。复制保留整段文字。

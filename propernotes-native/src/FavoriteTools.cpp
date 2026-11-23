@@ -61,7 +61,7 @@ QJsonObject styleJson(const FavoriteTool& favorite)
     const auto& t = favorite.tools;
     if (favorite.markupKind)
         return {{"kind", markupToken(*favorite.markupKind)}, {"color", favorite.color.name(QColor::HexRgb)},
-                {"opacity", t.opacity}};
+                {"opacity", t.opacity}, {"singleUse", favorite.reviewSingleUse}};
     if (favorite.tool == InkCanvas::Tool::Pen)
         return {{"color",favorite.color.name(QColor::HexRgb)},{"widthPt",favorite.widthPt},
                 {"opacity",t.opacity},{"pressureEnabled",t.pressureEnabled},
@@ -98,7 +98,7 @@ QString textMarkupKindName(TextMarkupKind kind)
     return QStringLiteral("审阅");
 }
 
-FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color, const QString& name)
+FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color, const QString& name, bool singleUse)
 {
     FavoriteTool favorite;
     favorite.tool = InkCanvas::Tool::TextSelect;
@@ -107,6 +107,7 @@ FavoriteTool captureReviewFavorite(TextMarkupKind kind, const QColor& color, con
     favorite.color = color;
     favorite.color.setAlpha(255);
     favorite.tools.opacity = color.alphaF();
+    favorite.reviewSingleUse = singleUse;
     return favorite;
 }
 
@@ -188,8 +189,9 @@ QString favoriteToolName(InkCanvas::Tool tool)
 QString favoriteDescription(const FavoriteTool& favorite)
 {
     if (favorite.markupKind)
-        return favorite.name + QLatin1Char('\n') + QStringLiteral("%1 · %2% 不透明度")
-            .arg(textMarkupKindName(*favorite.markupKind)).arg(qRound(favorite.tools.opacity * 100));
+        return favorite.name + QLatin1Char('\n') + QStringLiteral("正文%1 · %2% 不透明度 · %3")
+            .arg(textMarkupKindName(*favorite.markupKind)).arg(qRound(favorite.tools.opacity * 100))
+            .arg(favorite.reviewSingleUse ? QStringLiteral("单次") : QStringLiteral("持续"));
     QString detail = favoriteToolName(favorite.tool);
     if (favorite.tool == InkCanvas::Tool::Pen)
         detail += QStringLiteral(" · %1 pt · %2% 不透明度 · %3").arg(favorite.widthPt).arg(qRound(favorite.tools.opacity*100))
@@ -242,7 +244,7 @@ bool validFavoriteTools(const QVector<FavoriteTool>& favorites, QString* error)
                 return fail();
             continue;
         }
-        if (kind(f.tool).isEmpty()) return fail();
+        if (f.reviewSingleUse || kind(f.tool).isEmpty()) return fail();
         if (f.tool == InkCanvas::Tool::Pen || f.tool == InkCanvas::Tool::TextBox) {
             if (!f.color.isValid() || f.color.alpha()!=255 || !std::isfinite(f.tools.opacity) || f.tools.opacity<0 || f.tools.opacity>1) return fail();
         }
@@ -269,9 +271,12 @@ QJsonArray favoriteToolsJson(const QVector<FavoriteTool>& favorites)
     return result;
 }
 
-bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, bool allowHighlighter)
+bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites, int settingsVersion)
 {
     if (array.size()>MaximumFavorites) return false;
+    const bool hasReviewUse = settingsVersion >= 6;
+    QStringList reviewStyleKeys{QStringLiteral("kind"), QStringLiteral("color"), QStringLiteral("opacity")};
+    if (hasReviewUse) reviewStyleKeys.append(QStringLiteral("singleUse"));
     QVector<FavoriteTool> result;
     for (const auto& item : array) {
         if (!item.isObject()) return false;
@@ -282,18 +287,20 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
         if (f.id.toString(QUuid::WithoutBraces).compare(object.value("id").toString(),Qt::CaseInsensitive)!=0) return false;
         const QString tool=object.value("tool").toString();
         if(tool=="pen")f.tool=InkCanvas::Tool::Pen;else if(tool=="eraser")f.tool=InkCanvas::Tool::ObjectEraser;
-        else if (tool == "freehand-highlighter" && allowHighlighter) f.tool = InkCanvas::Tool::Highlighter;
+        else if (tool == "freehand-highlighter" && settingsVersion >= 5) f.tool = InkCanvas::Tool::Highlighter;
         else if(tool=="text-box")f.tool=InkCanvas::Tool::TextBox;else if(tool=="select")f.tool=InkCanvas::Tool::Select;
         else if(tool=="pan")f.tool=InkCanvas::Tool::Pan;
         else if(tool=="text-review")f.tool=InkCanvas::Tool::TextSelect;else return false;
         const auto style=object.value("style").toObject();
         if (f.tool == InkCanvas::Tool::TextSelect) {
-            if (!exactKeys(style,{"kind","color","opacity"}) || !style.value("kind").isString() ||
-                !readColor(style,f.color) || !number(style,"opacity",1.0 / 255,1)) return false;
+            if (!exactKeys(style, reviewStyleKeys) || !style.value("kind").isString() ||
+                !readColor(style, f.color) || !number(style, "opacity", 1.0 / 255, 1) ||
+                (hasReviewUse && !style.value("singleUse").isBool())) return false;
             for (auto candidate : {TextMarkupKind::Highlight, TextMarkupKind::Underline, TextMarkupKind::StrikeOut, TextMarkupKind::Squiggly})
                 if (style.value("kind").toString() == markupToken(candidate)) f.markupKind = candidate;
             if (!f.markupKind) return false;
             f.tools.opacity = style.value("opacity").toDouble();
+            f.reviewSingleUse = hasReviewUse && style.value("singleUse").toBool();
         } else if(f.tool==InkCanvas::Tool::Pen){
             if(!exactKeys(style,{"color","widthPt","opacity","pressureEnabled","pressureSensitivity","singleUse"}) ||
                 !readColor(style,f.color)||!number(style,"widthPt",0.5,24)||!number(style,"opacity",0,1)||

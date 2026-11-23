@@ -3,16 +3,20 @@
 #include "InkData.h"
 #include "PdfTextLayer.h"
 #include <QImage>
+#include <QPointer>
 #include <QSet>
 #include <QWidget>
 #include <memory>
 
+class QContextMenuEvent;
+class QDialog;
 class QFocusEvent;
 class QKeyEvent;
 class QMouseEvent;
 class QPaintEvent;
 class QPlainTextEdit;
 class QTabletEvent;
+class QToolButton;
 class QWheelEvent;
 
 namespace propernotes {
@@ -49,6 +53,7 @@ public:
     void setEditingEnabled(bool enabled);
     void setDarkTheme(bool dark) { m_darkTheme = dark; update(); }
     void setZoom(qreal zoom);
+    void setVisibleCanvasRect(const QRect& visibleRect);
     qreal zoom() const { return m_zoom; }
     int pageIndex() const { return m_pageIndex; }
     bool hasActiveGesture() const;
@@ -67,7 +72,7 @@ public:
     QPointF widgetPointForPdf(const QPointF& pdfPoint) const;
     QSize sizeHint() const override;
     void finishActiveOperation(FinishReason reason = FinishReason::ForcedCommit);
-    void finishGesture() { finishActiveOperation(FinishReason::ForcedCommit); }
+    void finishGesture();
     void cancelActiveOperation();
 
 signals:
@@ -95,6 +100,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void mouseDoubleClickEvent(QMouseEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void focusOutEvent(QFocusEvent* event) override;
     void keyPressEvent(QKeyEvent* event) override;
@@ -119,6 +125,10 @@ private:
     void beginTextSelection(const QPointF& position);
     void updateTextSelection(const QPointF& position);
     void positionEditor();
+    const InkStroke* selectedInkStroke() const;
+    void updateStrokeStyleButton();
+    void beginStrokeStyleEdit();
+    void cancelStrokeStyleEdit();
     QUuid textAt(const QPointF& pdfPoint) const;
     QSet<QUuid> objectsIn(const QRectF& pdfRect) const;
     QRectF selectionBounds() const;
@@ -186,6 +196,9 @@ private:
     QSet<QUuid> m_selectionBeforeGesture;
     InkStroke m_pendingStroke;
     QPlainTextEdit* m_editor = nullptr;
+    QToolButton* m_strokeStyleButton = nullptr;
+    QPointer<QDialog> m_strokeStyleDialog;
+    QRect m_visibleCanvasRect;
     QUuid m_editTextId;
     QRectF m_editTextRect;
     PageAnnotations m_beforeTextEdit;

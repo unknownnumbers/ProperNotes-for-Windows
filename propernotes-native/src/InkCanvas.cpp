@@ -1,22 +1,33 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "InkCanvas.h"
+#include "ToolPreferences.h"
 
 #include <QApplication>
+#include <QColorDialog>
+#include <QContextMenuEvent>
+#include <QDialogButtonBox>
+#include <QDoubleSpinBox>
 #include <QEvent>
 #include <QFocusEvent>
 #include <QFont>
+#include <QFormLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QInputMethod>
 #include <QLineF>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPixmap>
 #include <QPlainTextEdit>
 #include <QPointingDevice>
+#include <QPushButton>
+#include <QScreen>
 #include <QSignalBlocker>
 #include <QTabletEvent>
 #include <QTextDocument>
 #include <QTextCursor>
 #include <QTouchEvent>
+#include <QToolButton>
 #include <QVariant>
 #include <QWheelEvent>
 #include <algorithm>
@@ -183,6 +194,78 @@ void paintTextQuads(QPainter& painter, const QVector<TextMarkupQuad>& quads, con
         painter.drawPolygon(polygon);
     }
 }
+
+QRectF strokeBounds(const InkStroke& stroke)
+{
+    QRectF bounds;
+    // Each connecting segment lies within the union bounds of its two round caps.
+    for (const auto& point : stroke.points) {
+        const qreal width = strokeSampleWidth(stroke, point);
+        bounds = bounds.united(QRectF(point.position - QPointF(width / 2, width / 2), QSizeF(width, width)));
+    }
+    return bounds;
+}
+
+class StrokeStyleButton final : public QToolButton {
+public:
+    explicit StrokeStyleButton(QWidget* parent) : QToolButton(parent)
+    {
+        setAttribute(Qt::WA_AcceptTouchEvents);
+        setCursor(Qt::ArrowCursor);
+        setText(QStringLiteral("样式"));
+        setToolTip(QStringLiteral("编辑笔迹的颜色、粗细和不透明度"));
+        setAccessibleName(QStringLiteral("编辑笔迹样式"));
+        setMinimumSize(44, 32);
+        setFocusPolicy(Qt::TabFocus);
+    }
+
+protected:
+    void tabletEvent(QTabletEvent* event) override
+    {
+        event->accept();
+        if (event->type() == QEvent::TabletPress)
+            m_penPressed = !m_touchPressed && event->button() == Qt::LeftButton
+                && event->pointingDevice()->pointerType() != QPointingDevice::PointerType::Eraser;
+        if (event->type() == QEvent::TabletRelease) {
+            const bool activate = std::exchange(m_penPressed, false) && rect().contains(event->position().toPoint());
+            if (activate) click();
+        }
+    }
+
+    bool event(QEvent* event) override
+    {
+        switch (event->type()) {
+        case QEvent::TouchBegin:
+        case QEvent::TouchUpdate:
+        case QEvent::TouchEnd:
+        case QEvent::TouchCancel: {
+            const auto* touch = static_cast<QTouchEvent*>(event);
+            const bool singleInside = touch->points().size() == 1 && rect().contains(touch->points().front().position().toPoint());
+            event->accept();
+            if (event->type() == QEvent::TouchBegin)
+                m_touchPressed = singleInside && !m_penPressed;
+            else if (event->type() == QEvent::TouchUpdate)
+                m_touchPressed &= singleInside;
+            else {
+                const bool activate = std::exchange(m_touchPressed, false) && event->type() == QEvent::TouchEnd && singleInside;
+                if (activate) click();
+            }
+            return true;
+        }
+        case QEvent::Hide:
+        case QEvent::WindowDeactivate:
+            m_penPressed = m_touchPressed = false;
+            break;
+        default:
+            break;
+        }
+        return QToolButton::event(event);
+    }
+
+private:
+    bool m_penPressed = false;
+    bool m_touchPressed = false;
+};
 } // namespace
 
 InkCanvas::InkCanvas(QWidget* parent) : QWidget(parent)
@@ -191,6 +274,9 @@ InkCanvas::InkCanvas(QWidget* parent) : QWidget(parent)
     setFocusPolicy(Qt::StrongFocus);
     setMouseTracking(true);
     setAccessibleName(QStringLiteral("PDF 页面和批注"));
+    m_strokeStyleButton = new StrokeStyleButton(this);
+    m_strokeStyleButton->hide();
+    connect(m_strokeStyleButton, &QToolButton::clicked, this, &InkCanvas::beginStrokeStyleEdit);
     qApp->installEventFilter(this);
     updateCursor();
 }
@@ -204,6 +290,8 @@ void InkCanvas::setPage(int pageIndex, const QImage& background, const QTransfor
                         const QRectF& pageRect, qreal rasterScale, const PageAnnotations& annotations)
 {
     finishActiveOperation();
+    if (pageIndex != m_pageIndex || annotations != m_annotations)
+        cancelStrokeStyleEdit();
     if (pageIndex != m_pageIndex) {
         clearSelection();
         m_textPage.reset();
@@ -233,6 +321,7 @@ void InkCanvas::setPage(int pageIndex, const QImage& background, const QTransfor
 void InkCanvas::setPageAnnotations(const PageAnnotations& annotations)
 {
     finishActiveOperation();
+    cancelStrokeStyleEdit();
     m_annotations = annotations;
     QSet<QUuid> valid;
     for (const auto& stroke : annotations.strokes) valid.insert(stroke.id);
@@ -240,12 +329,14 @@ void InkCanvas::setPageAnnotations(const PageAnnotations& annotations)
     for (const auto& markup : annotations.textMarkups) valid.insert(markup.id);
     m_selection.intersect(valid);
     rebuildInkCache();
+    updateStrokeStyleButton();
     Q_EMIT selectionChanged();
 }
 
 void InkCanvas::clearPage()
 {
     finishActiveOperation();
+    cancelStrokeStyleEdit();
     m_pageIndex = -1;
     m_background = {};
     m_inkCache = {};
@@ -263,10 +354,12 @@ void InkCanvas::setTool(Tool tool)
 {
     if (m_tool == tool) return;
     finishActiveOperation();
+    cancelStrokeStyleEdit();
     m_tool = tool;
     if (tool == Tool::TextSelect)
         clearSelection();
     updateCursor();
+    updateStrokeStyleButton();
     update();
 }
 
@@ -292,12 +385,15 @@ void InkCanvas::setTextStyle(const QString& family, qreal size, const QColor& co
 
 void InkCanvas::setEditingEnabled(bool enabled)
 {
+    if (enabled == m_editingEnabled) return;
     if (!enabled && m_editingEnabled) finishActiveOperation();
     m_editingEnabled = enabled;
+    if (!enabled) cancelStrokeStyleEdit();
     updateCursor();
+    updateStrokeStyleButton();
 }
 
-bool InkCanvas::hasActiveGesture() const { return m_gesture != Gesture::None || m_editor != nullptr; }
+bool InkCanvas::hasActiveGesture() const { return m_gesture != Gesture::None || m_editor || m_strokeStyleDialog; }
 
 void InkCanvas::setTextPage(const std::shared_ptr<const PdfTextPage>& text)
 {
@@ -320,8 +416,18 @@ void InkCanvas::setSearchHighlight(const QVector<TextMarkupQuad>& quads)
 void InkCanvas::setZoom(qreal zoom)
 {
     if (!std::isfinite(zoom)) return;
-    m_zoom = std::clamp(zoom, 1e-6, 4.0);
+    const qreal bounded = std::clamp(zoom, 1e-6, 4.0);
+    if (bounded == m_zoom) return;
+    m_zoom = bounded;
     updateExtent();
+}
+
+void InkCanvas::setVisibleCanvasRect(const QRect& visibleRect)
+{
+    if (visibleRect == m_visibleCanvasRect) return;
+    m_visibleCanvasRect = visibleRect;
+    if (!m_visibleCanvasRect.intersects(rect())) cancelStrokeStyleEdit();
+    updateStrokeStyleButton();
 }
 
 QSizeF InkCanvas::imageSize() const
@@ -336,6 +442,7 @@ void InkCanvas::updateExtent()
     m_imageScale = m_zoom / m_rasterScale;
     resize(sizeHint());
     positionEditor();
+    updateStrokeStyleButton();
     updateGeometry();
     update();
 }
@@ -461,14 +568,165 @@ void InkCanvas::clearSelection()
 {
     if (m_selection.isEmpty()) return;
     m_selection.clear();
+    cancelStrokeStyleEdit();
+    updateStrokeStyleButton();
     Q_EMIT selectionChanged();
     update();
+}
+
+const InkStroke* InkCanvas::selectedInkStroke() const
+{
+    if (!m_editingEnabled || m_pageIndex < 0 || m_background.isNull() || m_tool != Tool::Select || m_selection.size() != 1)
+        return nullptr;
+    const auto id = *m_selection.cbegin();
+    const auto stroke = std::find_if(m_annotations.strokes.cbegin(), m_annotations.strokes.cend(),
+        [&id](const InkStroke& value) { return value.id == id; });
+    return stroke == m_annotations.strokes.cend() ? nullptr : &*stroke;
+}
+
+void InkCanvas::updateStrokeStyleButton()
+{
+    const InkStroke* stroke = selectedInkStroke();
+    if (!stroke || m_gesture != Gesture::None || m_editor || m_strokeStyleDialog || m_externalPenContact) {
+        m_strokeStyleButton->hide();
+        return;
+    }
+
+    const QRect visible = m_visibleCanvasRect.intersected(rect());
+    const QRect available = visible.adjusted(6, 6, -6, -6);
+    const QSize buttonSize = m_strokeStyleButton->sizeHint().expandedTo(m_strokeStyleButton->minimumSize());
+    const QRectF selection = pdfToWidget().mapRect(strokeBounds(*stroke));
+    const QRectF visibleSelection = selection.intersected(QRectF(visible));
+    if (available.width() < buttonSize.width() || available.height() < buttonSize.height() || visibleSelection.isEmpty()) {
+        m_strokeStyleButton->hide();
+        return;
+    }
+
+    const int maxX = available.x() + available.width() - buttonSize.width();
+    const int maxY = available.y() + available.height() - buttonSize.height();
+    const int x = std::clamp(qRound(visibleSelection.right()) - buttonSize.width(), available.x(), maxX);
+    const int above = qRound(visibleSelection.top()) - buttonSize.height() - 5;
+    const int y = above >= available.y() ? above : std::clamp(qRound(visibleSelection.bottom()) + 5, available.y(), maxY);
+    m_strokeStyleButton->setGeometry(QRect(QPoint(x, y), buttonSize));
+    m_strokeStyleButton->show();
+}
+
+void InkCanvas::beginStrokeStyleEdit()
+{
+    const InkStroke* stroke = selectedInkStroke();
+    if (!stroke || hasActiveGesture() || hasPointerContact() || m_externalPenContact) return;
+
+    const InkStroke original = *stroke;
+    const int page = m_pageIndex;
+    const qreal userUnit = m_pageUserUnit;
+    const bool highlighter = original.kind == InkStrokeKind::Highlighter;
+    auto* dialog = new QDialog(this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
+    dialog->setWindowModality(Qt::WindowModal);
+    dialog->setWindowTitle(highlighter ? QStringLiteral("编辑自由荧光笔样式") : QStringLiteral("编辑笔迹样式"));
+    auto* form = new QFormLayout(dialog);
+
+    auto* colorButton = new QPushButton(dialog);
+    auto* picker = new QColorDialog(original.color.toRgb(), dialog);
+    auto draftColor = std::make_shared<QColor>(original.color.toRgb());
+    const auto showColor = [colorButton](const QColor& color) {
+        QPixmap swatch(18, 18);
+        swatch.fill(QColor(color.rgb()));
+        colorButton->setIcon(QIcon(swatch));
+        colorButton->setText(color.name(QColor::HexRgb));
+    };
+    showColor(*draftColor);
+    connect(colorButton, &QPushButton::clicked, picker, [picker, draftColor] {
+        picker->setCurrentColor(*draftColor);
+        picker->open();
+    });
+    connect(picker, &QColorDialog::colorSelected, dialog, [draftColor, showColor](const QColor& color) {
+        *draftColor = color.toRgb();
+        showColor(*draftColor);
+    });
+    form->addRow(QStringLiteral("颜色"), colorButton);
+
+    auto* width = new QDoubleSpinBox(dialog);
+    width->setDecimals(3);
+    width->setSingleStep(0.5);
+    width->setSuffix(QStringLiteral(" pt"));
+    const qreal originalWidth = original.widthPt * userUnit;
+    const qreal normalMinWidth = highlighter ? MinHighlighterWidthPt : 0.5;
+    const qreal normalMaxWidth = highlighter ? MaxHighlighterWidthPt : 24;
+    width->setRange(std::min(originalWidth, normalMinWidth), std::max(originalWidth, normalMaxWidth));
+    width->setValue(originalWidth);
+    const qreal initialWidth = width->value();
+    form->addRow(QStringLiteral("粗细"), width);
+
+    auto* opacity = new QDoubleSpinBox(dialog);
+    opacity->setDecimals(2);
+    opacity->setSuffix(QStringLiteral("%"));
+    const qreal originalOpacity = original.color.alphaF() * 100;
+    opacity->setRange(highlighter ? std::min(qreal(MinHighlighterOpacity), originalOpacity) : 0, 100);
+    opacity->setValue(originalOpacity);
+    const qreal initialOpacity = opacity->value();
+    form->addRow(QStringLiteral("不透明度"), opacity);
+
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Apply | QDialogButtonBox::Cancel, dialog);
+    buttons->button(QDialogButtonBox::Apply)->setText(QStringLiteral("应用"));
+    buttons->button(QDialogButtonBox::Cancel)->setText(QStringLiteral("取消"));
+    connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked, dialog, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, dialog, &QDialog::reject);
+    form->addRow(buttons);
+
+    connect(dialog, &QDialog::finished, this, [this, dialog, page, userUnit, original, draftColor, width, opacity,
+            initialWidth, initialOpacity](int result) {
+        if (m_strokeStyleDialog.data() != dialog) return;
+        m_strokeStyleDialog.clear();
+        const InkStroke* selected = selectedInkStroke();
+        if (result == QDialog::Accepted && page == m_pageIndex && qFuzzyCompare(userUnit, m_pageUserUnit)
+            && selected && *selected == original) {
+            InkStroke edited = original;
+            if (draftColor->rgb() != original.color.rgb()) {
+                edited.color = *draftColor;
+                edited.color.setAlphaF(original.color.alphaF());
+            }
+            if (width->value() != initialWidth) edited.widthPt = std::clamp(width->value() / userUnit, 0.05, 1000.0);
+            if (opacity->value() != initialOpacity) edited.color.setAlphaF(opacity->value() / 100);
+            if (edited != original) {
+                const qsizetype index = selected - m_annotations.strokes.constData();
+                const auto before = m_annotations;
+                m_annotations.strokes[index] = std::move(edited);
+                commit(before, QStringLiteral("ink-style"), original.id, false, Tool::Select);
+                return;
+            }
+        }
+        updateStrokeStyleButton();
+        Q_EMIT operationFinished();
+    });
+
+    const QRectF strokeRect = pdfToWidget().mapRect(strokeBounds(original));
+    const QRectF visible = strokeRect.intersected(QRectF(m_visibleCanvasRect));
+    const QPoint anchor = m_strokeStyleButton->isVisible() ? m_strokeStyleButton->mapToGlobal(QPoint(0, m_strokeStyleButton->height()))
+        : mapToGlobal((visible.isEmpty() ? strokeRect.center() : visible.center()).toPoint());
+    QScreen* display = QGuiApplication::screenAt(anchor);
+    if (!display) display = screen();
+    dialog->adjustSize();
+    if (display) {
+        const QRect area = display->availableGeometry().adjusted(12, 34, -12, -12);
+        const int maxX = std::max(area.x(), area.x() + area.width() - dialog->width());
+        const int maxY = std::max(area.y(), area.y() + area.height() - dialog->height());
+        dialog->move(std::clamp(anchor.x(), area.x(), maxX), std::clamp(anchor.y() + 8, area.y(), maxY));
+    }
+    m_strokeStyleDialog = dialog;
+    updateStrokeStyleButton();
+    dialog->open();
+}
+
+void InkCanvas::cancelStrokeStyleEdit()
+{
+    if (m_strokeStyleDialog) m_strokeStyleDialog->reject();
 }
 
 QRectF InkCanvas::objectBounds(const QUuid& id) const
 {
     for (const auto& stroke : m_annotations.strokes)
-        if (stroke.id == id) return inkStrokeOutline(stroke).boundingRect();
+        if (stroke.id == id) return strokeBounds(stroke);
     for (const auto& text : m_annotations.textBoxes)
         if (text.id == id) return text.rect;
     for (const auto& markup : m_annotations.textMarkups)
@@ -535,6 +793,7 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     if (forcePan || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
         m_gesture = Gesture::Pan;
         updateCursor();
+        updateStrokeStyleButton();
         return;
     }
     if (!insidePaper(position)) { m_source = Source::None; return; }
@@ -595,6 +854,7 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
         m_gesture = Gesture::TextFrame;
     }
     updateCursor();
+    updateStrokeStyleButton();
     update();
 }
 
@@ -760,6 +1020,7 @@ void InkCanvas::resetGesture()
     m_textLastGlyph = -1;
     m_textPreview = {};
     updateCursor();
+    updateStrokeStyleButton();
 }
 
 void InkCanvas::commit(const PageAnnotations& before, const QString& reason, const QUuid& focusId,
@@ -778,6 +1039,7 @@ void InkCanvas::commit(const PageAnnotations& before, const QString& reason, con
         Q_EMIT annotationsCommitted(m_pageIndex, before, after, reason, focusId);
         if (normalCompletion) Q_EMIT normalToolCompleted(completedTool, reason);
     }
+    updateStrokeStyleButton();
     Q_EMIT operationFinished();
     update();
 }
@@ -788,6 +1050,12 @@ void InkCanvas::pointerRelease(const QPointF& position, qreal pressure)
     else if (m_gesture != Gesture::Pan && m_gesture != Gesture::None)
         pointerMove(position, m_previousPanGlobal, pressure);
     finishActiveOperation(FinishReason::NormalRelease);
+}
+
+void InkCanvas::finishGesture()
+{
+    cancelStrokeStyleEdit();
+    finishActiveOperation(FinishReason::ForcedCommit);
 }
 
 void InkCanvas::finishActiveOperation(FinishReason finishReason)
@@ -833,6 +1101,7 @@ void InkCanvas::finishActiveOperation(FinishReason finishReason)
 
 void InkCanvas::cancelActiveOperation()
 {
+    if (m_strokeStyleDialog) { cancelStrokeStyleEdit(); return; }
     if (m_editor) { finishTextEdit(true); return; }
     if (m_gesture == Gesture::None) return;
     if (m_gesture == Gesture::TextSelection) {
@@ -862,11 +1131,13 @@ void InkCanvas::cancelTouchOperation()
 
 void InkCanvas::setExternalPenContact(bool down)
 {
+    if (m_externalPenContact == down) return;
     m_externalPenContact = down;
     if (down) {
         m_suppressedTouch = true;
         if (m_source == Source::Touch || m_touchActive) cancelTouchOperation();
     }
+    updateStrokeStyleButton();
 }
 
 void InkCanvas::beginTextEdit(const QUuid& id, const QRectF& newRect)
@@ -1065,6 +1336,19 @@ void InkCanvas::mouseDoubleClickEvent(QMouseEvent* event)
         if (!id.isNull()) { beginTextEdit(id); event->accept(); return; }
     }
     mousePressEvent(event);
+}
+
+void InkCanvas::contextMenuEvent(QContextMenuEvent* event)
+{
+    const InkStroke* selected = selectedInkStroke();
+    if (!selected || hasActiveGesture() || hasPointerContact() || m_externalPenContact
+        || (event->reason() != QContextMenuEvent::Keyboard &&
+            !pdfToWidget().mapRect(strokeBounds(*selected)).adjusted(-4, -4, 4, 4).contains(event->pos()))) {
+        event->ignore();
+        return;
+    }
+    event->accept();
+    beginStrokeStyleEdit();
 }
 
 void InkCanvas::wheelEvent(QWheelEvent* event)

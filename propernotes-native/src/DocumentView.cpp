@@ -598,6 +598,7 @@ void DocumentView::refreshVisible()
                 m_textSelectionPage = index;
                 canvas->setTextSelection(selection.quads);
                 Q_EMIT textSelectionChanged();
+                Q_EMIT textSelectionCompleted();
             });
             connect(canvas, &InkCanvas::activity, this, &DocumentView::activity);
             connect(canvas, &InkCanvas::operationFinished, this, [this] { m_refreshTimer.start(0); });
@@ -611,6 +612,7 @@ void DocumentView::refreshVisible()
         const QRectF rect = m_pagePositions[page].translated(-offset());
         canvas->move(qRound(rect.left()), qRound(rect.top()));
         applyImage(page);
+        canvas->setVisibleCanvasRect(viewport()->rect().translated(-canvas->pos()));
         canvas->setEditingEnabled(m_editing && m_cache.contains(page));
         canvas->show();
     }
@@ -910,7 +912,7 @@ void DocumentView::finishGesture()
 {
     const auto canvases = m_canvases;
     for (auto* canvas : canvases)
-        canvas->finishActiveOperation(InkCanvas::FinishReason::ForcedCommit);
+        canvas->finishGesture();
 }
 void DocumentView::cancelGesture()
 {

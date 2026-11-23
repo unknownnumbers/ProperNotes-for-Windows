@@ -62,6 +62,9 @@ private:
     void resetTextSearch(bool hidePanel);
     void updateSearchProgress();
     void copyBodySelection();
+    const FavoriteTool* activeReviewTool() const;
+    void chooseReviewTool(TextMarkupKind kind);
+    void setActiveReviewSingleUse(bool singleUse);
     void applyTextReview(TextMarkupKind kind);
     void favoriteTextReview();
     QColor reviewColor(TextMarkupKind kind) const;

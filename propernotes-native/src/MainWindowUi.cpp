@@ -79,6 +79,10 @@ void MainWindow::buildUi() {
     connect(m_redoAction,&QAction::triggered,this,[this]{editHistory(true);});
     connect(m_followAction,&QAction::triggered,this,[this](bool on){auto p=m_preferences;p.tools.inputFollowsTool=on;persistPreferences(p);});
     connect(m_lockAction,&QAction::triggered,this,[this](bool locked){
+        if (m_tool == InkCanvas::Tool::TextSelect) {
+            setActiveReviewSingleUse(!locked);
+            return;
+        }
         if(m_preferencesBusy||m_backupBusy||m_fileBusy||!m_preferencesWritable||locked==!isSingleUse(m_tool))return;
         auto p=m_preferences;p.tools=effectiveToolPreferences();p.penColor=m_color;p.penWidthPt=effectivePenWidth();
         if(m_tool==InkCanvas::Tool::Pen)p.tools.penSingleUse=!locked;

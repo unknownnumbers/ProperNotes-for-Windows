@@ -105,7 +105,8 @@ QString tooltip(const QString& text){return QStringLiteral("<qt>")+text.toHtmlEs
 bool sameRecipe(const FavoriteTool& a,const FavoriteTool& b)
 {
     if (a.markupKind || b.markupKind)
-        return a.markupKind == b.markupKind && a.color == b.color && qFuzzyCompare(a.tools.opacity, b.tools.opacity);
+        return a.markupKind == b.markupKind && a.color == b.color
+            && qFuzzyCompare(a.tools.opacity, b.tools.opacity) && a.reviewSingleUse == b.reviewSingleUse;
     auto left=captureFavorite(a.tool,a.tools,a.color,a.widthPt,favoriteToolName(a.tool));
     auto right=captureFavorite(b.tool,b.tools,b.color,b.widthPt,favoriteToolName(b.tool));
     left.id=QUuid();right.id=QUuid();return favoriteToolsJson({left})==favoriteToolsJson({right});
@@ -170,6 +171,7 @@ public:
         case InkCanvas::Tool::Highlighter: single = original.tools.highlighterSingleUse; break;
         case InkCanvas::Tool::ObjectEraser: single = original.tools.eraserSingleUse; break;
         case InkCanvas::Tool::TextBox: single = original.tools.textSingleUse; break;
+        case InkCanvas::Tool::TextSelect: single = original.markupKind && original.reviewSingleUse; break;
         default: break;
         }
         m_single->setChecked(single);
@@ -183,7 +185,7 @@ public:
         const QString name = m_name->text().trimmed();
         FavoriteTool result;
         if (selection >= MarkupOffset) {
-            result = captureReviewFavorite(TextMarkupKind(selection - MarkupOffset), m_color, name);
+            result = captureReviewFavorite(TextMarkupKind(selection - MarkupOffset), m_color, name, m_single->isChecked());
             result.tools.opacity = tools.opacity;
         } else {
             if (selection == int(InkCanvas::Tool::Highlighter)) {
@@ -221,7 +223,7 @@ private:
         m_radius->setEnabled(eraser);
         m_family->setEnabled(text);
         m_size->setEnabled(text);
-        m_single->setEnabled(pen || highlighter || eraser || text);
+        m_single->setEnabled(pen || highlighter || eraser || text || markup);
     }
     FavoriteTool m_original;QColor m_color;QLineEdit* m_name;QComboBox* m_kind;QToolButton* m_colorButton;QDoubleSpinBox* m_width;QDoubleSpinBox* m_opacity;
     QCheckBox* m_pressure;QSpinBox* m_sensitivity;QComboBox* m_mode;QDoubleSpinBox* m_radius;QFontComboBox* m_family;QDoubleSpinBox* m_size;QCheckBox* m_single;
