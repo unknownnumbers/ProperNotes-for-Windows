@@ -55,6 +55,7 @@ private:
     void recordLayout();
     FavoritesBarPreferences currentLayout() const;
     void syncPlacementControls();
+    void placeResizeEdges();
     void constrainGeometry();
     QRect boundedFloatingGeometry(const QRect& geometry) const;
     void applyPlacement(bool floating, const QString& side);

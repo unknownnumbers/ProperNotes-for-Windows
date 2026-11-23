@@ -45,6 +45,8 @@ The 0.3.11 revision adopts a narrow native sidebar and an in-viewport floating f
 
 The 0.3.12 revision replaces inconsistent rasterized UI drawings with a pinned Lucide SVG subset, rendered at a common 24-pixel scale and the requested display pixel ratio. Favorite point-size badges use separate layout space. Pan and the mouse/touch follow switch have distinct hand and mouse icons; palette pinning depicts a toolbar and pin. Left/right edge docking is restored with a release preview, occupied layout space and separately saved floating geometry. Pen settings explain pressure response and preset independence, and provide a user-clicked Windows Pen & Windows Ink settings link. The full icon notices and source identities accompany the portable package. Cloud compilation and packaging do not launch or test the application. 原生 0.3.12 統一 SVG 圖示、獨立角標，恢復左右停靠並補充筆設定說明。原生 0.3.12 统一 SVG 图标、独立角标，恢复左右停靠并补充笔设置说明。實際外觀與輸入仍待用戶驗收。实际外观与输入仍待用户验收。
 
+The 0.3.13 revision removes the large top and bottom palette resize buttons. Drag an unlocked floating palette's upper or lower border directly to change height; no icon rows are reserved for resizing. The bottom move handle, edge docking, saved geometry and locked-state rules are retained. The workflow compiles and packages only. 原生 0.3.13 移除上下調高圖示，解鎖懸浮時直接拖動上下邊緣拉伸。原生 0.3.13 移除上下调高图标，解锁悬浮时直接拖动上下边缘拉伸。沒有在使用者 PC 安裝、啟動或測試。没有在用户 PC 安装、启动或测试。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

@@ -4,6 +4,16 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.13 resize from the palette edges
+
+Unlock the floating palette with the left-rail pin button, then drag its top or
+bottom edge directly to adjust the height. The large resize-icon rows have been
+removed. Keep using the bottom movement handle to move or dock the palette.
+Locking disables edge resizing, and a docked palette keeps its full side-strip
+height. Existing PDF behavior is retained. Cloud compilation and packaging are
+pending at source preparation time. No installation, application launch or test
+is performed on the recipient's PC.
+
 ### 0.3.12 icons, docking and pen settings
 
 The sidebar, favorite tools and bottom controls use consistently scaled vector
@@ -192,6 +202,10 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.13 直接拖動工具框邊緣
+
+先用左側圖釘解除固定，再直接拖動懸浮工具框的上、下邊緣調整高度。上下大型拉伸圖示已移除，底部移動把手仍用於移動及停靠。鎖定時不能拉伸，停靠時維持側欄整高，PDF 操作保留原有邏輯。源碼準備時仍待雲端編譯及打包，不在使用者 PC 安裝、啟動應用或執行測試。
+
 ### 0.3.12 圖示、停靠及筆設定
 
 側邊欄、收藏工具與底角控件的向量圖示採統一尺寸，pt 角標獨立排版，並修正高 DPI 顯示和間距。工具命令及 PDF 儲存格式維持原有邏輯。源碼準備時仍待雲端編譯及打包，不在使用者 PC 安裝、啟動或測試，實際編譯結果以包內構建紀錄為準。
@@ -267,6 +281,10 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.13 直接拖动工具框边缘
+
+先用左侧图钉解除固定，再直接拖动悬浮工具框的上、下边缘调整高度。上下大型拉伸图标已移除，底部移动把手仍用于移动和停靠。锁定时不能拉伸，停靠时保持侧栏整高，PDF 操作保留原有逻辑。源码准备时仍待云端编译和打包，不在用户 PC 安装、启动应用或运行测试。
 
 ### 0.3.12 图标、停靠及笔设置
 

@@ -6,6 +6,20 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.13 palette edge resizing
+
+English (en): The large top and bottom resize icons are removed. Direct edge
+zones resize an unlocked floating palette. Locking prevents resizing, and a
+docked palette retains the full side-strip height. PDF behavior and saved
+document formats remain unchanged. Cloud compilation and portable packaging are
+pending at source preparation time. No installation, application launch or test
+is performed on the user's PC. Actual edge hit targets, input cancellation and
+display scaling still require user acceptance.
+
+Traditional Chinese (zh-TC): 此修訂移除上下大型拉伸圖示，解鎖且懸浮時直接拖動工具框上、下邊緣調整高度。鎖定時停用拉伸，停靠時維持側欄整高，PDF 操作及文件格式保留原有邏輯。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。邊緣命中範圍、輸入取消和顯示縮放仍待使用者實際驗收。
+
+Simplified Chinese (zh-SC): 此修订移除上下大型拉伸图标，解锁且悬浮时直接拖动工具框上、下边缘调整高度。锁定时停用拉伸，停靠时保持侧栏整高，PDF 操作和文档格式保留原有逻辑。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试。边缘命中范围、输入取消和显示缩放仍待用户实际验收。
+
 ## 0.3.12 icons and restored edge docking
 
 English (en): This source revision unifies vector icon scale, alignment and

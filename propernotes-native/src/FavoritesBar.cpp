@@ -39,6 +39,7 @@
 namespace propernotes {
 namespace {
 constexpr int MoveHandle=0, TopHandle=1, BottomHandle=2;
+constexpr int ResizeEdgeHeight=10;
 QString tooltip(const QString& text) {return QStringLiteral("<qt>")+text.toHtmlEscaped().replace(QLatin1Char('\n'),QStringLiteral("<br>"))+QStringLiteral("</qt>");}
 bool sameRecipe(const FavoriteTool& a,const FavoriteTool& b)
 {
@@ -178,15 +179,27 @@ FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent),m_viewport(parent)
 {
     setObjectName(QStringLiteral("propernotesFavoritesBar"));setAttribute(Qt::WA_StyledBackground);setAutoFillBackground(true);
     setStyleSheet(QStringLiteral("QWidget#propernotesFavoritesBar{border:1px solid palette(mid);border-radius:12px;background:palette(window);} QToolButton{border:0;border-radius:7px;padding:0;} QToolButton:hover{background:palette(alternate-base);} QToolButton:checked{background:palette(highlight);}"));
-    setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setContentsMargins(8,6,8,6);layout->setSpacing(2);
+    setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setContentsMargins(8,ResizeEdgeHeight,8,ResizeEdgeHeight);layout->setSpacing(2);
     auto handle=[this,layout](int kind,const QString& label,const QString& icon){auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},[this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);b->setToolTip(label);b->setAccessibleName(label);b->setIcon(uiIcon(icon,palette()));configureReaderIconButton(b);b->setCursor(kind==MoveHandle?Qt::SizeAllCursor:Qt::SizeVerCursor);layout->addWidget(b,0,Qt::AlignHCenter);return b;};
-    m_topResize=handle(TopHandle,QStringLiteral("拖动上沿调整高度，或使用上下方向键"),QStringLiteral("grip"));
+    // Resize zones belong to the border, not to the list of toolbar buttons.
+    auto edge=[this](int kind,const QString& label){
+        auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},
+            [this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);
+        b->setToolTip(label);b->setAccessibleName(label);b->setCursor(Qt::SizeVerCursor);
+        b->setFocusPolicy(Qt::StrongFocus);
+        b->setStyleSheet(QStringLiteral("QToolButton,QToolButton:hover,QToolButton:pressed,QToolButton:checked{"
+            "background:transparent;border:0;border-radius:0;padding:0;margin:0;}"
+            "QToolButton:focus{border:1px dotted palette(highlight);}"));
+        return b;
+    };
+    m_topResize=edge(TopHandle,QStringLiteral("拖动工具栏上边缘调整高度，或使用上下方向键"));
     auto button=[this,layout](const QString& label,const QString& icon){auto* b=new QToolButton(this);b->setAutoRaise(true);configureReaderIconButton(b);b->setIcon(uiIcon(icon,palette()));b->setToolTip(label);b->setAccessibleName(label);layout->addWidget(b,0,Qt::AlignHCenter);return b;};
     m_pan=button(QStringLiteral("平移"),QStringLiteral("hand"));m_pan->setCheckable(true);m_select=button(QStringLiteral("框选／移动"),QStringLiteral("select"));m_select->setCheckable(true);m_selectMore=button(QStringLiteral("框选选项"),QStringLiteral("ellipsis"));m_selectMore->hide();
     auto separator=[this,layout]{auto* line=new QFrame(this);line->setFrameShape(QFrame::HLine);line->setFixedHeight(8);layout->addWidget(line);};separator();
     m_scroll=new QScrollArea(this);m_scroll->setObjectName(QStringLiteral("favoritesScroll"));m_scroll->setWidgetResizable(true);m_scroll->setFrameShape(QFrame::NoFrame);m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setMinimumHeight(0);m_scroll->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Expanding);
     m_entries=new QWidget;m_entriesLayout=new QVBoxLayout(m_entries);m_entriesLayout->setContentsMargins(0,2,0,2);m_entriesLayout->setSpacing(2);m_scroll->setWidget(m_entries);m_scroll->viewport()->installEventFilter(this);QScroller::grabGesture(m_scroll->viewport(),QScroller::TouchGesture);layout->addWidget(m_scroll,1);separator();
-    m_add=button(QStringLiteral("工具与选项：加入工具栏或使用"),QStringLiteral("plus"));m_move=handle(MoveHandle,QStringLiteral("移动工具栏，或使用方向键"),QStringLiteral("move"));m_bottomResize=handle(BottomHandle,QStringLiteral("拖动下沿调整高度，或使用上下方向键"),QStringLiteral("grip"));
+    m_add=button(QStringLiteral("工具与选项：加入工具栏或使用"),QStringLiteral("plus"));m_move=handle(MoveHandle,QStringLiteral("移动工具栏，或使用方向键"),QStringLiteral("move"));
+    m_bottomResize=edge(BottomHandle,QStringLiteral("拖动工具栏下边缘调整高度，或使用上下方向键"));
     connect(m_pan,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Pan);});connect(m_select,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Select);});connect(m_selectMore,&QToolButton::clicked,this,&FavoritesBar::selectionOptionsRequested);connect(m_add,&QToolButton::clicked,this,&FavoritesBar::openLibrary);
     m_visibilityAction=new QAction(QStringLiteral("显示收藏工具栏"),this);m_visibilityAction->setCheckable(true);connect(m_visibilityAction,&QAction::triggered,this,&FavoritesBar::setUserVisible);
     m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
@@ -236,6 +249,18 @@ void FavoritesBar::setPinned(bool pinned)
 void FavoritesBar::syncPlacementControls()
 {
     const bool unlocked=!m_preferences.pinned;m_move->setVisible(unlocked);m_topResize->setVisible(unlocked&&m_floating);m_bottomResize->setVisible(unlocked&&m_floating);m_move->setEnabled(m_writable);m_topResize->setEnabled(m_writable);m_bottomResize->setEnabled(m_writable);m_add->setEnabled(m_activationEnabled||m_writable);
+    if(auto* column=qobject_cast<QVBoxLayout*>(layout())){
+        const int margin=unlocked&&m_floating?ResizeEdgeHeight:6;
+        column->setContentsMargins(8,margin,8,margin);
+    }
+    placeResizeEdges();
+}
+void FavoritesBar::placeResizeEdges()
+{
+    if(!m_topResize||!m_bottomResize)return;
+    m_topResize->setGeometry(0,0,width(),ResizeEdgeHeight);
+    m_bottomResize->setGeometry(0,std::max(0,height()-ResizeEdgeHeight),width(),ResizeEdgeHeight);
+    m_topResize->raise();m_bottomResize->raise();
 }
 void FavoritesBar::rebuild()
 {
@@ -313,7 +338,18 @@ void FavoritesBar::syncDockHosts()
 }
 int FavoritesBar::minimumPaletteHeight()const
 {
-    int height=12+16+80;for(auto* button:{m_pan,m_select,m_selectMore,m_add,m_move,m_topResize,m_bottomResize})if(!button->isHidden())height+=button->height()+2;return height;
+    // Only actual layout rows consume space. The transparent edge zones are
+    // already contained in the margins and must never add 44px button rows.
+    const auto* column=qobject_cast<QVBoxLayout*>(layout());
+    if(!column)return 160;
+    const auto margins=column->contentsMargins();
+    int height=margins.top()+margins.bottom()+80,visible=0;
+    for(int i=0;i<column->count();++i){
+        const auto* item=column->itemAt(i);const auto* widget=item->widget();
+        if(!widget||widget->isHidden())continue;
+        ++visible;if(widget!=m_scroll)height+=widget->height();
+    }
+    return height+std::max(0,visible-1)*column->spacing();
 }
 void FavoritesBar::constrainGeometry()
 {
@@ -388,7 +424,8 @@ void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
     if(phase==0){
         if(kind!=MoveHandle&&!m_floating)return;
         m_layoutTimer.stop();hideDockPreview();
-        const QPoint offset=m_floating?m_viewport->mapFromGlobal(global.toPoint())-geometry().topLeft():QPoint(40,std::max(44,m_floatingGeometry.height()-72));
+        const int floatingMoveInset=ResizeEdgeHeight+ReaderButtonSize/2+1;
+        const QPoint offset=m_floating?m_viewport->mapFromGlobal(global.toPoint())-geometry().topLeft():QPoint(40,std::max(44,m_floatingGeometry.height()-floatingMoveInset));
         m_gesture=Gesture{kind,global,geometry(),offset,m_floating,false};return;
     }
     if(!m_gesture||m_gesture->kind!=kind)return;
@@ -450,7 +487,8 @@ bool FavoritesBar::eventFilter(QObject* watched,QEvent* e)
 bool FavoritesBar::event(QEvent* e)
 {
     const auto type=e->type();const bool result=QWidget::event(e);if(m_scroll&&m_floating&&!m_applying&&!m_hostClosing&&!m_gesture&&(type==QEvent::Move||type==QEvent::Resize))m_layoutTimer.start();
-    if(m_scroll&&(type==QEvent::PaletteChange||type==QEvent::ApplicationPaletteChange)){m_pan->setIcon(uiIcon(QStringLiteral("hand"),palette()));m_select->setIcon(uiIcon(QStringLiteral("select"),palette()));m_selectMore->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));m_add->setIcon(uiIcon(QStringLiteral("plus"),palette()));m_move->setIcon(uiIcon(QStringLiteral("move"),palette()));m_topResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));m_bottomResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));rebuild();}return result;
+    if(type==QEvent::Resize)placeResizeEdges();
+    if(m_scroll&&(type==QEvent::PaletteChange||type==QEvent::ApplicationPaletteChange)){m_pan->setIcon(uiIcon(QStringLiteral("hand"),palette()));m_select->setIcon(uiIcon(QStringLiteral("select"),palette()));m_selectMore->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));m_add->setIcon(uiIcon(QStringLiteral("plus"),palette()));m_move->setIcon(uiIcon(QStringLiteral("move"),palette()));rebuild();}return result;
 }
 void FavoritesBar::closeEvent(QCloseEvent* e){if(!m_hostClosing)setUserVisible(false);e->accept();}
 }
