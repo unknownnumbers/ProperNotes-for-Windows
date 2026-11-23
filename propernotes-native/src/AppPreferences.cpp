@@ -20,7 +20,7 @@ namespace propernotes {
 namespace {
 constexpr qint64 MaximumSettingsBytes = 256 * 1024;
 constexpr int MaximumRoots = 32;
-constexpr int SettingsSchemaVersion = 9;
+constexpr int SettingsSchemaVersion = 10;
 
 bool fail(QString* error, const QString& message)
 {
@@ -108,6 +108,8 @@ bool AppPreferences::validate(const AppPreferenceValues& value, QString* error)
         return fail(error, QStringLiteral("工具或阅读偏好无效，未覆盖设置。"));
     if (!QStringList{QStringLiteral("system"), QStringLiteral("light"), QStringLiteral("dark")}.contains(value.theme))
         return fail(error, QStringLiteral("界面主题无效。"));
+    if (value.controlsHideDelaySeconds < 1 || value.controlsHideDelaySeconds > 30)
+        return fail(error, QStringLiteral("底角控件隐藏时间须为 1–30 秒。"));
     if (value.sidebarWidth < 112 || value.sidebarWidth > 400 || !value.penColor.isValid() || value.penColor.alpha() != 255 ||
         !std::isfinite(value.penWidthPt) || value.penWidthPt < 0.5 || value.penWidthPt > 24)
         return fail(error, QStringLiteral("侧栏或笔样式超出当前支持范围。"));
@@ -175,6 +177,7 @@ bool AppPreferences::load()
     if (schemaVersion >= 2) rootKeys.append(QStringLiteral("tools"));
     if (schemaVersion >= 3) { rootKeys.append(QStringLiteral("favorites")); rootKeys.append(QStringLiteral("favoritesBar")); }
     if (schemaVersion >= 8) rootKeys.append(QStringLiteral("editTextMarkups"));
+    if (schemaVersion >= 10) rootKeys.append(QStringLiteral("controlsHideDelaySeconds"));
     if (!exactKeys(root, rootKeys))
         return fail(&m_error, QStringLiteral("设置文件含未知字段；未覆盖原文件。"));
     const QJsonObject backup = root.value(QStringLiteral("backup")).toObject();
@@ -186,6 +189,12 @@ bool AppPreferences::load()
         !backup.value(QStringLiteral("directory")).isString() || !backup.value(QStringLiteral("knownDirectories")).isArray())
         return fail(&m_error, QStringLiteral("设置字段类型或范围无效；未覆盖原文件。"));
     AppPreferenceValues candidate;
+    if (schemaVersion >= 10) {
+        const auto delay = root.value(QStringLiteral("controlsHideDelaySeconds"));
+        if (!integer(delay, 1, 30))
+            return fail(&m_error, QStringLiteral("底角控件隐藏时间无效，原设置文件保留。"));
+        candidate.controlsHideDelaySeconds = delay.toInt();
+    }
     if (schemaVersion >= 2 &&
         (!root.value(QStringLiteral("tools")).isObject()
          || !readToolPreferences(root.value(QStringLiteral("tools")).toObject(), candidate.tools, schemaVersion)))
@@ -268,6 +277,7 @@ bool AppPreferences::save(const AppPreferenceValues& requested)
                            {QStringLiteral("penColor"), candidate.penColor.name(QColor::HexRgb)}, {QStringLiteral("penWidthPt"), candidate.penWidthPt},
                            {QStringLiteral("backup"), backup}, {QStringLiteral("tools"), toolPreferencesJson(candidate.tools)},
                            {QStringLiteral("editTextMarkups"), candidate.editTextMarkups},
+                           {QStringLiteral("controlsHideDelaySeconds"), candidate.controlsHideDelaySeconds},
                            {QStringLiteral("favorites"),favoriteToolsJson(candidate.favorites)},
                            {QStringLiteral("favoritesBar"),favoritesBarJson(candidate.favoritesBar)}};
     const QByteArray bytes = QJsonDocument(root).toJson(QJsonDocument::Indented);

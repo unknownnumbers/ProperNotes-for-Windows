@@ -29,10 +29,11 @@ struct FavoriteTool {
 struct FavoritesBarPreferences {
     bool visible = true;
     bool collapsed = false;
-    QString side = QStringLiteral("left");
-    bool floating = false;
-    QRect geometry = QRect(100, 100, 160, 480);
-    bool pinned = false;
+    QString side = QStringLiteral("right");
+    bool floating = true;
+    // Viewport-relative in settings v10. The initial x clamps to the right edge.
+    QRect geometry = QRect(100000, 72, 80, 420);
+    bool pinned = true;
 };
 
 FavoriteTool captureFavorite(InkCanvas::Tool tool, const ToolPreferences& tools,

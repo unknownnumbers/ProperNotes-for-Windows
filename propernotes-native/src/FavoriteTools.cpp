@@ -36,7 +36,7 @@ QString kind(InkCanvas::Tool tool)
     case InkCanvas::Tool::Arrow:
     case InkCanvas::Tool::Rectangle:
     case InkCanvas::Tool::Ellipse: return shapeToolPreferenceToken(*InkCanvas::shapeKind(tool));
-    case InkCanvas::Tool::TextSelect: break;
+    case InkCanvas::Tool::TextSelect: return QStringLiteral("text-select");
     }
     return {};
 }
@@ -318,6 +318,7 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
         else if(tool=="text-box")f.tool=InkCanvas::Tool::TextBox;else if(tool=="select")f.tool=InkCanvas::Tool::Select;
         else if(tool=="pan")f.tool=InkCanvas::Tool::Pan;
         else if(tool=="text-review")f.tool=InkCanvas::Tool::TextSelect;
+        else if(tool=="text-select" && settingsVersion >= 10)f.tool=InkCanvas::Tool::TextSelect;
         else {
             if (settingsVersion < 9) return false;
             const auto match = std::find_if(ShapeTools.cbegin(), ShapeTools.cend(), [&tool](auto candidate) { return kind(candidate) == tool; });
@@ -325,7 +326,7 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
             f.tool = *match;
         }
         const auto style=object.value("style").toObject();
-        if (f.tool == InkCanvas::Tool::TextSelect) {
+        if (tool == QStringLiteral("text-review")) {
             if (!exactKeys(style, reviewStyleKeys) || !style.value("kind").isString() ||
                 !readColor(style, f.color) || !number(style, "opacity", 1.0 / 255, 1) ||
                 (hasReviewUse && !style.value("singleUse").isBool())) return false;
@@ -393,6 +394,13 @@ bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result
     FavoritesBarPreferences p;p.visible=object.value("visible").toBool();p.collapsed=object.value("collapsed").toBool();
     p.side=object.value("side").toString();p.floating=object.value("floating").toBool();p.geometry={geometry.value("x").toInt(),geometry.value("y").toInt(),geometry.value("width").toInt(),geometry.value("height").toInt()};
     p.pinned = hasPin && object.value("pinned").toBool();
-    if(!validFavoritesBarPreferences(p))return false;result=p;return true;
+    if(!validFavoritesBarPreferences(p))return false;
+    if (settingsVersion < 10) {
+        // Old dock widgets stored desktop coordinates. Do not interpret them
+        // as positions within the PDF viewport or restore a separate window.
+        p.geometry = QRect(100000,72,80,std::clamp(p.geometry.height(),320,1200));
+        p.side = QStringLiteral("right"); p.floating = true; p.collapsed = false;
+    }
+    result=p;return true;
 }
 } // namespace propernotes

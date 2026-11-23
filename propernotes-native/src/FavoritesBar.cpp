@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "FavoritesBar.h"
+#include "ToolIcon.h"
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -9,615 +10,279 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
-#include <QDrag>
-#include <QDragEnterEvent>
-#include <QDropEvent>
-#include <QEvent>
 #include <QFontComboBox>
 #include <QFormLayout>
-#include <QGuiApplication>
-#include <QHBoxLayout>
-#include <QIcon>
+#include <QFrame>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
-#include <QMainWindow>
 #include <QMenu>
 #include <QMessageBox>
-#include <QMimeData>
 #include <QMouseEvent>
-#include <QPainter>
-#include <QPixmap>
-#include <QScreen>
+#include <QPushButton>
+#include <QPointer>
 #include <QScopedValueRollback>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QScroller>
 #include <QSpinBox>
-#include <QStyle>
+#include <QTabletEvent>
 #include <QToolButton>
+#include <QTouchEvent>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 #include <algorithm>
 #include <functional>
-#include <utility>
 
 namespace propernotes {
 namespace {
-constexpr auto DragFormat = "application/x-propernotes-favorite-tool";
-QIcon toolIcon(const FavoriteTool& favorite)
-{
-    QPixmap pixmap(56,56);pixmap.fill(Qt::transparent);
-    QPainter p(&pixmap);p.setRenderHint(QPainter::Antialiasing);p.scale(2,2);
-    const bool coloredTool = favorite.markupKind || favorite.tool == InkCanvas::Tool::Pen
-        || favorite.tool == InkCanvas::Tool::Highlighter || favorite.tool == InkCanvas::Tool::TextBox;
-    const QColor color = coloredTool ? favorite.color : QColor("#3977bd");
-    p.setPen(QPen(color,1.6,Qt::SolidLine,Qt::RoundCap,Qt::RoundJoin));p.setBrush(Qt::NoBrush);
-    if (const auto shape = InkCanvas::shapeKind(favorite.tool)) {
-        ShapeAnnotation sample;
-        sample.kind = *shape;
-        sample.style = favorite.tools.shapeToolPreference(*shape).style;
-        sample.style.strokeColor.setAlpha(255);
-        sample.style.widthPt = 1.7;
-        if (isAreaShape(*shape)) {
-            sample.start = QPointF(4, 6);
-            sample.end = QPointF(24, 22);
-        } else {
-            sample.start = QPointF(5, 22);
-            sample.end = QPointF(23, 6);
-        }
-        paintShape(p, sample);
-    } else if (favorite.markupKind) {
-        const auto kind = *favorite.markupKind;
-        if (kind == TextMarkupKind::Highlight) {
-            QColor fill = color;
-            fill.setAlpha(124);
-            p.fillRect(QRectF(3, 6, 22, 15), fill);
-        }
-        p.setPen(QPen(QColor("#475569"), 1.5));
-        p.drawLine(QPointF(5, 9), QPointF(23, 9));
-        p.drawLine(QPointF(5, 14), QPointF(21, 14));
-        p.setPen(QPen(color, 1.7, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        if (kind == TextMarkupKind::Underline) p.drawLine(QPointF(5, 20), QPointF(23, 20));
-        if (kind == TextMarkupKind::StrikeOut) p.drawLine(QPointF(4, 12), QPointF(24, 12));
-        if (kind == TextMarkupKind::Squiggly) {
-            QPolygonF wave;
-            for (int x = 5; x <= 23; x += 3) wave << QPointF(x, ((x - 5) / 3) % 2 ? 18 : 21);
-            p.drawPolyline(wave);
-        }
-    } else if(favorite.tool==InkCanvas::Tool::TextSelect){
-        p.drawLine(QPointF(14,5), QPointF(14,23));
-        p.drawLine(QPointF(10,5), QPointF(18,5));
-        p.drawLine(QPointF(10,23), QPointF(18,23));
-    } else if (favorite.tool == InkCanvas::Tool::Highlighter) {
-        p.setBrush(color);
-        p.setPen(QPen(QColor("#475569"), 1.2, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        QPolygonF marker;
-        marker << QPointF(6, 18) << QPointF(17, 6) << QPointF(23, 12) << QPointF(12, 24) << QPointF(6, 24);
-        p.drawPolygon(marker);
-        p.drawLine(QPointF(6, 18), QPointF(12, 24));
-    } else if(favorite.tool==InkCanvas::Tool::Pen){
-        p.drawLine(QPointF(7,21),QPointF(21,7));p.drawLine(QPointF(10,23),QPointF(23,10));
-        p.drawLine(QPointF(21,7),QPointF(23,10));p.drawLine(QPointF(7,21),QPointF(6,24));p.drawLine(QPointF(6,24),QPointF(10,23));
-    }else if(favorite.tool==InkCanvas::Tool::ObjectEraser){
-        QPolygonF shape;shape<<QPointF(5,17)<<QPointF(16,6)<<QPointF(24,14)<<QPointF(14,24)<<QPointF(11,24);p.drawPolygon(shape);
-        p.drawLine(QPointF(10,12),QPointF(19,21));
-        if(favorite.tools.eraserMode==QStringLiteral("partial")){p.setPen(QPen(color,1,Qt::DashLine));p.drawLine(QPointF(3,25),QPointF(25,25));}
-    }else if(favorite.tool==InkCanvas::Tool::TextBox){
-        p.setPen(QPen(color,1,Qt::DashLine));p.drawRect(QRectF(3,4,22,20));p.setPen(QPen(color,1.8));
-        p.drawLine(QPointF(8,9),QPointF(20,9));p.drawLine(QPointF(14,9),QPointF(14,21));p.drawLine(QPointF(11,21),QPointF(17,21));
-    }else if(favorite.tool==InkCanvas::Tool::Select){
-        p.setPen(QPen(color,1.3,Qt::DashLine));p.drawRect(QRectF(4,4,19,18));p.setPen(QPen(color,1.5));
-        p.drawLine(QPointF(15,14),QPointF(24,23));p.drawLine(QPointF(24,23),QPointF(18,23));p.drawLine(QPointF(24,23),QPointF(24,17));
-    }else{
-        p.drawLine(QPointF(14,3),QPointF(14,25));p.drawLine(QPointF(3,14),QPointF(25,14));
-        for(const auto& d:QVector<QPointF>{{0,-1},{1,0},{0,1},{-1,0}}){
-            const QPointF tip=QPointF(14,14)+d*11;const QPointF side(-d.y(),d.x());
-            p.drawLine(tip,tip-d*4+side*3);p.drawLine(tip,tip-d*4-side*3);
-        }
-    }
-    pixmap.setDevicePixelRatio(2);return QIcon(pixmap);
-}
-QString literalButtonText(QString text){return text.replace(QChar('&'),QStringLiteral("&&"));}
-QString tooltip(const QString& text){return QStringLiteral("<qt>")+text.toHtmlEscaped().replace(QLatin1Char('\n'),QStringLiteral("<br>"))+QStringLiteral("</qt>");}
-QIcon positionPinIcon()
-{
-    QIcon icon;
-    for (const bool pinned : {false, true}) {
-        QPixmap pixmap(28, 28);
-        pixmap.setDevicePixelRatio(2);
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        painter.setRenderHint(QPainter::Antialiasing);
-        painter.translate(7, 7);
-        if (!pinned) painter.rotate(34);
-        painter.setPen(QPen(QColor(pinned ? "#387bc5" : "#718096"), 1.35,
-                            Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
-        painter.drawLine(QPointF(-2.5, -4.5), QPointF(2.5, -4.5));
-        painter.drawPolyline(QPolygonF{QPointF(-1.5, -4.5), QPointF(-1.7, -1.8), QPointF(-3.1, 0.5),
-                                       QPointF(3.1, 0.5), QPointF(1.7, -1.8), QPointF(1.5, -4.5)});
-        painter.drawLine(QPointF(0, 0.5), QPointF(0, 5.2));
-        painter.end();
-        icon.addPixmap(pixmap, QIcon::Normal, pinned ? QIcon::On : QIcon::Off);
-    }
-    return icon;
-}
+constexpr int MoveHandle=0, TopHandle=1, BottomHandle=2;
+QString tooltip(const QString& text) {return QStringLiteral("<qt>")+text.toHtmlEscaped().replace(QLatin1Char('\n'),QStringLiteral("<br>"))+QStringLiteral("</qt>");}
 bool sameRecipe(const FavoriteTool& a,const FavoriteTool& b)
 {
-    if (a.markupKind || b.markupKind)
-        return a.markupKind == b.markupKind && a.color == b.color
-            && qFuzzyCompare(a.tools.opacity, b.tools.opacity) && a.reviewSingleUse == b.reviewSingleUse;
-    auto left=captureFavorite(a.tool,a.tools,a.color,a.widthPt,favoriteToolName(a.tool));
-    auto right=captureFavorite(b.tool,b.tools,b.color,b.widthPt,favoriteToolName(b.tool));
-    left.id=QUuid();right.id=QUuid();return favoriteToolsJson({left})==favoriteToolsJson({right});
+    auto left=a,right=b;left.id=right.id=QUuid();left.name=right.name=QStringLiteral("工具");
+    return favoriteToolsJson({left})==favoriteToolsJson({right});
 }
 
-class FavoriteButton final : public QToolButton {
+class GeometryHandle final : public QToolButton {
 public:
-    FavoriteButton(const QUuid& id,const QString& token,std::function<bool()> writable,QWidget* parent)
-        :QToolButton(parent),m_id(id),m_token(token),m_writable(std::move(writable)){}
+    using Gesture=std::function<void(int,const QPointF&)>;
+    GeometryHandle(Gesture gesture,std::function<void(int,bool)> key,QWidget* parent)
+        :QToolButton(parent),m_gesture(std::move(gesture)),m_key(std::move(key))
+    {setAttribute(Qt::WA_AcceptTouchEvents);setAutoRaise(true);}
 protected:
-    void mousePressEvent(QMouseEvent* event)override{m_start=event->position().toPoint();QToolButton::mousePressEvent(event);}
-    void mouseMoveEvent(QMouseEvent* event)override{
-        if(event->buttons().testFlag(Qt::LeftButton)&&m_writable()&&(event->position().toPoint()-m_start).manhattanLength()>=QApplication::startDragDistance()){
-            setDown(false);auto* drag=new QDrag(this);auto* mime=new QMimeData;
-            mime->setData(DragFormat,m_token.toUtf8()+QByteArray("\n")+m_id.toString(QUuid::WithoutBraces).toUtf8());drag->setMimeData(mime);
-            drag->setPixmap(icon().pixmap(QSize(28,28)));drag->exec(Qt::MoveAction);drag->deleteLater();return;
-        }QToolButton::mouseMoveEvent(event);
+    bool event(QEvent* event) override {
+        if(event->type()==QEvent::TouchBegin||event->type()==QEvent::TouchUpdate||event->type()==QEvent::TouchEnd||event->type()==QEvent::TouchCancel){
+            auto* touch=static_cast<QTouchEvent*>(event);
+            if(event->type()==QEvent::TouchBegin){if(!isEnabled()||m_mouse||touch->points().isEmpty())return false;m_touch=true;setDown(true);m_last=touch->points().first().globalPosition();m_gesture(0,m_last);}
+            else if(m_touch){if(!touch->points().isEmpty())m_last=touch->points().first().globalPosition();if(event->type()==QEvent::TouchUpdate)m_gesture(1,m_last);else{m_touch=false;setDown(false);m_gesture(2,m_last);}}
+            event->accept();return true;
+        }
+        if(event->type()==QEvent::UngrabMouse&&m_mouse){m_mouse=false;setDown(false);m_gesture(2,m_last);}
+        if(event->type()==QEvent::Hide&&(m_mouse||m_touch)){m_mouse=m_touch=false;setDown(false);m_gesture(2,m_last);}
+        return QToolButton::event(event);
     }
-private:QUuid m_id;QString m_token;std::function<bool()> m_writable;QPoint m_start;
+    void mousePressEvent(QMouseEvent* e) override {if(e->button()!=Qt::LeftButton||m_touch){e->ignore();return;}m_mouse=true;m_last=e->globalPosition();setDown(true);grabMouse();m_gesture(0,m_last);e->accept();}
+    void mouseMoveEvent(QMouseEvent* e) override {if(!m_mouse){QToolButton::mouseMoveEvent(e);return;}m_last=e->globalPosition();m_gesture(1,m_last);e->accept();}
+    void mouseReleaseEvent(QMouseEvent* e) override {if(!m_mouse||e->button()!=Qt::LeftButton){e->ignore();return;}m_mouse=false;m_last=e->globalPosition();setDown(false);releaseMouse();m_gesture(2,m_last);e->accept();}
+    void tabletEvent(QTabletEvent* e) override {if(e->type()==QEvent::TabletPress){m_last=e->globalPosition();m_gesture(0,m_last);setDown(true);}else if(e->type()==QEvent::TabletMove){m_last=e->globalPosition();m_gesture(1,m_last);}else if(e->type()==QEvent::TabletRelease){m_last=e->globalPosition();m_gesture(2,m_last);setDown(false);}e->accept();}
+    void keyPressEvent(QKeyEvent* e) override {if(e->key()==Qt::Key_Up||e->key()==Qt::Key_Down||e->key()==Qt::Key_Left||e->key()==Qt::Key_Right){m_key(e->key(),e->modifiers().testFlag(Qt::ShiftModifier));e->accept();}else QToolButton::keyPressEvent(e);}
+private:
+    Gesture m_gesture;std::function<void(int,bool)> m_key;QPointF m_last;bool m_mouse=false,m_touch=false;
 };
 
-// A draft editor only. Nothing becomes active or persistent until the host
-// successfully commits the emitted candidate to its protected settings store.
+// The dialog owns an isolated draft. Saving uses the host's normal protected
+// preference transaction. Merely browsing choices never changes the tool.
 class FavoriteEditor final : public QDialog {
 public:
-    FavoriteEditor(const FavoriteTool& original,QWidget* parent):QDialog(parent),m_original(original),m_color(original.color){
-        setWindowTitle(QStringLiteral("编辑工具收藏"));auto* box=new QVBoxLayout(this);m_form=new QFormLayout;auto* form=m_form;
-        m_name=new QLineEdit(original.name);m_name->setMaxLength(80);form->addRow(QStringLiteral("名称"),m_name);
+    enum Outcome {Cancelled=0,SavePreset=1,UseTool=2,Manage=3};
+    FavoriteEditor(const FavoriteTool& initial,bool library,bool writable,bool usable,QWidget* parent)
+        :QDialog(parent),m_original(initial),m_color(initial.color),m_library(library)
+    {
+        setWindowTitle(library?QStringLiteral("工具与选项"):QStringLiteral("收藏工具选项"));
+        setMinimumWidth(360);auto* box=new QVBoxLayout(this);m_form=new QFormLayout;m_form->setFieldGrowthPolicy(QFormLayout::AllNonFixedFieldsGrow);
+        m_name=new QLineEdit(initial.name);m_name->setMaxLength(80);m_form->addRow(QStringLiteral("预设名称"),m_name);
         m_kind=new QComboBox;
-        for (const auto kind : {InkCanvas::Tool::Pen, InkCanvas::Tool::Highlighter, InkCanvas::Tool::ObjectEraser,
-                               InkCanvas::Tool::TextBox, InkCanvas::Tool::Select, InkCanvas::Tool::Pan})
-            m_kind->addItem(favoriteToolName(kind), int(kind));
-        for (const auto kind : ShapeTools) m_kind->addItem(favoriteToolName(kind), int(kind));
-        for (auto kind : {TextMarkupKind::Highlight, TextMarkupKind::Underline, TextMarkupKind::StrikeOut, TextMarkupKind::Squiggly})
-            m_kind->addItem(textMarkupKindName(kind), MarkupOffset + int(kind));
-        m_kind->setCurrentIndex(m_kind->findData(original.markupKind ? MarkupOffset + int(*original.markupKind) : int(original.tool)));
-        form->addRow(QStringLiteral("工具"),m_kind);
-        m_colorButton=new QToolButton;m_colorButton->setText(QStringLiteral("选择颜色…"));form->addRow(QStringLiteral("颜色"),m_colorButton);
-        m_width=new QDoubleSpinBox;m_width->setRange(0.5,24);m_width->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("线宽"),m_width);
-        m_opacity=new QDoubleSpinBox;m_opacity->setRange(0,100);m_opacity->setSuffix(QStringLiteral("%"));form->addRow(QStringLiteral("不透明度"),m_opacity);
-        m_fillColorButton = new QToolButton;
-        m_fillColorButton->setText(QStringLiteral("选择颜色…"));
-        form->addRow(QStringLiteral("填充颜色"), m_fillColorButton);
-        m_fillOpacity = new QSpinBox;
-        m_fillOpacity->setRange(0, 100);
-        m_fillOpacity->setSuffix(QStringLiteral("%"));
-        m_fillOpacity->setSpecialValueText(QStringLiteral("无填充"));
-        form->addRow(QStringLiteral("填充不透明度"), m_fillOpacity);
-        m_pressure=new QCheckBox(QStringLiteral("启用笔压"));form->addRow(m_pressure);
-        m_sensitivity=new QSpinBox;m_sensitivity->setRange(0,100);form->addRow(QStringLiteral("笔压灵敏度"),m_sensitivity);
-        m_mode=new QComboBox;m_mode->addItem(QStringLiteral("整笔擦除"),"whole");m_mode->addItem(QStringLiteral("局部擦除"),"partial");form->addRow(QStringLiteral("擦除模式"),m_mode);
-        m_radius=new QDoubleSpinBox;m_radius->setRange(1,100);m_radius->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("橡皮半径"),m_radius);
-        m_family=new QFontComboBox;form->addRow(QStringLiteral("字体"),m_family);
-        m_size=new QDoubleSpinBox;m_size->setRange(4,144);m_size->setSuffix(QStringLiteral(" pt"));form->addRow(QStringLiteral("字号"),m_size);
-        m_single=new QCheckBox(QStringLiteral("完成一次后返回上个持续工具"));form->addRow(m_single);
-        box->addLayout(form);auto* hint=new QLabel(QStringLiteral("仅保存本工具适用的样式。不会更改已存在批注、其他收藏、输入开关或阅读布局。"));hint->setWordWrap(true);box->addWidget(hint);
-        auto* buttons=new QDialogButtonBox(QDialogButtonBox::Save|QDialogButtonBox::Cancel);box->addWidget(buttons);
-        connect(buttons,&QDialogButtonBox::accepted,this,[this]{auto candidate=value();QString error;if(!validFavoriteTools({candidate},&error)){QMessageBox::warning(this,QStringLiteral("无法保存收藏"),error);return;}accept();});
-        connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject);
-        connect(m_colorButton,&QToolButton::clicked,this,[this]{auto chosen=QColorDialog::getColor(m_color,this,QStringLiteral("工具颜色"));if(chosen.isValid()){m_color=chosen;updateColor();}});
-        connect(m_fillColorButton, &QToolButton::clicked, this, [this] {
-            const auto chosen = QColorDialog::getColor(m_fillColor, this, QStringLiteral("形状填充颜色"));
-            if (!chosen.isValid()) return;
-            m_fillColor = chosen;
-            if (m_fillOpacity->value() == 0) m_fillOpacity->setValue(DefaultShapeFillOpacityPercent);
-            updateColor();
-        });
-        connect(m_kind,&QComboBox::currentIndexChanged,this,[this](int){showKind();});
-        showKind();
-        const bool highlighter = original.tool == InkCanvas::Tool::Highlighter;
-        m_width->setValue(original.widthPt);
-        m_opacity->setValue(highlighter ? original.tools.highlighterOpacity : original.tools.opacity * 100);
-        m_pressure->setChecked(original.tools.pressureEnabled);m_sensitivity->setValue(original.tools.pressureSensitivity);
-        m_mode->setCurrentIndex(m_mode->findData(original.tools.eraserMode));m_radius->setValue(original.tools.eraserRadiusPt);m_family->setCurrentFont(QFont(original.tools.textFamily));m_size->setValue(original.tools.textSizePt);
-        bool single = false;
-        switch (original.tool) {
-        case InkCanvas::Tool::Pen: single = original.tools.penSingleUse; break;
-        case InkCanvas::Tool::Highlighter: single = original.tools.highlighterSingleUse; break;
-        case InkCanvas::Tool::ObjectEraser: single = original.tools.eraserSingleUse; break;
-        case InkCanvas::Tool::TextBox: single = original.tools.textSingleUse; break;
-        case InkCanvas::Tool::TextSelect: single = original.markupKind && original.reviewSingleUse; break;
-        default: break;
-        }
-        if (const auto shape = InkCanvas::shapeKind(original.tool)) {
-            const auto& preference = original.tools.shapeToolPreference(*shape);
-            const auto& style = preference.style;
-            m_color = style.strokeColor;
-            m_color.setAlpha(255);
-            m_width->setValue(style.widthPt);
-            m_opacity->setValue(qRound(style.strokeColor.alphaF() * 100));
-            m_fillColor = style.fillColor;
-            m_fillColor.setAlpha(255);
-            m_fillOpacity->setValue(qRound(style.fillColor.alphaF() * 100));
-            single = preference.singleUse;
-        }
-        m_single->setChecked(single);
-        updateColor();
+        for(auto kind:{InkCanvas::Tool::Pen,InkCanvas::Tool::Highlighter,InkCanvas::Tool::ObjectEraser,InkCanvas::Tool::TextBox,InkCanvas::Tool::TextSelect})m_kind->addItem(favoriteToolName(kind),int(kind));
+        for(auto kind:ShapeTools)m_kind->addItem(favoriteToolName(kind),int(kind));
+        for(auto kind:{TextMarkupKind::Highlight,TextMarkupKind::Underline,TextMarkupKind::Squiggly,TextMarkupKind::StrikeOut})m_kind->addItem(textMarkupKindName(kind),MarkupOffset+int(kind));
+        for(auto kind:{InkCanvas::Tool::Select,InkCanvas::Tool::Pan})m_kind->addItem(favoriteToolName(kind),int(kind));
+        m_kind->setCurrentIndex(m_kind->findData(initial.markupKind?MarkupOffset+int(*initial.markupKind):int(initial.tool)));
+        if(m_kind->currentIndex()<0)m_kind->setCurrentIndex(0);
+        m_kind->setEnabled(library);m_form->addRow(QStringLiteral("工具"),m_kind);
+        m_colorButton=new QPushButton(QStringLiteral("选择颜色…"));m_form->addRow(QStringLiteral("颜色"),m_colorButton);
+        m_width=new QDoubleSpinBox;m_width->setSuffix(QStringLiteral(" pt"));m_width->setSingleStep(0.5);m_form->addRow(QStringLiteral("粗细"),m_width);
+        m_opacity=new QDoubleSpinBox;m_opacity->setSuffix(QStringLiteral("%"));m_form->addRow(QStringLiteral("不透明度"),m_opacity);
+        m_fillButton=new QPushButton(QStringLiteral("选择颜色…"));m_form->addRow(QStringLiteral("填充颜色"),m_fillButton);
+        m_fillOpacity=new QSpinBox;m_fillOpacity->setRange(0,100);m_fillOpacity->setSuffix(QStringLiteral("%"));m_fillOpacity->setSpecialValueText(QStringLiteral("无填充"));m_form->addRow(QStringLiteral("填充不透明度"),m_fillOpacity);
+        m_pressure=new QCheckBox(QStringLiteral("启用笔压"));m_form->addRow(m_pressure);
+        m_sensitivity=new QSpinBox;m_sensitivity->setRange(0,100);m_form->addRow(QStringLiteral("笔压灵敏度"),m_sensitivity);
+        m_mode=new QComboBox;m_mode->addItem(QStringLiteral("整笔擦除"),QStringLiteral("whole"));m_mode->addItem(QStringLiteral("局部擦除"),QStringLiteral("partial"));m_form->addRow(QStringLiteral("橡皮模式"),m_mode);
+        m_radius=new QDoubleSpinBox;m_radius->setRange(1,100);m_radius->setSuffix(QStringLiteral(" pt"));m_form->addRow(QStringLiteral("橡皮半径"),m_radius);
+        m_family=new QFontComboBox;m_form->addRow(QStringLiteral("字体"),m_family);
+        m_size=new QDoubleSpinBox;m_size->setRange(4,144);m_size->setSuffix(QStringLiteral(" pt"));m_form->addRow(QStringLiteral("字号"),m_size);
+        m_continuous=new QCheckBox(QStringLiteral("持续使用"));m_form->addRow(m_continuous);
+        auto* body=new QWidget;body->setLayout(m_form);auto* scroll=new QScrollArea;scroll->setWidgetResizable(true);scroll->setFrameShape(QFrame::NoFrame);scroll->setWidget(body);box->addWidget(scroll,1);
+        auto* buttons=new QDialogButtonBox;
+        auto finish=[this](Outcome result){const auto candidate=value();QString error;if(!validFavoriteTools({candidate},&error)){QMessageBox::warning(this,QStringLiteral("无法使用工具"),error);return;}done(result);};
+        auto* save=buttons->addButton(library?QStringLiteral("加入工具栏"):QStringLiteral("保存预设"),QDialogButtonBox::AcceptRole);save->setEnabled(writable);connect(save,&QPushButton::clicked,this,[finish]{finish(SavePreset);});
+        if(library){auto* use=buttons->addButton(QStringLiteral("使用"),QDialogButtonBox::ActionRole);use->setEnabled(usable);connect(use,&QPushButton::clicked,this,[finish]{finish(UseTool);});}
+        else{auto* manage=buttons->addButton(QStringLiteral("管理收藏…"),QDialogButtonBox::ActionRole);manage->setEnabled(writable);connect(manage,&QPushButton::clicked,this,[this]{done(Manage);});}
+        buttons->addButton(QDialogButtonBox::Cancel);connect(buttons,&QDialogButtonBox::rejected,this,&QDialog::reject);box->addWidget(buttons);
+        connect(m_colorButton,&QPushButton::clicked,this,[this]{const auto c=QColorDialog::getColor(m_color,this,QStringLiteral("工具颜色"));if(c.isValid()){m_color=c;updateColor();}});
+        connect(m_fillButton,&QPushButton::clicked,this,[this]{const auto c=QColorDialog::getColor(m_fillColor,this,QStringLiteral("填充颜色"));if(c.isValid()){m_fillColor=c;if(m_fillOpacity->value()==0)m_fillOpacity->setValue(DefaultShapeFillOpacityPercent);updateColor();}});
+        connect(m_kind,&QComboBox::currentIndexChanged,this,[this]{loadKind(false);});loadKind(true);
+        resize(410,570);
     }
-    FavoriteTool value()const{
-        ToolPreferences tools;tools.opacity=m_opacity->value()/100;tools.pressureEnabled=m_pressure->isChecked();tools.pressureSensitivity=m_sensitivity->value();
-        tools.eraserMode=m_mode->currentData().toString();tools.eraserRadiusPt=m_radius->value();tools.textFamily=m_family->currentFont().family();tools.textSizePt=m_size->value();
-        tools.penSingleUse=tools.eraserSingleUse=tools.textSingleUse=m_single->isChecked();
-        const int selection = m_kind->currentData().toInt();
-        const QString name = m_name->text().trimmed();
-        FavoriteTool result;
-        if (selection >= MarkupOffset) {
-            result = captureReviewFavorite(TextMarkupKind(selection - MarkupOffset), m_color, name, m_single->isChecked());
-            result.tools.opacity = tools.opacity;
-        } else {
-            if (selection == int(InkCanvas::Tool::Highlighter)) {
-                tools.highlighterColor = m_color;
-                tools.highlighterWidthPt = m_width->value();
-                tools.highlighterOpacity = qRound(m_opacity->value());
-                tools.highlighterSingleUse = m_single->isChecked();
-            }
-            if (const auto shape = InkCanvas::shapeKind(InkCanvas::Tool(selection))) {
-                auto& preference = tools.shapeToolPreference(*shape);
-                preference.singleUse = m_single->isChecked();
-                preference.style.widthPt = m_width->value();
-                preference.style.strokeColor = m_color;
-                preference.style.strokeColor.setAlpha(qRound(m_opacity->value() * 255 / 100));
-                if (isAreaShape(*shape)) {
-                    preference.style.fillColor = m_fillColor;
-                    preference.style.fillColor.setAlpha(qRound(m_fillOpacity->value() * 255 / 100.0));
+    FavoriteTool value()const {
+        // Display rounding must not rewrite an untouched preset's exact
+        // opacity, especially one-byte alpha values near zero.
+        const auto opacityValue = [this](qreal original) {
+            qreal scale = 1;
+            for (int digit = 0; digit < m_opacity->decimals(); ++digit) scale *= 10;
+            const qreal displayed = std::clamp(qRound64(original * 100 * scale) / scale,
+                                               m_opacity->minimum(), m_opacity->maximum());
+            return qFuzzyCompare(m_opacity->value() + 1, displayed + 1) ? original : m_opacity->value() / 100;
+        };
+        ToolPreferences tools=m_original.tools;tools.opacity=opacityValue(m_original.tools.opacity);tools.pressureEnabled=m_pressure->isChecked();tools.pressureSensitivity=m_sensitivity->value();tools.eraserMode=m_mode->currentData().toString();tools.eraserRadiusPt=m_radius->value();tools.textFamily=m_family->currentFont().family();tools.textSizePt=m_size->value();
+        const bool single=!m_continuous->isChecked();tools.penSingleUse=tools.eraserSingleUse=tools.textSingleUse=single;const int selected=m_kind->currentData().toInt();
+        QString name=m_name->text().trimmed();if(name.isEmpty())name=m_kind->currentText();FavoriteTool result;
+        if(selected>=MarkupOffset){result=captureReviewFavorite(TextMarkupKind(selected-MarkupOffset),m_color,name,single);result.tools.opacity=std::clamp(tools.opacity,1.0/255,1.0);}
+        else{const auto tool=InkCanvas::Tool(selected);if(tool==InkCanvas::Tool::Highlighter){tools.highlighterColor=m_color;tools.highlighterWidthPt=m_width->value();tools.highlighterOpacity=qRound(m_opacity->value());tools.highlighterSingleUse=single;}
+            if(const auto shape=InkCanvas::shapeKind(tool)){
+                const auto& originalStyle=m_original.tools.shapeToolPreference(*shape).style;
+                auto& pref=tools.shapeToolPreference(*shape);pref.singleUse=single;pref.style.widthPt=m_width->value();pref.style.strokeColor=m_color;
+                pref.style.strokeColor.setAlpha(std::clamp(qRound(opacityValue(originalStyle.strokeColor.alphaF())*255),1,255));
+                if(isAreaShape(*shape)){
+                    pref.style.fillColor=m_fillColor;
+                    const int displayedFill=std::clamp(qRound(originalStyle.fillColor.alphaF()*100),m_fillOpacity->minimum(),m_fillOpacity->maximum());
+                    pref.style.fillColor.setAlpha(m_fillOpacity->value()==displayedFill?originalStyle.fillColor.alpha():qRound(m_fillOpacity->value()*255/100.0));
                 }
             }
-            result = captureFavorite(InkCanvas::Tool(selection),tools,m_color,m_width->value(),name);
-        }
-        result.id=m_original.id;
-        return result;
+            result=captureFavorite(tool,tools,m_color,m_width->value(),name);
+        }result.id=m_original.id;return result;
     }
 private:
-    static constexpr int MarkupOffset = 100;
-    void updateColor()
-    {
-        m_colorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_color.name()));
-        m_fillColorButton->setStyleSheet(QStringLiteral("QToolButton{color:%1;}").arg(m_fillColor.name()));
+    void updateColor(){m_colorButton->setIcon(uiIcon(QStringLiteral("plus"),palette(),m_color));m_colorButton->setText(m_color.name().toUpper());m_fillButton->setIcon(uiIcon(QStringLiteral("plus"),palette(),m_fillColor));m_fillButton->setText(m_fillColor.name().toUpper());}
+    void loadKind(bool original) {
+        const int selection=m_kind->currentData().toInt();const bool markup=selection>=MarkupOffset;
+        const auto tool=markup?InkCanvas::Tool::TextSelect:InkCanvas::Tool(selection);const auto shape=markup?std::nullopt:InkCanvas::shapeKind(tool);
+        const bool pen=tool==InkCanvas::Tool::Pen,highlighter=tool==InkCanvas::Tool::Highlighter,eraser=tool==InkCanvas::Tool::ObjectEraser,text=tool==InkCanvas::Tool::TextBox,fill=shape&&isAreaShape(*shape);
+        m_form->setRowVisible(m_colorButton,pen||highlighter||text||markup||shape.has_value());m_form->setRowVisible(m_width,pen||highlighter||shape.has_value());m_form->setRowVisible(m_opacity,pen||highlighter||text||markup||shape.has_value());m_form->setRowVisible(m_fillButton,fill);m_form->setRowVisible(m_fillOpacity,fill);m_form->setRowVisible(m_pressure,pen);m_form->setRowVisible(m_sensitivity,pen);m_form->setRowVisible(m_mode,eraser);m_form->setRowVisible(m_radius,eraser);m_form->setRowVisible(m_family,text);m_form->setRowVisible(m_size,text);m_form->setRowVisible(m_continuous,pen||highlighter||eraser||text||markup||shape.has_value());
+        m_width->setRange(highlighter?MinHighlighterWidthPt:0.5,highlighter?MaxHighlighterWidthPt:24);m_opacity->setDecimals(highlighter||shape?0:2);m_opacity->setRange(highlighter||shape?1.0:markup?100.0/255:0.0,100);
+        const auto& t=m_original.tools;bool single=false;m_color=m_original.color;m_width->setValue(original?m_original.widthPt:2.5);m_opacity->setValue(t.opacity*100);
+        m_pressure->setChecked(t.pressureEnabled);m_sensitivity->setValue(t.pressureSensitivity);m_mode->setCurrentIndex(m_mode->findData(t.eraserMode));m_radius->setValue(t.eraserRadiusPt);m_family->setCurrentFont(QFont(t.textFamily));m_size->setValue(t.textSizePt);
+        if(pen)single=t.penSingleUse;if(highlighter){m_color=t.highlighterColor;m_width->setValue(t.highlighterWidthPt);m_opacity->setValue(t.highlighterOpacity);single=t.highlighterSingleUse;}if(eraser)single=t.eraserSingleUse;if(text)single=t.textSingleUse;if(markup)single=original&&m_original.reviewSingleUse;
+        if(shape){const auto& pref=t.shapeToolPreference(*shape);m_color=pref.style.strokeColor;m_color.setAlpha(255);m_width->setValue(pref.style.widthPt);m_opacity->setValue(pref.style.strokeColor.alphaF()*100);m_fillColor=pref.style.fillColor;m_fillColor.setAlpha(255);m_fillOpacity->setValue(qRound(pref.style.fillColor.alphaF()*100));single=pref.singleUse;}
+        m_continuous->setChecked(!single);if(!original&&m_library)m_name->setText(m_kind->currentText());updateColor();
     }
-    void showKind()
-    {
-        const int selection = m_kind->currentData().toInt();
-        const bool markup = selection >= MarkupOffset;
-        const bool pen = selection == int(InkCanvas::Tool::Pen);
-        const bool highlighter = selection == int(InkCanvas::Tool::Highlighter);
-        const bool eraser = selection == int(InkCanvas::Tool::ObjectEraser);
-        const bool text = selection == int(InkCanvas::Tool::TextBox);
-        const auto shape = markup ? std::nullopt : InkCanvas::shapeKind(InkCanvas::Tool(selection));
-        const bool fill = shape && isAreaShape(*shape);
-        const bool changeAppearance = pen || highlighter || text || markup || shape;
-        m_colorButton->setEnabled(changeAppearance);
-        m_opacity->setEnabled(changeAppearance);
-        m_opacity->setDecimals(highlighter || shape ? 0 : 2);
-        m_opacity->setRange(highlighter || shape ? qreal(MinShapeToolOpacityPercent) : (markup ? 0.4 : 0), MaxHighlighterOpacity);
-        m_width->setEnabled(pen || highlighter || shape);
-        m_width->setRange(highlighter ? MinHighlighterWidthPt : 0.5, highlighter ? MaxHighlighterWidthPt : 24);
-        m_form->setRowVisible(m_fillColorButton, fill);
-        m_form->setRowVisible(m_fillOpacity, fill);
-        m_pressure->setEnabled(pen);
-        m_sensitivity->setEnabled(pen);
-        m_mode->setEnabled(eraser);
-        m_radius->setEnabled(eraser);
-        m_family->setEnabled(text);
-        m_size->setEnabled(text);
-        m_single->setEnabled(pen || highlighter || eraser || text || markup || shape);
-    }
-    FavoriteTool m_original;QColor m_color;QLineEdit* m_name;QComboBox* m_kind;QToolButton* m_colorButton;QDoubleSpinBox* m_width;QDoubleSpinBox* m_opacity;
-    QCheckBox* m_pressure;QSpinBox* m_sensitivity;QComboBox* m_mode;QDoubleSpinBox* m_radius;QFontComboBox* m_family;QDoubleSpinBox* m_size;QCheckBox* m_single;
-    QFormLayout* m_form;
-    QToolButton* m_fillColorButton;
-    QSpinBox* m_fillOpacity;
-    QColor m_fillColor{Qt::black};
+    static constexpr int MarkupOffset=100;
+    FavoriteTool m_original;QColor m_color,m_fillColor{Qt::black};bool m_library;
+    QFormLayout* m_form=nullptr;QLineEdit* m_name=nullptr;QComboBox* m_kind=nullptr;QPushButton* m_colorButton=nullptr;QDoubleSpinBox* m_width=nullptr;QDoubleSpinBox* m_opacity=nullptr;QPushButton* m_fillButton=nullptr;QSpinBox* m_fillOpacity=nullptr;QCheckBox* m_pressure=nullptr;QSpinBox* m_sensitivity=nullptr;QComboBox* m_mode=nullptr;QDoubleSpinBox* m_radius=nullptr;QFontComboBox* m_family=nullptr;QDoubleSpinBox* m_size=nullptr;QCheckBox* m_continuous=nullptr;
 };
-} // namespace
-
-FavoritesBar::FavoritesBar(QMainWindow* parent):QDockWidget(QStringLiteral("工具收藏"),parent),m_mainWindow(parent),m_dragToken(QUuid::createUuid().toString())
-{
-    setObjectName(QStringLiteral("propernotesFavoritesBar"));setAllowedAreas(Qt::LeftDockWidgetArea|Qt::RightDockWidgetArea);
-    setFeatures(DockWidgetMovable|DockWidgetFloatable|DockWidgetClosable);setAcceptDrops(true);
-    setAttribute(Qt::WA_QuitOnClose, false);
-    auto* title=new QWidget;auto* titleLayout=new QHBoxLayout(title);titleLayout->setContentsMargins(4,2,4,2);
-    m_collapse=new QToolButton;m_collapse->setText(QStringLiteral("▾"));m_collapse->setToolTip(QStringLiteral("折叠工具收藏"));titleLayout->addWidget(m_collapse);
-    auto* label=new QLabel(QStringLiteral("收藏"));titleLayout->addWidget(label);titleLayout->addStretch();
-    m_pin = new QToolButton(title);
-    m_pin->setAutoRaise(true);
-    m_pin->setCheckable(true);
-    m_pin->setIcon(positionPinIcon());
-    m_pin->setIconSize(QSize(14, 14));
-    titleLayout->addWidget(m_pin);
-    m_menu=new QToolButton;m_menu->setText(QStringLiteral("⋮"));m_menu->setToolTip(QStringLiteral("管理收藏栏"));titleLayout->addWidget(m_menu);
-    auto* closeButton = new QToolButton(title);
-    closeButton->setAutoRaise(true);
-    const QIcon closeIcon = style()->standardIcon(QStyle::SP_TitleBarCloseButton);
-    if (closeIcon.isNull()) closeButton->setText(QStringLiteral("×"));
-    else closeButton->setIcon(closeIcon);
-    closeButton->setIconSize(QSize(14, 14));
-    closeButton->setToolTip(QStringLiteral("隐藏收藏栏"));
-    closeButton->setAccessibleName(closeButton->toolTip());
-    titleLayout->addWidget(closeButton);
-    setTitleBarWidget(title);
-    connect(closeButton, &QToolButton::clicked, this, [this] { close(); });
-    m_contents=new QWidget;auto* contentsLayout=new QVBoxLayout(m_contents);contentsLayout->setContentsMargins(4,4,4,4);contentsLayout->setSpacing(4);
-    m_current=new QToolButton;m_current->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);m_current->setIconSize(QSize(24,24));m_current->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);m_current->setMinimumHeight(34);contentsLayout->addWidget(m_current);
-    auto* scroll=new QScrollArea;scroll->setWidgetResizable(true);scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);scroll->setFrameShape(QFrame::NoFrame);
-    m_entries=new QWidget;m_entriesLayout=new QVBoxLayout(m_entries);m_entriesLayout->setContentsMargins(0,0,0,0);m_entriesLayout->setSpacing(3);scroll->setWidget(m_entries);contentsLayout->addWidget(scroll);scroll->setObjectName(QStringLiteral("favoritesScroll"));
-    setWidget(m_contents);setMinimumWidth(84);resize(160,480);
-    m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
-    connect(m_collapse,&QToolButton::clicked,this,[this]{auto p=m_preferences;p.collapsed=!p.collapsed;proposeLayout(p);});
-    connect(m_pin, &QToolButton::clicked, this, [this](bool pinned) {
-        m_pin->setChecked(m_preferences.pinned);
-        if (!m_writable || !m_hostAvailable || !isFloating()) return;
-        auto preferences = currentLayout();
-        preferences.pinned = pinned;
-        m_layoutTimer.stop();
-        proposeLayout(preferences);
-    });
-    connect(m_menu,&QToolButton::clicked,this,[this]{showMenu(m_menu->mapToGlobal(QPoint(0,m_menu->height())));});
-    connect(this, &QDockWidget::topLevelChanged, this, [this](bool) {
-        syncPlacementControls();
-        if (!m_applying) m_layoutTimer.start();
-    });
-    connect(this,&QDockWidget::dockLocationChanged,this,[this](Qt::DockWidgetArea){if(!m_applying)m_layoutTimer.start();});
-    m_visibilityAction = new QAction(windowTitle(), this);
-    m_visibilityAction->setCheckable(true);
-    connect(m_visibilityAction, &QAction::triggered, this, &FavoritesBar::setUserVisible);
-    m_hostAvailable = parent->isVisible() && !parent->isMinimized();
-    parent->installEventFilter(this);
-    syncVisibility();
-    setContextMenuPolicy(Qt::CustomContextMenu);connect(this,&QWidget::customContextMenuRequested,this,[this](const QPoint& point){showMenu(mapToGlobal(point));});
-    setCurrentTool(InkCanvas::Tool::Pen,ToolPreferences{},QColor("#202833"),2.5);rebuild();setWritable(false);
 }
 
+FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent)
+{
+    setObjectName(QStringLiteral("propernotesFavoritesBar"));setAttribute(Qt::WA_StyledBackground);setAutoFillBackground(true);
+    setStyleSheet(QStringLiteral("QWidget#propernotesFavoritesBar{border:1px solid palette(mid);border-radius:12px;background:palette(window);} QToolButton{border:0;border-radius:7px;padding:0;} QToolButton:hover{background:palette(alternate-base);} QToolButton:checked{background:palette(highlight);}"));
+    setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setContentsMargins(8,6,8,6);layout->setSpacing(2);
+    auto handle=[this,layout](int kind,const QString& label,const QString& icon){auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},[this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);b->setToolTip(label);b->setAccessibleName(label);b->setIcon(uiIcon(icon,palette()));b->setIconSize(QSize(24,24));b->setFixedHeight(44);b->setCursor(kind==MoveHandle?Qt::SizeAllCursor:Qt::SizeVerCursor);layout->addWidget(b);return b;};
+    m_topResize=handle(TopHandle,QStringLiteral("拖动上沿调整高度，或使用上下方向键"),QStringLiteral("grip"));
+    auto button=[this,layout](const QString& label,const QString& icon,int height=44){auto* b=new QToolButton(this);b->setAutoRaise(true);b->setFixedHeight(height);b->setIcon(uiIcon(icon,palette()));b->setIconSize(QSize(26,26));b->setToolTip(label);b->setAccessibleName(label);layout->addWidget(b);return b;};
+    m_pan=button(QStringLiteral("平移"),QStringLiteral("hand"));m_pan->setCheckable(true);m_select=button(QStringLiteral("框选／移动"),QStringLiteral("select"));m_select->setCheckable(true);m_selectMore=button(QStringLiteral("框选选项"),QStringLiteral("ellipsis"));m_selectMore->hide();
+    auto separator=[this,layout]{auto* line=new QFrame(this);line->setFrameShape(QFrame::HLine);line->setFixedHeight(8);layout->addWidget(line);};separator();
+    m_scroll=new QScrollArea(this);m_scroll->setObjectName(QStringLiteral("favoritesScroll"));m_scroll->setWidgetResizable(true);m_scroll->setFrameShape(QFrame::NoFrame);m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);m_scroll->setMinimumHeight(0);m_scroll->setSizePolicy(QSizePolicy::Preferred,QSizePolicy::Expanding);
+    m_entries=new QWidget;m_entriesLayout=new QVBoxLayout(m_entries);m_entriesLayout->setContentsMargins(0,2,0,2);m_entriesLayout->setSpacing(2);m_scroll->setWidget(m_entries);m_scroll->viewport()->installEventFilter(this);QScroller::grabGesture(m_scroll->viewport(),QScroller::TouchGesture);layout->addWidget(m_scroll,1);separator();
+    m_add=button(QStringLiteral("工具与选项：加入工具栏或使用"),QStringLiteral("plus"));m_move=handle(MoveHandle,QStringLiteral("移动工具栏，或使用方向键"),QStringLiteral("move"));m_bottomResize=handle(BottomHandle,QStringLiteral("拖动下沿调整高度，或使用上下方向键"),QStringLiteral("grip"));
+    connect(m_pan,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Pan);});connect(m_select,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Select);});connect(m_selectMore,&QToolButton::clicked,this,&FavoritesBar::selectionOptionsRequested);connect(m_add,&QToolButton::clicked,this,&FavoritesBar::openLibrary);
+    m_visibilityAction=new QAction(QStringLiteral("显示收藏工具栏"),this);m_visibilityAction->setCheckable(true);connect(m_visibilityAction,&QAction::triggered,this,&FavoritesBar::setUserVisible);
+    m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
+    parent->installEventFilter(this);setContextMenuPolicy(Qt::CustomContextMenu);connect(this,&QWidget::customContextMenuRequested,this,[this](const QPoint& point){showMenu(mapToGlobal(point));});resize(80,420);syncPlacementControls();rebuild();syncVisibility();
+}
 void FavoritesBar::setFavorites(const QVector<FavoriteTool>& favorites)
 {
-    if(!validFavoriteTools(favorites))return;
-    if(favoriteToolsJson(favorites)==favoriteToolsJson(m_favorites)){m_favorites=favorites;return;}
+    if(!validFavoriteTools(favorites))return;if(favoriteToolsJson(favorites)==favoriteToolsJson(m_favorites))return;
+    if(favorites.size()>m_favorites.size()){for(const auto& favorite:favorites)if(indexOf(favorite.id)<0)m_revealId=favorite.id;}
     m_favorites=favorites;rebuild();
 }
 void FavoritesBar::setCurrentTool(InkCanvas::Tool tool,const ToolPreferences& tools,const QColor& color,qreal width)
 {setCurrentTool(captureFavorite(tool,tools,color,width,QStringLiteral("当前工具")));}
-void FavoritesBar::setCurrentTool(const FavoriteTool& current)
-{
-    m_currentTool=current;m_current->setIcon(toolIcon(current));
-    m_current->setText(literalButtonText(current.markupKind ? textMarkupKindName(*current.markupKind) : favoriteToolName(current.tool)));
-    m_current->setToolTip(tooltip(QStringLiteral("当前工具\n")+favoriteDescription(current)));
-}
+void FavoritesBar::setCurrentTool(const FavoriteTool& current){m_currentTool=current;setActiveFavoriteId(m_activeId);}
 void FavoritesBar::setActiveFavoriteId(const QUuid& id)
 {
-    m_activeId=id;
-    for(auto it=m_buttons.begin();it!=m_buttons.end();++it){const int i=indexOf(it.key());it.value()->setChecked(it.key()==id&&i>=0&&sameRecipe(m_favorites[i],m_currentTool));}
+    const bool changed=m_activeId!=id;m_activeId=id;
+    for(auto it=m_buttons.begin();it!=m_buttons.end();++it){const int i=indexOf(it.key());const bool active=it.key()==id&&i>=0&&sameRecipe(m_favorites[i],m_currentTool);it.value()->setChecked(active);m_moreButtons.value(it.key())->setVisible(active);}
+    m_pan->setChecked(id.isNull()&&m_currentTool.tool==InkCanvas::Tool::Pan);m_select->setChecked(id.isNull()&&m_currentTool.tool==InkCanvas::Tool::Select);m_selectMore->setVisible(m_select->isChecked());constrainGeometry();
+    if(changed&&m_buttons.contains(id)){QPointer<QWidget> row=m_buttons.value(id)->parentWidget();QTimer::singleShot(0,this,[this,row]{if(row)m_scroll->ensureWidgetVisible(row,0,0);});}
 }
 void FavoritesBar::setWritable(bool writable)
 {
-    if(m_writable&&!writable&&m_layoutTimer.isActive()){m_layoutTimer.stop();recordLayout();}
-    m_writable=writable;m_collapse->setEnabled(writable);
-    syncPlacementControls();
-}
-void FavoritesBar::syncPlacementControls()
-{
-    const bool floating = isFloating();
-    const bool pinned = floating && m_preferences.pinned;
-    setFeatures(m_writable && !pinned ? DockWidgetFeatures(DockWidgetMovable | DockWidgetFloatable | DockWidgetClosable)
-                                     : DockWidgetFeatures(DockWidgetClosable));
-    m_pin->setVisible(floating);
-    m_pin->setEnabled(m_writable && floating);
-    m_pin->setChecked(pinned);
-    m_pin->setToolTip(pinned ? QStringLiteral("解锁收藏栏位置") : QStringLiteral("固定收藏栏位置"));
-    m_pin->setAccessibleName(m_pin->toolTip());
-
-    // A floating QDockWidget can still move without DockWidgetMovable.
-    // Filter its chrome before Qt's drag and resize handlers. Child controls
-    // receive their events normally, and programmatic geometry is unaffected.
-    if (pinned) installEventFilter(this);
-    else removeEventFilter(this);
+    std::optional<FavoritesBarPreferences> pending;
+    if(m_writable&&!writable&&(m_layoutTimer.isActive()||m_gesture)){m_layoutTimer.stop();pending=currentLayout();}
+    m_writable=writable;if(!writable)m_gesture.reset();syncPlacementControls();
+    if(pending&&!m_hostClosing&&favoritesBarJson(*pending)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(*pending);
 }
 void FavoritesBar::setActivationEnabled(bool enabled)
-{m_activationEnabled=enabled;for(auto* button:m_buttons)button->setEnabled(enabled);}
-
+{m_activationEnabled=enabled;for(auto* b:m_buttons)b->setEnabled(enabled);m_pan->setEnabled(enabled);m_select->setEnabled(enabled);m_selectMore->setEnabled(enabled);m_add->setEnabled(enabled||m_writable);}
+void FavoritesBar::setPinned(bool pinned)
+{if(!m_writable||m_hostClosing)return;m_gesture.reset();m_layoutTimer.stop();auto preferences=currentLayout();preferences.pinned=pinned;Q_EMIT barPreferencesEdited(preferences);}
+void FavoritesBar::syncPlacementControls()
+{
+    const bool unlocked=!m_preferences.pinned;m_move->setVisible(unlocked);m_topResize->setVisible(unlocked);m_bottomResize->setVisible(unlocked);m_move->setEnabled(m_writable);m_topResize->setEnabled(m_writable);m_bottomResize->setEnabled(m_writable);m_add->setEnabled(m_activationEnabled||m_writable);
+}
 void FavoritesBar::rebuild()
 {
-    m_buttons.clear();while(auto* item=m_entriesLayout->takeAt(0)){if(auto* widget=item->widget())widget->deleteLater();delete item;}
-    for(const auto& favorite:m_favorites){
-        auto* button=new FavoriteButton(favorite.id,m_dragToken,[this]{return m_writable;},m_entries);button->setText(literalButtonText(favorite.name));button->setIcon(toolIcon(favorite));button->setIconSize(QSize(24,24));
-        button->setCheckable(true);button->setChecked(favorite.id==m_activeId&&sameRecipe(favorite,m_currentTool));button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);button->setSizePolicy(QSizePolicy::Ignored,QSizePolicy::Fixed);button->setMinimumHeight(34);button->setEnabled(m_activationEnabled);
-        button->setToolTip(tooltip(favoriteDescription(favorite)));m_entriesLayout->addWidget(button);m_buttons.insert(favorite.id,button);
-        connect(button,&QToolButton::clicked,this,[this,id=favorite.id]{const int index=indexOf(id);if(index>=0&&m_activationEnabled)Q_EMIT activated(m_favorites[index]);});
-        button->setContextMenuPolicy(Qt::CustomContextMenu);connect(button,&QWidget::customContextMenuRequested,this,[this,button,id=favorite.id](const QPoint& point){showMenu(button->mapToGlobal(point),id);});
-    }
-    if(m_favorites.isEmpty()){auto* label=new QLabel(QStringLiteral("暂无收藏\n使用菜单添加"));label->setWordWrap(true);m_entriesLayout->addWidget(label);}
-    m_entriesLayout->addStretch();
+    const int scroll=m_scroll->verticalScrollBar()->value();m_buttons.clear();m_moreButtons.clear();while(auto* item=m_entriesLayout->takeAt(0)){if(auto* widget=item->widget()){widget->hide();widget->deleteLater();}delete item;}
+    for(const auto& favorite:m_favorites){auto* row=new QWidget(m_entries);auto* layout=new QVBoxLayout(row);layout->setContentsMargins(0,0,0,0);layout->setSpacing(0);auto* button=new QToolButton(row);button->setAutoRaise(true);button->setFixedSize(60,52);button->setIcon(favoriteIcon(favorite,palette()));button->setIconSize(QSize(52,52));button->setCheckable(true);button->setEnabled(m_activationEnabled);button->setToolTip(tooltip(favoriteDescription(favorite)));button->setAccessibleName(favoriteDescription(favorite));layout->addWidget(button);m_buttons.insert(favorite.id,button);
+        auto* more=new QToolButton(row);more->setAutoRaise(true);more->setFixedSize(60,44);more->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));more->setIconSize(QSize(22,22));more->setToolTip(QStringLiteral("此收藏工具的选项"));more->setAccessibleName(more->toolTip());layout->addWidget(more);m_moreButtons.insert(favorite.id,more);m_entriesLayout->addWidget(row);
+        connect(button,&QToolButton::clicked,this,[this,id=favorite.id]{const int index=indexOf(id);if(index>=0&&m_activationEnabled){const auto favorite=m_favorites[index];Q_EMIT activated(favorite);}});connect(more,&QToolButton::clicked,this,[this,id=favorite.id]{editFavorite(id);});button->setContextMenuPolicy(Qt::CustomContextMenu);connect(button,&QWidget::customContextMenuRequested,this,[this,button,id=favorite.id](const QPoint& point){showMenu(button->mapToGlobal(point),id);});}
+    m_entriesLayout->addStretch();setActiveFavoriteId(m_activeId);
+    const QUuid reveal=m_revealId;m_revealId={};QTimer::singleShot(0,this,[this,scroll,reveal]{m_scroll->verticalScrollBar()->setValue(scroll);if(m_buttons.contains(reveal))m_scroll->ensureWidgetVisible(m_buttons.value(reveal)->parentWidget(),0,0);});
 }
-
-int FavoritesBar::indexOf(const QUuid& id)const
-{for(int index=0;index<m_favorites.size();++index)if(m_favorites[index].id==id)return index;return -1;}
-
-void FavoritesBar::showMenu(const QPoint& global,const QUuid& id)
+int FavoritesBar::indexOf(const QUuid& id)const{for(int i=0;i<m_favorites.size();++i)if(m_favorites[i].id==id)return i;return -1;}
+void FavoritesBar::openLibrary()
 {
-    QMenu menu(this);auto* add=menu.addAction(QStringLiteral("收藏当前工具…"));add->setEnabled(m_writable&&m_favorites.size()<128);
-    connect(add,&QAction::triggered,this,&FavoritesBar::addCurrentRequested);
-    const int index=indexOf(id);
-    if(index>=0){
-        menu.addSeparator();auto* edit=menu.addAction(QStringLiteral("编辑收藏…"));auto* copy=menu.addAction(QStringLiteral("复制收藏"));auto* remove=menu.addAction(QStringLiteral("删除收藏…"));
-        edit->setEnabled(m_writable);copy->setEnabled(m_writable&&m_favorites.size()<128);remove->setEnabled(m_writable);
-        connect(edit,&QAction::triggered,this,[this,id]{editFavorite(id);});
-        connect(copy,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable||m_favorites.size()>=128)return;auto candidate=m_favorites;auto copy=candidate[i];copy.id=QUuid::createUuid();copy.name=copy.name.left(74);if(!copy.name.isEmpty()&&copy.name.back().isHighSurrogate())copy.name.chop(1);copy.name+=QStringLiteral(" 副本");candidate.insert(i+1,copy);Q_EMIT favoritesEdited(candidate);});
-        connect(remove,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable)return;QMessageBox box(QMessageBox::Question,QStringLiteral("删除工具收藏"),{},QMessageBox::Yes|QMessageBox::No,this);box.setTextFormat(Qt::PlainText);box.setText(QStringLiteral("删除收藏“%1”？已存在批注保持原样。").arg(m_favorites[i].name));box.setDefaultButton(QMessageBox::No);if(box.exec()!=QMessageBox::Yes)return;auto candidate=m_favorites;const int current=indexOf(id);if(current<0)return;candidate.removeAt(current);Q_EMIT favoritesEdited(candidate);});
-        auto* earlier=menu.addAction(QStringLiteral("上移"));auto* later=menu.addAction(QStringLiteral("下移"));earlier->setEnabled(m_writable&&index>0);later->setEnabled(m_writable&&index+1<m_favorites.size());
-        connect(earlier,&QAction::triggered,this,[this,id]{auto p=m_favorites;const int i=indexOf(id);if(m_writable&&i>0){p.move(i,i-1);Q_EMIT favoritesEdited(p);}});
-        connect(later,&QAction::triggered,this,[this,id]{auto p=m_favorites;const int i=indexOf(id);if(m_writable&&i>=0&&i+1<p.size()){p.move(i,i+1);Q_EMIT favoritesEdited(p);}});
-    }
-    menu.addSeparator();auto* fold=menu.addAction(m_preferences.collapsed?QStringLiteral("展开收藏栏"):QStringLiteral("折叠收藏栏"));fold->setEnabled(m_writable);
-    connect(fold,&QAction::triggered,this,[this]{auto p=m_preferences;p.collapsed=!p.collapsed;proposeLayout(p);});
-    const bool movable = m_writable && !m_preferences.pinned;
-    for(const auto& side:QStringList{QStringLiteral("left"),QStringLiteral("right")}){auto* action=menu.addAction(side==QStringLiteral("left")?QStringLiteral("停靠左侧"):QStringLiteral("停靠右侧"));action->setEnabled(movable);connect(action,&QAction::triggered,this,[this,side]{auto p=m_preferences;p.side=side;p.floating=false;p.visible=true;proposeLayout(p);});}
-    auto* floating=menu.addAction(QStringLiteral("浮动收藏栏"));floating->setEnabled(movable);connect(floating,&QAction::triggered,this,[this]{auto p=m_preferences;p.floating=true;p.visible=true;proposeLayout(p);});
-    auto* hide=menu.addAction(QStringLiteral("隐藏收藏栏"));connect(hide,&QAction::triggered,this,[this]{close();});
-    menu.exec(global);
+    if(!m_activationEnabled&&!m_writable)return;auto seed=m_currentTool;seed.id=QUuid::createUuid();seed.name=seed.markupKind?textMarkupKindName(*seed.markupKind):favoriteToolName(seed.tool);FavoriteEditor editor(seed,true,m_writable&&m_favorites.size()<128,m_activationEnabled,this);
+    const int result=editor.exec();if(result!=FavoriteEditor::SavePreset&&result!=FavoriteEditor::UseTool)return;const auto favorite=editor.value();
+    if(result==FavoriteEditor::SavePreset){if(!m_writable||m_favorites.size()>=128)return;auto candidate=m_favorites;candidate.append(favorite);if(m_activationEnabled)Q_EMIT activated(favorite);Q_EMIT favoritesEdited(candidate);}
+    else if(m_activationEnabled)Q_EMIT activated(favorite);
 }
-
 void FavoritesBar::editFavorite(const QUuid& id)
 {
-    const int index=indexOf(id);if(index<0||!m_writable)return;FavoriteEditor editor(m_favorites[index],this);
-    if(editor.exec()!=QDialog::Accepted||!m_writable)return;const int current=indexOf(id);if(current<0)return;
-    auto candidate=m_favorites;candidate[current]=editor.value();Q_EMIT favoritesEdited(candidate);
+    const int index=indexOf(id);if(index<0)return;FavoriteEditor editor(m_favorites[index],false,m_writable,false,this);const int result=editor.exec();if(result==FavoriteEditor::Manage){showMenu(mapToGlobal(QPoint(-180,40)),id);return;}if(result!=FavoriteEditor::SavePreset||!m_writable)return;const int current=indexOf(id);if(current<0)return;const auto favorite=editor.value();auto candidate=m_favorites;candidate[current]=favorite;if(m_activationEnabled)Q_EMIT activated(favorite);Q_EMIT favoritesEdited(candidate);
 }
-
+void FavoritesBar::showMenu(const QPoint& global,const QUuid& id)
+{
+    QMenu menu(this);auto* library=menu.addAction(QStringLiteral("工具与选项…"));connect(library,&QAction::triggered,this,&FavoritesBar::openLibrary);const int index=indexOf(id);
+    if(index>=0){menu.addSeparator();auto* edit=menu.addAction(QStringLiteral("编辑选项…"));connect(edit,&QAction::triggered,this,[this,id]{editFavorite(id);});auto* copy=menu.addAction(QStringLiteral("复制收藏"));copy->setEnabled(m_writable&&m_favorites.size()<128);connect(copy,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable||m_favorites.size()>=128)return;auto candidate=m_favorites;auto copy=candidate[i];copy.id=QUuid::createUuid();copy.name=copy.name.left(74);if(!copy.name.isEmpty()&&copy.name.back().isHighSurrogate())copy.name.chop(1);copy.name+=QStringLiteral(" 副本");candidate.insert(i+1,copy);Q_EMIT favoritesEdited(candidate);});
+        auto* earlier=menu.addAction(QStringLiteral("上移"));auto* later=menu.addAction(QStringLiteral("下移"));earlier->setEnabled(m_writable&&index>0);later->setEnabled(m_writable&&index+1<m_favorites.size());connect(earlier,&QAction::triggered,this,[this,id]{auto candidate=m_favorites;const int i=indexOf(id);if(m_writable&&i>0){candidate.move(i,i-1);Q_EMIT favoritesEdited(candidate);}});connect(later,&QAction::triggered,this,[this,id]{auto candidate=m_favorites;const int i=indexOf(id);if(m_writable&&i>=0&&i+1<candidate.size()){candidate.move(i,i+1);Q_EMIT favoritesEdited(candidate);}});
+        auto* remove=menu.addAction(QStringLiteral("移除收藏"));remove->setEnabled(m_writable);connect(remove,&QAction::triggered,this,[this,id]{const int i=indexOf(id);if(i<0||!m_writable)return;auto candidate=m_favorites;candidate.removeAt(i);Q_EMIT favoritesEdited(candidate);});}
+    menu.addSeparator();auto* hide=menu.addAction(QStringLiteral("隐藏收藏工具栏"));connect(hide,&QAction::triggered,this,[this]{setUserVisible(false);});menu.exec(global);
+}
 void FavoritesBar::setBarPreferences(const FavoritesBarPreferences& preferences)
 {
-    if (!validFavoritesBarPreferences(preferences) || m_hostClosing) return;
-    const bool placementChanged = !m_preferencesApplied || preferences.side != m_preferences.side
-        || preferences.floating != m_preferences.floating;
-    const bool geometryChanged = placementChanged || preferences.geometry != m_preferences.geometry;
-    const bool collapsedChanged = !m_preferencesApplied || preferences.collapsed != m_preferences.collapsed;
-    m_preferences = preferences;
-    m_preferencesApplied = true;
-    if (m_visibilityOverride && *m_visibilityOverride == preferences.visible) m_visibilityOverride.reset();
-
-    QScopedValueRollback<bool> applying(m_applying, true);
-    const auto area = preferences.side == QStringLiteral("right") ? Qt::RightDockWidgetArea : Qt::LeftDockWidgetArea;
-    if (placementChanged) {
-        if (!preferences.floating) {
-            setFloating(false);
-            m_mainWindow->addDockWidget(area, this);
-        } else if (!isFloating()) {
-            m_mainWindow->addDockWidget(area, this);
-            setFloating(true);
-        }
-    }
-    if (preferences.floating && geometryChanged) {
-        QRect restored = preferences.geometry;
-        QScreen* screen = QGuiApplication::screenAt(restored.center());
-        if (!screen) screen = QGuiApplication::primaryScreen();
-        if (screen) {
-            const QRect available = screen->availableGeometry();
-            restored.setSize(restored.size().boundedTo(available.size()));
-            restored.moveLeft(std::clamp(restored.left(), available.left(),
-                std::max(available.left(), available.right() - restored.width() + 1)));
-            restored.moveTop(std::clamp(restored.top(), available.top(),
-                std::max(available.top(), available.bottom() - restored.height() + 1)));
-        }
-        setGeometry(restored);
-    }
-    if (collapsedChanged) {
-        if (auto* scroll = m_contents->findChild<QScrollArea*>(QStringLiteral("favoritesScroll")))
-            scroll->setVisible(!preferences.collapsed);
-        m_collapse->setText(preferences.collapsed ? QStringLiteral("▸") : QStringLiteral("▾"));
-        m_collapse->setToolTip(preferences.collapsed ? QStringLiteral("展开工具收藏") : QStringLiteral("折叠工具收藏"));
-    }
-    syncPlacementControls();
-    syncVisibility();
+    if(!validFavoritesBarPreferences(preferences)||m_hostClosing)return;const bool geometryChanged=!m_preferencesApplied||preferences.geometry!=m_preferences.geometry;const QScopedValueRollback<bool> applying(m_applying,true);m_preferences=preferences;m_preferencesApplied=true;if(m_visibilityOverride&&*m_visibilityOverride==preferences.visible)m_visibilityOverride.reset();m_gesture.reset();syncPlacementControls();if(geometryChanged)setGeometry(QRect(preferences.geometry.topLeft(),QSize(80,preferences.geometry.height())));constrainGeometry();syncVisibility();
 }
-void FavoritesBar::proposeLayout(FavoritesBarPreferences preferences)
+int FavoritesBar::minimumPaletteHeight()const
 {
-    if (!m_writable || !validFavoritesBarPreferences(preferences)) return;
-    preferences.visible = requestedVisible();
-    Q_EMIT barPreferencesEdited(preferences);
+    int height=12+16+80;for(auto* button:{m_pan,m_select,m_selectMore,m_add,m_move,m_topResize,m_bottomResize})if(!button->isHidden())height+=button->height()+2;return height;
 }
-FavoritesBarPreferences FavoritesBar::currentLayout()
+void FavoritesBar::constrainGeometry()
 {
-    auto p = m_preferences;
-    p.visible = requestedVisible();
-    if (!m_hostAvailable) return p;
-    p.floating=isFloating();
-    p.pinned = p.floating && p.pinned;
-    const auto area=m_mainWindow->dockWidgetArea(this);if(area==Qt::LeftDockWidgetArea)p.side=QStringLiteral("left");else if(area==Qt::RightDockWidgetArea)p.side=QStringLiteral("right");
-    if(p.floating){const QRect actual=geometry();p.geometry=QRect(std::clamp(actual.x(),-100000,100000),std::clamp(actual.y(),-100000,100000),std::clamp(actual.width(),80,1200),std::clamp(actual.height(),80,1600));}
-    return p;
+    if(!parentWidget()||m_hostClosing)return;const QScopedValueRollback<bool> applying(m_applying,true);const int availableHeight=std::max(80,parentWidget()->height()-92);const int minimum=std::min(minimumPaletteHeight(),availableHeight);const int height=std::clamp(this->height(),minimum,availableHeight);const int x=std::clamp(this->x(),8,std::max(8,parentWidget()->width()-width()-8));const int y=std::clamp(this->y(),8,std::max(8,parentWidget()->height()-height-84));setGeometry(x,y,width(),height);raise();
+}
+void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
+{
+    if(phase==2){if(m_gesture){m_gesture.reset();recordLayout();}return;}if(m_preferences.pinned||!m_writable||m_hostClosing)return;if(phase==0){m_layoutTimer.stop();m_gesture=Gesture{kind,global,geometry()};return;}if(!m_gesture||m_gesture->kind!=kind)return;
+    const auto start=m_gesture->geometry;const QPoint delta=(global-m_gesture->origin).toPoint();const int bottom=parentWidget()->height()-84;const int minimum=std::min(minimumPaletteHeight(),std::max(80,bottom-8));QRect proposed=start;
+    if(kind==MoveHandle)proposed.translate(delta);else if(kind==BottomHandle)proposed.setHeight(std::clamp(start.height()+delta.y(),minimum,std::max(minimum,bottom-start.top())));else{const int end=std::min(start.bottom()+1,bottom);const int top=std::clamp(start.top()+delta.y(),8,std::max(8,end-minimum));proposed.setTop(top);proposed.setBottom(end-1);}const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(proposed);constrainGeometry();
+}
+void FavoritesBar::keyboardGeometry(int kind,int key,bool accelerated)
+{
+    if(m_preferences.pinned||!m_writable||m_hostClosing)return;if(kind!=MoveHandle&&(key==Qt::Key_Left||key==Qt::Key_Right))return;const int step=accelerated?24:8;const QPointF delta(key==Qt::Key_Left?-step:key==Qt::Key_Right?step:0,key==Qt::Key_Up?-step:key==Qt::Key_Down?step:0);handleGesture(kind,0,{});handleGesture(kind,1,delta);handleGesture(kind,2,delta);
+}
+FavoritesBarPreferences FavoritesBar::currentLayout()const
+{
+    auto p=m_preferences;p.visible=requestedVisible();p.collapsed=false;p.floating=true;p.geometry=QRect(std::clamp(x(),-100000,100000),std::clamp(y(),-100000,100000),80,std::clamp(height(),80,1600));return p;
 }
 void FavoritesBar::recordLayout()
 {
-    if(m_applying||!m_writable||!m_hostAvailable||m_hostClosing)return;
-    const auto p = currentLayout();
-    if(favoritesBarJson(p)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(p);
+    if(m_applying||!m_writable||m_hostClosing||!isVisible())return;const auto p=currentLayout();if(favoritesBarJson(p)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(p);
 }
-
-bool FavoritesBar::requestedVisible() const
+bool FavoritesBar::requestedVisible()const{return m_visibilityOverride.value_or(m_preferences.visible);}
+void FavoritesBar::syncVisibility(){m_visibilityAction->setChecked(requestedVisible());setVisible(requestedVisible()&&!m_hostClosing);if(isVisible()){constrainGeometry();raise();}}
+void FavoritesBar::setUserVisible(bool visible){if(m_hostClosing)return;m_visibilityOverride=visible;auto candidate=currentLayout();m_layoutTimer.stop();syncVisibility();Q_EMIT barPreferencesEdited(candidate);}
+void FavoritesBar::prepareForHostClose(){m_hostClosing=true;m_gesture.reset();m_layoutTimer.stop();hide();}
+bool FavoritesBar::eventFilter(QObject* watched,QEvent* e)
 {
-    return m_visibilityOverride.value_or(m_preferences.visible);
+    if(watched==m_scroll->viewport()&&e->type()==QEvent::Wheel){const auto* wheel=static_cast<QWheelEvent*>(e);auto* bar=m_scroll->verticalScrollBar();const int delta=wheel->pixelDelta().y()!=0?wheel->pixelDelta().y():qRound(wheel->angleDelta().y()*52.0/120);bar->setValue(bar->value()-delta);e->accept();return true;}
+    if(watched==parentWidget()&&(e->type()==QEvent::Resize||e->type()==QEvent::Show))constrainGeometry();return QWidget::eventFilter(watched,e);
 }
-
-void FavoritesBar::syncVisibility()
+bool FavoritesBar::event(QEvent* e)
 {
-    QScopedValueRollback<bool> applying(m_applying, true);
-    m_visibilityAction->setChecked(requestedVisible());
-    setVisible(requestedVisible() && m_hostAvailable && !m_hostClosing);
+    const auto type=e->type();const bool result=QWidget::event(e);if(m_scroll&&!m_applying&&!m_hostClosing&&!m_gesture&&(type==QEvent::Move||type==QEvent::Resize))m_layoutTimer.start();
+    if(m_scroll&&(type==QEvent::PaletteChange||type==QEvent::ApplicationPaletteChange)){m_pan->setIcon(uiIcon(QStringLiteral("hand"),palette()));m_select->setIcon(uiIcon(QStringLiteral("select"),palette()));m_selectMore->setIcon(uiIcon(QStringLiteral("ellipsis"),palette()));m_add->setIcon(uiIcon(QStringLiteral("plus"),palette()));m_move->setIcon(uiIcon(QStringLiteral("move"),palette()));m_topResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));m_bottomResize->setIcon(uiIcon(QStringLiteral("grip"),palette()));rebuild();}return result;
 }
-
-void FavoritesBar::setUserVisible(bool visible)
-{
-    if (m_hostClosing) return;
-    m_visibilityOverride = visible;
-    const auto settings = currentLayout();
-    m_layoutTimer.stop();
-    syncVisibility();
-    // Visibility changes take effect immediately. The host can save them,
-    // queue them while busy, or leave them as a session override if read-only.
-    Q_EMIT barPreferencesEdited(settings);
+void FavoritesBar::closeEvent(QCloseEvent* e){if(!m_hostClosing)setUserVisible(false);e->accept();}
 }
-
-void FavoritesBar::prepareForHostClose()
-{
-    m_hostClosing = true;
-    m_layoutTimer.stop();
-    syncVisibility();
-}
-
-bool FavoritesBar::eventFilter(QObject* watched, QEvent* event)
-{
-    if (watched == this && m_preferences.pinned && isFloating()) {
-        switch (event->type()) {
-        case QEvent::MouseButtonPress:
-        case QEvent::MouseButtonRelease:
-        case QEvent::MouseButtonDblClick:
-            if (static_cast<QMouseEvent*>(event)->button() != Qt::LeftButton) break;
-            [[fallthrough]];
-        case QEvent::MouseMove:
-        case QEvent::NonClientAreaMouseButtonPress:
-        case QEvent::NonClientAreaMouseButtonRelease:
-        case QEvent::NonClientAreaMouseButtonDblClick:
-        case QEvent::NonClientAreaMouseMove:
-            event->accept();
-            return true;
-        default:
-            break;
-        }
-    }
-    if (watched == m_mainWindow && !m_hostClosing) {
-        const auto type = event->type();
-        if (type == QEvent::Hide || type == QEvent::Show || type == QEvent::WindowStateChange) {
-            m_hostAvailable = type != QEvent::Hide && (type == QEvent::Show || m_mainWindow->isVisible())
-                && !m_mainWindow->isMinimized();
-            syncVisibility();
-        }
-    }
-    return QDockWidget::eventFilter(watched, event);
-}
-
-bool FavoritesBar::event(QEvent* event)
-{const bool result=QDockWidget::event(event);if(m_contents&&!m_applying&&m_hostAvailable&&!m_hostClosing&&(event->type()==QEvent::Move||event->type()==QEvent::Resize))m_layoutTimer.start();return result;}
-void FavoritesBar::closeEvent(QCloseEvent* event)
-{
-    if (m_hostAvailable && !m_hostClosing) setUserVisible(false);
-    event->accept();
-}
-void FavoritesBar::dragEnterEvent(QDragEnterEvent* event)
-{
-    const auto data=event->mimeData()->data(DragFormat);if(m_writable&&data.size()<256&&data.startsWith(m_dragToken.toUtf8()+QByteArray("\n"))){const QUuid id(QString::fromUtf8(data.mid(m_dragToken.toUtf8().size()+1)));if(indexOf(id)>=0)event->acceptProposedAction();}
-}
-void FavoritesBar::dragMoveEvent(QDragMoveEvent* event)
-{if(m_writable&&event->mimeData()->hasFormat(DragFormat))event->acceptProposedAction();}
-void FavoritesBar::dropEvent(QDropEvent* event)
-{
-    const auto data=event->mimeData()->data(DragFormat);if(!m_writable||data.size()>=256||!data.startsWith(m_dragToken.toUtf8()+QByteArray("\n")))return;
-    const int from=indexOf(QUuid(QString::fromUtf8(data.mid(m_dragToken.toUtf8().size()+1))));if(from<0)return;
-    int insertion=m_favorites.size();for(int i=0;i<m_favorites.size();++i){const auto* button=m_buttons.value(m_favorites[i].id);if(button&&event->position().y()<button->mapTo(this,button->rect().center()).y()){insertion=i;break;}}
-    if(insertion>from)--insertion;if(insertion==from){event->acceptProposedAction();return;}
-    auto candidate=m_favorites;candidate.move(from,insertion);Q_EMIT favoritesEdited(candidate);event->acceptProposedAction();
-}
-} // namespace propernotes

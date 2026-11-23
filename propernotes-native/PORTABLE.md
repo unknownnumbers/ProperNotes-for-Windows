@@ -4,6 +4,32 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.11 compact native layout
+
+Use the narrow left rail for page/annotation navigation, the mouse-and-touch
+follow-tool switch, palette locking, full screen and the application settings gear.
+The floating palette keeps Pan and Select above the scrollable favorite tools.
+Use a wheel or one finger to scroll its middle area. Its bottom + stays visible
+and opens shared tool properties, with Add to Toolbar for a saved preset and Use
+for immediate activation. Select a preset and open its options to change it.
+
+Unlock the palette from the left rail to show the movement handle below + and
+the height handles at its edges. Drag the movement handle to reposition it or an
+edge to make it taller or shorter. Locking hides these handles. The app remembers
+the palette geometry and lock state. Fixed top and bottom controls remain available
+when favorites overflow. Tool icons use the preset color and show applicable pt values.
+
+View Back/Forward and Undo/Redo appear near the lower-left corner. Zoom and
+Fit Width/Page/Height appear near the lower-right corner. Reveal a hidden group
+from its corner. Related operations show their controls. Hover, keyboard focus,
+touch interaction and open menus keep them visible. The idle hide delay defaults
+to 3 seconds and can be set from 1 to 30 seconds in the categorized Settings window.
+
+This revision is awaiting cloud compilation and portable assembly at source
+preparation time. Build provenance records the actual result. Packaging does not
+install, start or test the app on the recipient's PC. Older instructions below
+also document earlier versions and their previous toolbar placements.
+
 The left sidebar has **Pages** and **Annotations** tabs. Annotations lists this
 program's editable objects, with current-page or whole-document scope and a kind
 filter. Click an entry to navigate to it. Review marks are selected only when
@@ -148,6 +174,16 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.11 精簡原生版面
+
+左側窄邊欄提供頁面／批注入口、滑鼠與手跟隨工具、工具框固定、全螢幕及完整軟體設定。浮動工具框頂部固定平移和框選，中間收藏區可用滾輪或單指上下捲動，底部「＋」始終可用。同一工具與選項窗口提供「加入工具欄」及「使用」，選中收藏預設後可開啟其選項，圖示反映顏色及適用的 pt 數值。
+
+從左側解除固定後，「＋」下方出現移動把手，上下沿出現高度把手，可移動、拉長或縮短工具框。鎖定後隱藏這些把手，位置、高度和鎖定狀態會保留。收藏過多時，頂部及底部控件維持可見。
+
+左下顯示視角返回／前進及復原／重做，右下提供縮放及適寬／適頁／適高。隱藏後可從對應底角喚出，相關操作也會顯示控件。懸停、鍵盤焦點、觸控操作及展開選單期間保持顯示，空閒隱藏預設 3 秒，可在分類設定調整為 1 至 30 秒。
+
+此修訂在源碼準備時仍待雲端編譯與打包，實際結果以構件 provenance 為準，不在使用者 PC 安裝、啟動或測試應用。下方保留舊版的功能說明及當時控件位置。
+
 左側欄的「页面／批注」可切換縮圖及本應用的批注列表。可按目前頁面或整份 PDF、批注類型篩選，點選條目即可定位。選取正文標記會遵循「包含正文标记」開關，該開關可從框選或橡皮的工具列及設定頁操作，選擇會儲存。
 
 從「形状」選擇直線、箭頭、矩形或橢圓，拖曳時預覽，放開後建立。按住 Shift 可將直線和箭頭約束為 45° 的倍數，將矩形和橢圓約束為正方形和正圓。線條、填充和持續或單次模式可收藏。整筆橡皮碰到邊線或可見填充即可移除整個圖形。
@@ -207,6 +243,16 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.11 紧凑原生布局
+
+左侧窄边栏提供页面／批注入口、鼠标与手跟随工具、工具框固定、全屏及完整软件设置。浮动工具框顶部固定平移和框选，中间收藏区可用滚轮或单指上下滚动，底部「＋」始终可用。同一工具与选项窗口提供「加入工具栏」和「使用」，选中收藏预设后可打开其选项，图标反映颜色和适用的 pt 数值。
+
+从左侧解除固定后，「＋」下方出现移动把手，上下沿出现高度把手，可移动、拉长或缩短工具框。锁定后隐藏这些把手，位置、高度和锁定状态会保留。收藏过多时，顶部和底部控件维持可见。
+
+左下显示视角返回／前进及撤销／重做，右下提供缩放和适宽／适页／适高。隐藏后可从对应底角唤出，相关操作也会显示控件。悬停、键盘焦点、触控操作和展开菜单期间保持显示，空闲隐藏默认 3 秒，可在分类设置调整为 1 至 30 秒。
+
+此修订在源码准备时仍待云端编译和打包，实际结果以构件 provenance 为准，不在用户 PC 安装、启动或测试应用。下方保留旧版的功能说明和当时控件位置。
 
 左侧栏的「页面／批注」可切换缩略图和本应用的批注列表。可按当前页或整份 PDF、批注类型筛选，点击条目即可定位。选中正文标记会遵循「包含正文标记」开关，该开关可从框选或橡皮的工具栏及设置页操作，选择会保存。
 

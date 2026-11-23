@@ -666,6 +666,9 @@ void DocumentView::refreshVisible()
         canvas->setVisibleCanvasRect(viewport()->rect().translated(-canvas->pos()));
         canvas->setEditingEnabled(m_editing && m_cache.contains(page));
         canvas->show();
+        // Page canvases are lazily created after the reader chrome. Keep all
+        // overlays above new pages without involving the document renderer.
+        canvas->lower();
     }
     const int page = pageAt(viewportRect.center());
     if (page >= 0 && page != m_currentPage) {

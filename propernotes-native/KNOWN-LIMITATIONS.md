@@ -6,6 +6,23 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.11 interface revision
+
+English (en): This source revision moves controls into the approved narrow left
+rail, floating scrollable favorites palette and transient bottom-corner groups.
+The settings gear opens categorized application settings, including a 1–30 second
+idle hide delay with a 3-second default. Palette geometry and pin state are saved.
+At source preparation time, cloud compilation and packaging are pending. No local
+application launch or test is authorized or claimed. Touch scrolling, resize bounds,
+focus/hover hiding, restored geometry, pen input and PDF save/reopen still require
+runtime acceptance by the user. The interaction design follows user decisions,
+and does not establish unverified Drawboard behavior. Large-document optimization
+remains a later task. Earlier version descriptions below are retained history.
+
+Traditional Chinese (zh-TC): 此修訂把控件移入已確認的左側窄邊欄、可捲動浮動收藏工具框及底角浮現控件。齒輪開啟分類設定，包含預設 3 秒、可調 1 至 30 秒的空閒隱藏時間，工具框位置、高度和固定狀態會保留。源碼準備時仍待雲端編譯與打包，沒有在使用者 PC 啟動應用或執行測試。觸控捲動、邊界縮放、焦點／懸停隱藏、位置恢復、筆輸入及 PDF 儲存重開仍待使用者實際驗收。依使用者已確認的互動規則實作，未核實的 Drawboard 邏輯仍不作推定，大文件優化繼續後排。
+
+Simplified Chinese (zh-SC): 此修订把控件移入已确认的左侧窄边栏、可滚动浮动收藏工具框和底角浮现控件。齿轮打开分类设置，包含默认 3 秒、可调 1 至 30 秒的空闲隐藏时间，工具框位置、高度和固定状态会保留。源码准备时仍待云端编译和打包，没有在用户 PC 启动应用或运行测试。触控滚动、边界缩放、焦点／悬停隐藏、位置恢复、笔输入及 PDF 保存重开仍待用户实际验收。按用户已确认的交互规则实现，未核实的 Drawboard 逻辑仍不作推定，大文件优化继续后排。
+
 Documents saved with native shapes use format v5. Earlier edits use their original
 native formats when the document has no shapes. Older native builds protect v5 from
 overwrite. The shapes use PDF annotation appearances. This version supports

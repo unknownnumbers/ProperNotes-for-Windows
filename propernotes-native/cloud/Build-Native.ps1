@@ -5,7 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$ArtifactDirectory,
     [string]$QtRoot = $env:QT_ROOT_DIR,
     [string]$DependencyCacheDirectory = $env:PROPERNOTES_DEPENDENCY_CACHE,
-    [string]$PackageName = 'ProperNotes-for-Windows-0.3.10-native-preview.1-win-x64'
+    [string]$PackageName = 'ProperNotes-for-Windows-0.3.11-native-preview.1-win-x64'
 )
 
 Set-StrictMode -Version Latest

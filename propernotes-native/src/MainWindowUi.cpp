@@ -272,7 +272,7 @@ void MainWindow::buildUi() {
     connect(m_backAction,&QAction::triggered,this,[this]{navigateHistory(-1);});connect(m_forwardAction,&QAction::triggered,this,[this]{navigateHistory(1);});
     m_previousAction=read->addAction(QStringLiteral("上一页"));m_pageNumber=new QSpinBox;m_pageNumber->setRange(1,1);m_pageNumber->setKeyboardTracking(false);read->addWidget(m_pageNumber);m_nextAction=read->addAction(QStringLiteral("下一页"));
     m_layout=new QComboBox;m_layout->addItem(QStringLiteral("单页连续"),"single-continuous");m_layout->addItem(QStringLiteral("双页连续"),"facing-continuous");m_layout->addItem(QStringLiteral("单页"),"single");m_layout->addItem(QStringLiteral("双页"),"facing");read->addWidget(m_layout);
-    m_zoomOutAction=read->addAction(QStringLiteral("−"));m_zoomLabel=new QLabel;read->addWidget(m_zoomLabel);m_zoomInAction=read->addAction(QStringLiteral("＋"));
+    m_zoomOutAction=read->addAction(QStringLiteral("缩小"));m_zoomLabel=new QLabel;read->addWidget(m_zoomLabel);m_zoomInAction=read->addAction(QStringLiteral("放大"));
     m_fitAction=read->addAction(QStringLiteral("适宽"));m_fitPageAction=read->addAction(QStringLiteral("适页"));m_fitHeightAction=read->addAction(QStringLiteral("适高"));
     connect(m_previousAction,&QAction::triggered,this,[this]{const bool facing=m_view->layoutMode()==DocumentView::LayoutMode::FacingPages||m_view->layoutMode()==DocumentView::LayoutMode::FacingContinuous;goToPage(m_currentPage-(facing?2:1));});
     connect(m_nextAction,&QAction::triggered,this,[this]{const bool facing=m_view->layoutMode()==DocumentView::LayoutMode::FacingPages||m_view->layoutMode()==DocumentView::LayoutMode::FacingContinuous;goToPage(m_currentPage+(facing?2:1));});

@@ -5,18 +5,26 @@
 #include <QCloseEvent>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QFileDialog>
 #include <QFormLayout>
+#include <QFrame>
 #include <QGroupBox>
+#include <QGridLayout>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QPushButton>
+#include <QPair>
+#include <QScrollArea>
 #include <QSpinBox>
+#include <QSize>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -37,21 +45,42 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
                                const QString& preferencesWarning, bool preferencesWritable, QWidget* parent)
     : QDialog(parent), m_initial(value), m_penColor(value.penColor), m_preferencesWritable(preferencesWritable)
 {
-    setWindowTitle(QStringLiteral("ProperNotes 设置与本地备份"));
+    setWindowTitle(QStringLiteral("ProperNotes 设置"));
     resize(940, 700);
     setMinimumSize(720, 540);
     auto* layout = new QVBoxLayout(this);
-    auto* tabs = new QTabWidget;
-    m_tabs = tabs;
-    auto* settings = new QWidget;
-    auto* settingsLayout = new QVBoxLayout(settings);
     if (!preferencesWarning.isEmpty()) {
         auto* warning = new QLabel(preferencesWarning);
         warning->setTextFormat(Qt::PlainText);
         warning->setWordWrap(true);
-        settingsLayout->addWidget(warning);
+        layout->addWidget(warning);
     }
-    auto* appearance = new QGroupBox(QStringLiteral("已接入的界面与笔设置"));
+    auto* body = new QHBoxLayout;
+    m_categories = new QListWidget;
+    m_categories->setAccessibleName(QStringLiteral("设置分类"));
+    m_categories->setMinimumWidth(138);
+    m_categories->setMaximumWidth(180);
+    m_categories->setSpacing(3);
+    m_pages = new QStackedWidget;
+    body->addWidget(m_categories);
+    body->addWidget(m_pages, 1);
+    layout->addLayout(body, 1);
+    auto addPage = [this](const QString& title) {
+        auto* scroll = new QScrollArea;
+        scroll->setWidgetResizable(true);
+        scroll->setFrameShape(QFrame::NoFrame);
+        auto* page = new QWidget;
+        auto* content = new QVBoxLayout(page);
+        content->setContentsMargins(16, 12, 16, 12);
+        content->setSpacing(16);
+        scroll->setWidget(page);
+        m_categories->addItem(title);
+        m_categories->item(m_categories->count() - 1)->setSizeHint(QSize(136, 44));
+        m_pages->addWidget(scroll);
+        return content;
+    };
+    auto* appearancePage = addPage(QStringLiteral("外观与界面"));
+    auto* appearance = new QGroupBox(QStringLiteral("外观与界面"));
     auto* form = new QFormLayout(appearance);
     m_theme = new QComboBox;
     m_theme->addItem(QStringLiteral("跟随系统"), QStringLiteral("system"));
@@ -67,17 +96,105 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     m_sidebarWidth->setSuffix(QStringLiteral(" 像素"));
     m_sidebarWidth->setValue(value.sidebarWidth);
     form->addRow(QStringLiteral("侧栏宽度"), m_sidebarWidth);
+    m_favoritesVisible = new QCheckBox(QStringLiteral("显示收藏工具栏"));
+    m_favoritesVisible->setChecked(value.favoritesBar.visible);
+    form->addRow(m_favoritesVisible);
+    m_favoritesPinned = new QCheckBox(QStringLiteral("固定收藏工具栏位置与高度"));
+    m_favoritesPinned->setChecked(value.favoritesBar.pinned);
+    form->addRow(m_favoritesPinned);
+    m_hideDelay = new QSpinBox;
+    m_hideDelay->setRange(1, 30);
+    m_hideDelay->setSuffix(QStringLiteral(" 秒"));
+    m_hideDelay->setValue(value.controlsHideDelaySeconds);
+    m_hideDelay->setAccessibleName(QStringLiteral("底角控件空闲隐藏时间"));
+    form->addRow(QStringLiteral("底角控件空闲隐藏时间"), m_hideDelay);
+    auto* hideHelp = new QLabel(QStringLiteral("缩放与视图、视角历史和撤销重做在操作后显示。悬停、焦点、触摸或菜单展开期间保持显示，轻点相应底角可再次唤出。"));
+    hideHelp->setWordWrap(true);
+    form->addRow(hideHelp);
+    appearance->setEnabled(preferencesWritable);
+    appearancePage->addWidget(appearance);
+    m_reload = new QPushButton(QStringLiteral("重新读取磁盘设置"));
+    appearancePage->addWidget(m_reload, 0, Qt::AlignLeft);
+    appearancePage->addStretch();
+
+    auto* readingPage = addPage(QStringLiteral("阅读与会话"));
+    auto* reading = new QGroupBox(QStringLiteral("阅读与会话"));
+    auto* readingForm = new QFormLayout(reading);
+    m_layoutMode = new QComboBox;
+    m_layoutMode->addItem(QStringLiteral("单页"), QStringLiteral("single"));
+    m_layoutMode->addItem(QStringLiteral("单页连续"), QStringLiteral("single-continuous"));
+    m_layoutMode->addItem(QStringLiteral("双页"), QStringLiteral("facing"));
+    m_layoutMode->addItem(QStringLiteral("双页连续"), QStringLiteral("facing-continuous"));
+    m_layoutMode->setCurrentIndex(m_layoutMode->findData(value.tools.layout));
+    readingForm->addRow(QStringLiteral("默认页面布局"), m_layoutMode);
+    m_thumbnailSize = new QSpinBox;
+    m_thumbnailSize->setRange(80, 280);
+    m_thumbnailSize->setSuffix(QStringLiteral(" 像素"));
+    m_thumbnailSize->setValue(value.tools.thumbnailSize);
+    readingForm->addRow(QStringLiteral("展开页面的预览尺寸"), m_thumbnailSize);
+    reading->setEnabled(preferencesWritable);
+    readingPage->addWidget(reading);
+    m_restoreSession = new QCheckBox(QStringLiteral("启动时恢复上次的文档标签与阅读位置"));
+    m_restoreSession->setChecked(true);
+    m_restoreSession->setEnabled(false);
+    readingPage->addWidget(m_restoreSession);
+    auto* navigationHelp = new QLabel(QStringLiteral("Ctrl + 滚轮缩放正文或展开页面的预览，Shift + 滚轮左右平移正文。适合宽度、页面和高度可从右下视图入口选择。"));
+    navigationHelp->setWordWrap(true);
+    readingPage->addWidget(navigationHelp);
+    readingPage->addStretch();
+
+    auto* inputPage = addPage(QStringLiteral("笔与输入"));
+    auto* input = new QGroupBox(QStringLiteral("笔与输入"));
+    auto* inputForm = new QFormLayout(input);
+    m_inputFollowsTool = new QCheckBox(QStringLiteral("鼠标与手跟随当前工具"));
+    m_inputFollowsTool->setChecked(value.tools.inputFollowsTool);
+    inputForm->addRow(m_inputFollowsTool);
+    auto* inputHelp = new QLabel(QStringLiteral("关闭后，鼠标与手用于浏览、选择正文及框选和移动已有批注。手写笔始终使用当前工具，两指用于平移和缩放。"));
+    inputHelp->setWordWrap(true);
+    inputForm->addRow(inputHelp);
+    m_pressureEnabled = new QCheckBox(QStringLiteral("启用笔压"));
+    m_pressureEnabled->setChecked(value.tools.pressureEnabled);
+    inputForm->addRow(m_pressureEnabled);
+    m_pressureSensitivity = new QSpinBox;
+    m_pressureSensitivity->setRange(0, 100);
+    m_pressureSensitivity->setValue(value.tools.pressureSensitivity);
+    m_pressureSensitivity->setEnabled(value.tools.pressureEnabled);
+    inputForm->addRow(QStringLiteral("笔压灵敏度"), m_pressureSensitivity);
+    connect(m_pressureEnabled, &QCheckBox::toggled, m_pressureSensitivity, &QWidget::setEnabled);
+    m_eraserMode = new QComboBox;
+    m_eraserMode->addItem(QStringLiteral("整笔擦除"), QStringLiteral("whole"));
+    m_eraserMode->addItem(QStringLiteral("局部擦除"), QStringLiteral("partial"));
+    m_eraserMode->setCurrentIndex(m_eraserMode->findData(value.tools.eraserMode));
+    inputForm->addRow(QStringLiteral("橡皮与笔尾模式"), m_eraserMode);
+    m_eraserRadius = new QDoubleSpinBox;
+    m_eraserRadius->setRange(1, 100);
+    m_eraserRadius->setSuffix(QStringLiteral(" pt"));
+    m_eraserRadius->setValue(value.tools.eraserRadiusPt);
+    inputForm->addRow(QStringLiteral("擦除半径"), m_eraserRadius);
+    input->setEnabled(preferencesWritable);
+    inputPage->addWidget(input);
+    inputPage->addStretch();
+
+    auto* annotationPage = addPage(QStringLiteral("批注与工具"));
+    auto* pen = new QGroupBox(QStringLiteral("默认笔样式"));
+    auto* penForm = new QFormLayout(pen);
     m_color = new QPushButton(value.penColor.name());
     m_color->setStyleSheet(QStringLiteral("color:%1;").arg(value.penColor.name()));
-    form->addRow(QStringLiteral("笔颜色"), m_color);
+    penForm->addRow(QStringLiteral("笔颜色"), m_color);
     m_penWidth = new QDoubleSpinBox;
     m_penWidth->setRange(0.5, 24.0);
     m_penWidth->setSingleStep(0.5);
     m_penWidth->setSuffix(QStringLiteral(" pt"));
     m_penWidth->setValue(value.penWidthPt);
-    form->addRow(QStringLiteral("笔粗细"), m_penWidth);
-    appearance->setEnabled(preferencesWritable);
-    settingsLayout->addWidget(appearance);
+    penForm->addRow(QStringLiteral("笔粗细"), m_penWidth);
+    m_penOpacity = new QDoubleSpinBox;
+    m_penOpacity->setRange(0, 100);
+    m_penOpacity->setDecimals(2);
+    m_penOpacity->setSuffix(QStringLiteral(" %"));
+    m_penOpacity->setValue(value.tools.opacity * 100);
+    penForm->addRow(QStringLiteral("不透明度"), m_penOpacity);
+    pen->setEnabled(preferencesWritable);
+    annotationPage->addWidget(pen);
 
     auto* annotations = new QGroupBox(QStringLiteral("正文审阅标记"));
     auto* annotationLayout = new QVBoxLayout(annotations);
@@ -89,8 +206,18 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     annotationLayout->addWidget(m_editTextMarkups);
     annotationLayout->addWidget(markupExplanation);
     annotations->setEnabled(preferencesWritable);
-    settingsLayout->addWidget(annotations);
+    annotationPage->addWidget(annotations);
+    auto* toolHelp = new QLabel(QStringLiteral("从工具栏「＋」选择工具并设置适用的颜色、粗细、透明度及持续或单次使用。收藏图标下方「···」可修改该预设。"));
+    toolHelp->setWordWrap(true);
+    annotationPage->addWidget(toolHelp);
+    annotationPage->addStretch();
 
+    auto* backupPage = addPage(QStringLiteral("本地备份"));
+    auto* tabs = new QTabWidget;
+    m_tabs = tabs;
+    backupPage->addWidget(tabs, 1);
+    auto* settings = new QWidget;
+    auto* settingsLayout = new QVBoxLayout(settings);
     auto* backup = new QGroupBox(QStringLiteral("本地备份"));
     auto* backupForm = new QFormLayout(backup);
     m_interval = new QSpinBox;
@@ -120,10 +247,8 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     backupForm->addRow(explanation);
     backup->setEnabled(preferencesWritable);
     settingsLayout->addWidget(backup);
-    m_reload = new QPushButton(QStringLiteral("重新读取磁盘设置"));
-    settingsLayout->addWidget(m_reload, 0, Qt::AlignLeft);
     settingsLayout->addStretch();
-    tabs->addTab(settings, QStringLiteral("设置"));
+    tabs->addTab(settings, QStringLiteral("备份设置"));
 
     auto* manager = new QWidget;
     auto* managerLayout = new QVBoxLayout(manager);
@@ -140,20 +265,54 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     m_tree->header()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_tree->header()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     managerLayout->addWidget(m_tree, 1);
-    auto* operations = new QHBoxLayout;
+    auto* operations = new QGridLayout;
     m_refresh = new QPushButton(QStringLiteral("刷新"));
     m_now = new QPushButton(QStringLiteral("备份当前 PDF"));
     m_current = new QPushButton(QStringLiteral("清理当前 PDF"));
     m_selected = new QPushButton(QStringLiteral("清理勾选 PDF"));
     m_selectAll = new QPushButton(QStringLiteral("全选 PDF"));
     m_all = new QPushButton(QStringLiteral("清理全部 PDF"));
-    for (auto* button : {m_refresh, m_now, m_current, m_selected, m_selectAll, m_all})
-        operations->addWidget(button);
+    int operationIndex = 0;
+    for (auto* button : {m_refresh, m_now, m_current, m_selected, m_selectAll, m_all}) {
+        operations->addWidget(button, operationIndex / 3, operationIndex % 3);
+        ++operationIndex;
+    }
     managerLayout->addLayout(operations);
     m_restore = new QPushButton(QStringLiteral("校验并另存所选备份…"));
     managerLayout->addWidget(m_restore, 0, Qt::AlignLeft);
     tabs->addTab(manager, QStringLiteral("备份管理"));
-    layout->addWidget(tabs, 1);
+    auto* shortcutsPage = addPage(QStringLiteral("快捷键"));
+    auto* shortcuts = new QGroupBox(QStringLiteral("键盘快捷键"));
+    auto* shortcutsForm = new QFormLayout(shortcuts);
+    const QList<QPair<QString, QString>> bindings{
+        {QStringLiteral("打开 PDF"), QStringLiteral("Ctrl + O")},
+        {QStringLiteral("保存"), QStringLiteral("Ctrl + S")},
+        {QStringLiteral("另存为"), QStringLiteral("Ctrl + Shift + S")},
+        {QStringLiteral("撤销"), QStringLiteral("Ctrl + Z")},
+        {QStringLiteral("重做"), QStringLiteral("Ctrl + Y")},
+        {QStringLiteral("搜索正文"), QStringLiteral("Ctrl + F")},
+        {QStringLiteral("剪切／复制／粘贴批注"), QStringLiteral("Ctrl + X / C / V")},
+        {QStringLiteral("切换文档标签"), QStringLiteral("Ctrl + Tab")},
+        {QStringLiteral("关闭当前标签"), QStringLiteral("Ctrl + W")},
+        {QStringLiteral("缩放"), QStringLiteral("Ctrl + 滚轮")},
+        {QStringLiteral("左右平移"), QStringLiteral("Shift + 滚轮")}
+    };
+    for (const auto& binding : bindings) shortcutsForm->addRow(binding.first, new QLabel(binding.second));
+    shortcutsPage->addWidget(shortcuts);
+    auto* shortcutHelp = new QLabel(QStringLiteral("此页列出当前快捷键。自定义快捷键与冲突处理仍在后续待办中。"));
+    shortcutHelp->setWordWrap(true);
+    shortcutsPage->addWidget(shortcutHelp);
+    shortcutsPage->addStretch();
+    auto* aboutPage = addPage(QStringLiteral("关于"));
+    auto* about = new QLabel(QStringLiteral("ProperNotes for Windows\n版本 %1\n\nPDF 阅读与手写批注\n\n原创代码 GPL-3.0-only\n原创说明 CC BY-SA 4.0\n第三方组件保留各自许可，详见程序目录的版权和许可文件。")
+        .arg(QCoreApplication::applicationVersion()));
+    about->setWordWrap(true);
+    about->setTextFormat(Qt::PlainText);
+    about->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    aboutPage->addWidget(about);
+    aboutPage->addStretch();
+    connect(m_categories, &QListWidget::currentRowChanged, m_pages, &QStackedWidget::setCurrentIndex);
+    m_categories->setCurrentRow(0);
     m_status = new QLabel;
     m_status->setTextFormat(Qt::PlainText);
     m_status->setWordWrap(true);
@@ -227,8 +386,19 @@ AppPreferenceValues SettingsDialog::values() const
     result.theme = m_theme->currentData().toString();
     result.sidebarVisible = m_sidebar->isChecked();
     result.sidebarWidth = m_sidebarWidth->value();
+    result.controlsHideDelaySeconds = m_hideDelay->value();
+    result.favoritesBar.visible = m_favoritesVisible->isChecked();
+    result.favoritesBar.pinned = m_favoritesPinned->isChecked();
+    result.tools.layout = m_layoutMode->currentData().toString();
+    result.tools.thumbnailSize = m_thumbnailSize->value();
+    result.tools.inputFollowsTool = m_inputFollowsTool->isChecked();
+    result.tools.pressureEnabled = m_pressureEnabled->isChecked();
+    result.tools.pressureSensitivity = m_pressureSensitivity->value();
+    result.tools.eraserMode = m_eraserMode->currentData().toString();
+    result.tools.eraserRadiusPt = m_eraserRadius->value();
     result.penColor = m_penColor;
     result.penWidthPt = m_penWidth->value();
+    result.tools.opacity = m_penOpacity->value() / 100.0;
     result.editTextMarkups = m_editTextMarkups->isChecked();
     result.backupIntervalMinutes = m_interval->value();
     result.backupRetainCount = m_retain->value();
@@ -238,7 +408,19 @@ AppPreferenceValues SettingsDialog::values() const
 
 bool SettingsDialog::migrateRequested() const { return m_migrate->isChecked(); }
 
-void SettingsDialog::showBackupManager() { m_tabs->setCurrentIndex(1); }
+void SettingsDialog::showBackupManager()
+{
+    m_categories->setCurrentRow(4);
+    m_tabs->setCurrentIndex(1);
+}
+
+void SettingsDialog::setRestoreSessionEnabled(bool enabled, bool writable)
+{
+    m_restoreSession->setChecked(enabled);
+    m_restoreSession->setEnabled(writable);
+}
+
+bool SettingsDialog::restoreSessionEnabled() const { return m_restoreSession->isChecked(); }
 
 void SettingsDialog::setCatalog(const BackupCatalog& catalog, const QString& currentDocumentId)
 {

@@ -249,6 +249,7 @@ void MainWindow::applyPreferences(const AppPreferenceValues& values)
     }
     updateToolUi();
     if(previouslySingle&&!isSingleUse(m_tool))rememberPersistentTool();
+    refreshReaderChrome();
 }
 
 void MainWindow::applyTheme()
@@ -403,11 +404,13 @@ void MainWindow::openSettings(bool backupManager)
     m_renderTimer->stop();
     m_backupTimer->stop();
     auto draft = m_preferences;
+    if (m_favoritesBar) draft.favoritesBar = m_favoritesBar->snapshotPreferences();
     if (m_sidebarTimer->isActive() && m_navigation->isVisible())
         draft.sidebarWidth = std::clamp(m_splitter->sizes().value(0, draft.sidebarWidth), 112, 400);
     m_sidebarTimer->stop();
     SettingsDialog dialog(draft, QCoreApplication::applicationDirPath(), m_preferencesWarning,
                           m_preferencesWritable, this);
+    dialog.setRestoreSessionEnabled(m_workspace->values.restoreEnabled, m_preferencesWritable && m_workspaceWritable && !m_workspaceBusy);
     m_settingsDialog = &dialog;
     if (backupManager)
         dialog.showBackupManager();
@@ -425,14 +428,27 @@ void MainWindow::openSettings(bool backupManager)
     const int result = dialog.exec();
     recoveredPath = dialog.property("recoveredPath").toString();
     m_settingsDialog.clear();
-    if (result == QDialog::Accepted)
-        persistPreferences(dialog.values(), dialog.migrateRequested());
-    else if (result == 3)
+    if (result == QDialog::Accepted) {
+        if (m_workspaceWritable && dialog.restoreSessionEnabled() != m_workspace->values.restoreEnabled) {
+            m_workspace->values.restoreEnabled = dialog.restoreSessionEnabled(); scheduleWorkspaceSave();
+        }
+        auto values = dialog.values();
+        if (m_liveFavorite->queuedBar) {
+            values.favoritesBar.geometry = m_liveFavorite->queuedBar->geometry;
+            m_liveFavorite->queuedBar.reset();
+        }
+        persistPreferences(values, dialog.migrateRequested());
+    } else if (result == 3) {
+        m_liveFavorite->queuedBar.reset();
         loadPreferences(true);
-    else {
+    } else {
         applyPreferences(m_preferences);
         updateUi();
         scheduleBackup();
+        if (m_liveFavorite->queuedBar && m_preferencesWritable) {
+            auto values=m_preferences;values.favoritesBar=*m_liveFavorite->queuedBar;
+            m_liveFavorite->queuedBar.reset();persistPreferences(values);
+        }
     }
     if (renderPending && m_preferencesBusy)
         m_resumeRenderAfterPreferences = true;
@@ -746,6 +762,7 @@ void MainWindow::updateUi()
         m_favoritesBar->setActivationEnabled(filesReady&&!m_settingsDialog);
     }
     updateTextReviewUi();
+    refreshReaderChrome();
 }
 void MainWindow::showError(const QString& message)
 {
@@ -926,7 +943,7 @@ void MainWindow::finishFileOperation()
     if (resumeRender && m_pageCount > 0 && !m_rendering && !m_allowClose)
         m_renderTimer->start();
     QTimer::singleShot(0,this,[this]{
-        if(m_liveFavorite->queuedBar&&m_preferencesWritable&&!m_preferencesBusy&&!m_backupBusy&&!m_fileBusy&&!m_closingAll){
+        if(m_liveFavorite->queuedBar&&m_preferencesWritable&&!m_preferencesBusy&&!m_backupBusy&&!m_fileBusy&&!m_closingAll&&!m_settingsDialog){
             auto values=m_preferences;values.favoritesBar=*m_liveFavorite->queuedBar;m_liveFavorite->queuedBar.reset();persistPreferences(values);
         }
     });

@@ -14,6 +14,7 @@ struct AppPreferenceValues {
     QString theme = QStringLiteral("system");
     bool sidebarVisible = true;
     int sidebarWidth = 160;
+    int controlsHideDelaySeconds = 3;
     QColor penColor = QColor(QStringLiteral("#202833"));
     qreal penWidthPt = 2.5;
     ToolPreferences tools;

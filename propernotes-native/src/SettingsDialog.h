@@ -12,10 +12,12 @@ class QDialogButtonBox;
 class QDoubleSpinBox;
 class QLabel;
 class QLineEdit;
+class QListWidget;
 class QPushButton;
 class QSpinBox;
 class QTreeWidget;
 class QTabWidget;
+class QStackedWidget;
 
 namespace propernotes {
 
@@ -33,6 +35,8 @@ public:
     void setStatus(const QString& message);
     void setCanBackupNow(bool enabled);
     void showBackupManager();
+    void setRestoreSessionEnabled(bool enabled, bool writable);
+    bool restoreSessionEnabled() const;
 
 signals:
     void refreshRequested();
@@ -58,8 +62,20 @@ private:
     QComboBox* m_theme = nullptr;
     QCheckBox* m_sidebar = nullptr;
     QSpinBox* m_sidebarWidth = nullptr;
+    QSpinBox* m_hideDelay = nullptr;
+    QCheckBox* m_favoritesVisible = nullptr;
+    QCheckBox* m_favoritesPinned = nullptr;
+    QComboBox* m_layoutMode = nullptr;
+    QSpinBox* m_thumbnailSize = nullptr;
+    QCheckBox* m_restoreSession = nullptr;
+    QCheckBox* m_inputFollowsTool = nullptr;
+    QCheckBox* m_pressureEnabled = nullptr;
+    QSpinBox* m_pressureSensitivity = nullptr;
+    QComboBox* m_eraserMode = nullptr;
+    QDoubleSpinBox* m_eraserRadius = nullptr;
     QPushButton* m_color = nullptr;
     QDoubleSpinBox* m_penWidth = nullptr;
+    QDoubleSpinBox* m_penOpacity = nullptr;
     QCheckBox* m_editTextMarkups = nullptr;
     QSpinBox* m_interval = nullptr;
     QSpinBox* m_retain = nullptr;
@@ -77,6 +93,8 @@ private:
     QPushButton* m_reload = nullptr;
     QDialogButtonBox* m_buttons = nullptr;
     QTabWidget* m_tabs = nullptr;
+    QListWidget* m_categories = nullptr;
+    QStackedWidget* m_pages = nullptr;
 };
 
 } // namespace propernotes

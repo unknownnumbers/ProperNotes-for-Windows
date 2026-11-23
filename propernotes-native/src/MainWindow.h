@@ -43,6 +43,7 @@ struct DocumentSession;
 class WorkspaceStore;
 class FavoritesBar;
 class AnnotationListPane;
+class ReadingControls;
 struct FavoriteTool;
 
 class MainWindow final : public QMainWindow
@@ -55,6 +56,7 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
     void buildUi();
@@ -117,6 +119,8 @@ private:
     void restoreBackup(const BackupSnapshotKey& snapshot, const QString& suggestedName);
     void finishBackupOperation();
     void buildWorkspaceUi();
+    void buildReaderChrome();
+    void refreshReaderChrome();
     void stashActiveTab();
     void activateTab(int index, bool load = true);
     void closeTab(int index);
@@ -209,6 +213,13 @@ private:
     QAction* m_closeTabAction = nullptr;
     QAction* m_restoreSessionAction = nullptr;
     FavoritesBar* m_favoritesBar = nullptr;
+    ReadingControls* m_readingControls = nullptr;
+    QAction* m_palettePinAction = nullptr;
+    QAction* m_fullScreenAction = nullptr;
+    QToolButton* m_pagesRail = nullptr;
+    QToolButton* m_annotationsRail = nullptr;
+    QSpinBox* m_chromePageNumber = nullptr;
+    QLabel* m_chromePageTotal = nullptr;
     QTimer* m_workspaceTimer = nullptr;
     QThread* m_workerThread = nullptr;
     QObject* m_workerContext = nullptr;

@@ -41,6 +41,8 @@ The 0.3.9 revision adds editable line, arrow, rectangle and ellipse annotations.
 
 The 0.3.10 revision adds the native annotation list with page/type filters and click-to-locate. The Select and Erase toolbar exposes the saved text-review inclusion switch. Sidebar previews reuse suitable rendered pages and schedule visible rows with no fixed per-image pause. 原生 0.3.10 增加批注列表、頁面及類型篩選和點選定位，工具列增加正文標記開關並改善側欄縮圖排程。原生 0.3.10 增加批注列表、页面和类型筛选及点击定位，工具栏增加正文标记开关并改善侧栏缩略图排队。
 
+The 0.3.11 revision adopts a narrow native sidebar and an in-viewport floating favorites palette. Pan and Select stay above a scrollable preset list. The unified tool picker offers Add to toolbar and Use with the same applicable properties. Unlocking reveals movement and height controls. History and zoom groups appear near the bottom corners, with a saved idle delay of 1–30 seconds, default 3 seconds. The categorized settings window retains local backup management. The cloud workflow compiles and packages only, without launching the application or running tests. 原生 0.3.11 採用窄側欄及可調高度的浮動收藏工具框，底角控件預設 3 秒隱藏並可設定。原生 0.3.11 采用窄侧栏及可调高度的浮动收藏工具框，底角控件默认 3 秒隐藏并可设置。實際操作與裝置驗收仍待用戶試用。实际操作与设备验收仍待用户试用。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

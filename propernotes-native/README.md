@@ -8,6 +8,21 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The 0.3.11 source adopts the approved compact native layout: a narrow left rail,
+a floating favorites palette, and separate bottom-corner history and zoom controls.
+Pan and Select stay at the top of the palette, favorites scroll in the middle,
+and the bottom + opens one tool/options picker with Add to Toolbar and Use.
+Favorite icons show their color and applicable point size, with an options entry
+for the selected preset. Unlock the palette from the left rail to move it or
+resize its height from its edges. Locking hides its movement and resizing handles.
+Its position, height and lock state are remembered. The settings gear opens the
+categorized application settings. Bottom controls default to hiding after 3 seconds
+of inactivity, adjustable from 1 to 30 seconds in Settings, and remain visible
+during interaction. Cloud compilation and packaging of this revision are pending
+at source preparation time. The application is not installed, started or tested
+on the recipient's PC. Large-document work remains deferred. Earlier version
+entries below retain their historical control placements.
+
 0.3.10 adds a native annotation sidebar with page and kind filters and navigation
 to an annotation. Select and Erase expose the text-review inclusion setting in
 their toolbar. Page previews reuse suitable reading images and schedule visible
@@ -114,6 +129,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.11 源碼採用已確認的精簡原生版面，包含左側窄邊欄、浮動收藏工具框，以及分置底角的歷史與縮放控件。平移和框選固定在工具框頂部，收藏區可用滾輪或手指捲動，底部「＋」統一開啟工具與選項，提供「加入工具欄」和「使用」。預設圖示反映顏色與適用的 pt 數值，選中後可開啟選項。從左側解除固定後可移動工具框或拖動邊緣調整高度，鎖定時隱藏移動及調高把手，位置、高度和鎖定狀態會保留。齒輪開啟分類軟體設定，底角控件預設空閒 3 秒隱藏，可在設定調整為 1 至 30 秒，操作期間保持顯示。此修訂在源碼準備時仍待雲端編譯與打包，不在使用者 PC 安裝、啟動或測試。大文件優化繼續留待後續，下方舊版條目保留當時的控件位置。
+
 0.3.10 新增批注側欄，可按頁面範圍及類型篩選，點選批注可定位。框選和橡皮的工具列加入「包含正文標記」設定。頁面預覽會重用適用的閱讀圖像，依可見範圍排程，完成一張後接續處理。
 
 0.3.9 新增可編輯的直線、箭頭、矩形和橢圓，支援線條樣式、矩形及橢圓填充與收藏。圖形和筆跡可一起移動、縮放及旋轉，圖形和文字方塊可在同一份 PDF 內跨頁剪貼。設定可控制框選和橡皮是否作用於正文審閱標記。含 ProperNotes 圖形的 PDF 使用原生編輯格式 v5。
@@ -172,6 +189,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.11 源码采用已确认的紧凑原生布局，包含左侧窄边栏、浮动收藏工具框，以及分置底角的历史和缩放控件。平移和框选固定在工具框顶部，收藏区可用滚轮或手指滚动，底部「＋」统一打开工具与选项，提供「加入工具栏」和「使用」。预设图标反映颜色和适用的 pt 数值，选中后可打开选项。从左侧解除固定后可移动工具框或拖动边缘调整高度，锁定时隐藏移动和调高把手，位置、高度和锁定状态会保留。齿轮打开分类软件设置，底角控件默认空闲 3 秒隐藏，可在设置调整为 1 至 30 秒，操作期间保持显示。此修订在源码准备时仍待云端编译和打包，不在用户 PC 安装、启动或测试。大文件优化继续留待后续，下方旧版条目保留当时的控件位置。
 
 0.3.10 新增批注侧栏，可按页面范围和类型筛选，点击批注可定位。框选和橡皮的工具栏加入「包含正文标记」设置。页面预览会复用适用的阅读图像，按可见范围排队，完成一张后接着处理。
 

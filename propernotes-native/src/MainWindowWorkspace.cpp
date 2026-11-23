@@ -93,18 +93,25 @@ void MainWindow::buildWorkspaceUi() {
     addCycle(QKeySequence(Qt::CTRL|Qt::Key_Tab),1);addCycle(QKeySequence(Qt::CTRL|Qt::SHIFT|Qt::Key_Tab),-1);
     m_workspaceTimer=new QTimer(this);m_workspaceTimer->setSingleShot(true);m_workspaceTimer->setInterval(650);
     connect(m_workspaceTimer,&QTimer::timeout,this,[this]{saveWorkspace();});
-    m_favoritesBar=new FavoritesBar(this);
-    addDockWidget(Qt::LeftDockWidgetArea,m_favoritesBar);
+    m_favoritesBar=new FavoritesBar(m_view->viewport());
     auto* view=menuBar()->addMenu(QStringLiteral("视图"));
     view->addAction(m_favoritesBar->visibilityAction());view->addAction(m_sidebarAction);view->addAction(m_overviewAction);
     connect(m_favoritesBar,&FavoritesBar::activated,this,&MainWindow::applyFavorite);
+    connect(m_favoritesBar,&FavoritesBar::fixedToolRequested,this,[this](InkCanvas::Tool tool){chooseTool(tool);});
+    connect(m_favoritesBar,&FavoritesBar::selectionOptionsRequested,this,[this]{
+        QMenu options(this);
+        options.addAction(m_editTextMarkupsAction);
+        options.addSeparator(); options.addAction(m_cutObjectsAction); options.addAction(m_copyObjectsAction); options.addAction(m_pasteObjectsAction);
+        options.exec(m_favoritesBar->mapToGlobal(QPoint(-180,90)));
+    });
     connect(m_favoritesBar,&FavoritesBar::addCurrentRequested,this,&MainWindow::addCurrentFavorite);
     connect(m_favoritesBar,&FavoritesBar::favoritesEdited,this,[this](const QVector<FavoriteTool>& favorites){auto values=m_preferences;values.favorites=favorites;persistPreferences(values);});
     connect(m_favoritesBar,&FavoritesBar::barPreferencesEdited,this,[this](const FavoritesBarPreferences& bar){
         if(!m_preferencesWritable||m_closingAll)return;
-        if(m_preferencesBusy||m_backupBusy||m_fileBusy){m_liveFavorite->queuedBar=bar;return;}
+        if(m_preferencesBusy||m_backupBusy||m_fileBusy||m_settingsDialog){m_liveFavorite->queuedBar=bar;return;}
         auto values=m_preferences;values.favoritesBar=bar;persistPreferences(values);
     });
+    buildReaderChrome();
     applyPreferences(m_preferences);
 }
 
