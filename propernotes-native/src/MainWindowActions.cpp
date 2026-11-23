@@ -314,6 +314,7 @@ void MainWindow::updateToolUi()
     m_followAction->setChecked(m_preferences.tools.inputFollowsTool);
     m_lockAction->setChecked(!isSingleUse(m_tool));
     const auto* review = activeReviewTool();
+    m_view->setTextReviewActive(review != nullptr);
     const bool lockableReview = review && m_pageCount > 0 && !m_readOnly && !m_closingAll && !m_thumbnailBrowser && !m_settingsDialog;
     const bool lockableDrawingTool = m_preferencesWritable && (m_tool == InkCanvas::Tool::Pen ||
         m_tool == InkCanvas::Tool::Highlighter || m_tool == InkCanvas::Tool::ObjectEraser || m_tool == InkCanvas::Tool::TextBox);

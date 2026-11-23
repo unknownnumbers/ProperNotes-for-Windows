@@ -485,6 +485,7 @@ void DocumentView::configureCanvas(InkCanvas* canvas)
     canvas->setEraserMode(m_eraserMode);
     canvas->setEraserRadius(m_eraserRadius);
     canvas->setTouchAndMouseAnnotate(m_inputFollowsTool);
+    canvas->setTextReviewActive(m_textReviewActive);
     canvas->setTextStyle(m_textFamily, m_textSize, m_textColor);
     canvas->setDarkTheme(m_dark);
     canvas->setZoom(m_zoom);
@@ -964,6 +965,7 @@ PROPERNOTES_CANVAS_OPTION(setPressureSensitivity, m_sensitivity, qreal, setPress
 PROPERNOTES_CANVAS_OPTION(setEraserMode, m_eraserMode, InkCanvas::EraseMode, setEraserMode)
 PROPERNOTES_CANVAS_OPTION(setEraserRadius, m_eraserRadius, qreal, setEraserRadius)
 PROPERNOTES_CANVAS_OPTION(setInputFollowsTool, m_inputFollowsTool, bool, setTouchAndMouseAnnotate)
+PROPERNOTES_CANVAS_OPTION(setTextReviewActive, m_textReviewActive, bool, setTextReviewActive)
 #undef PROPERNOTES_CANVAS_OPTION
 
 void DocumentView::setHighlighterStyle(const QColor& color, qreal widthPt)

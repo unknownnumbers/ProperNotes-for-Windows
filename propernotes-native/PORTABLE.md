@@ -4,10 +4,11 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
-Turn on **Mouse & Touch Follow Tool** to select text, apply a review tool or
-edit annotations using a left-button drag or one-finger gesture. With the switch
-off, these gestures navigate the canvas and the pen uses the selected tool.
-Toolbar, favorites and visible style controls remain clickable.
+With **Mouse & Touch Follow Tool** off, use the mouse or one finger to pan,
+drag in **Select Text** for manual selection, or drag in **Select / Move** to select and
+move existing annotations. Turn on the switch to draw, erase or apply a review tool
+automatically on release with the mouse or one finger. Toolbar, favorites and visible
+style controls remain clickable.
 
 For an existing pen or freehand highlighter stroke, use **Select / Move**
 (框选 / 移动), select one stroke and click **Style** (样式) by the selection.
@@ -62,8 +63,8 @@ left/right or float it, up to the project's 128-preset limit. Editing a preset d
 objects; selecting the preset applies it to subsequent operations. Multiple bars and
 presets for additional tools remain future work.
 
-For 0.3.0: pen input uses the selected tool. Mouse-left and one finger initially pan;
-enable the visible mouse-and-touch switch to draw/select/create text with those inputs.
+Pen input uses the selected tool. Enable the mouse-and-touch switch to draw,
+erase or create a text box with the left mouse button or one finger.
 Two fingers always pan/zoom. The tool's Persistent button retains that tool; switch it
 off for one successful operation followed by a return to the previous persistent tool.
 Pen-tail erasure is temporary and uses the selected whole/partial eraser option.
@@ -111,7 +112,7 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
-要用滑鼠左鍵或單指在頁面上選字、審閱或編輯批注，請開啟「鼠标与手跟随工具」。關閉時這些畫布手勢只用來瀏覽，筆仍使用所選工具。工具列、收藏欄及選區旁的「样式」按鈕可直接點擊。
+關閉「鼠标与手跟随工具」時，可用滑鼠左鍵或單指平移、在「选文字」模式手動選字，或在「框选 / 移动」模式選取和移動既有批注。若要用滑鼠或單指繪製、擦除或拖選後自動加審閱標記，請開啟開關。工具列、收藏欄及選區旁的「样式」按鈕可直接點擊。
 
 點「選文字」後在同一頁拖選，Ctrl+C 複製。0.3.3 在頁面上方顯示高亮、底線、
 波浪線及刪除線按鈕，也顯示套用結果。從「正文审阅」開啟「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏欄。啟用後拖選正文，放開時套用。關閉「持续使用」後，成功標記一次即回到上一個持續工具。取消或未成功時保留目前工具。編輯收藏可儲存其持續或單次模式。
@@ -140,8 +141,8 @@ Ctrl+F 搜尋既有文字層，Enter 開始，可選大小寫、停止，點結�
 刪除/拖排、折疊、左右停靠或浮動, 專案上限 128 預設. 編輯收藏不改工具預設或已選 PDF 物件, 點擊後才套用
 後續操作. 多收藏欄及其他工具預設另列後續.
 
-0.3.0: 筆直接使用所選工具. 滑鼠左鍵與單指預設瀏覽, 開啟「滑鼠與手跟隨工具」
-後才跟隨所選工具; 兩指始終瀏覽. 「持續使用」取消後, 成功使用一次回前一常駐工具.
+筆直接使用所選工具。開啟「鼠标与手跟随工具」後，可用滑鼠左鍵或單指繪製、擦除或新增文字框。
+兩指可瀏覽。取消「持续使用」後，成功使用一次就回前一個持續工具。
 整筆/局部橡皮可選, 筆尾為臨時擦除. 框選後拖移; 文字框拖出後輸入, Enter換行,
 Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返回/前進分開.
 「展開頁面」進全螢幕縮圖, 滑杆或Ctrl+滾輪調預覽大小; 點頁跳轉, Esc回原視角.
@@ -161,7 +162,7 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 
 ## Simplified Chinese (zh-SC)
 
-要用鼠标左键或单指在页面上选字、审阅或编辑批注，请打开「鼠标与手跟随工具」。关闭时这些画布手势只负责浏览，笔仍使用选定工具。工具栏、收藏栏和选区旁的「样式」按钮可以直接点击。
+关闭「鼠标与手跟随工具」时，可用鼠标左键或单指平移、在「选文字」模式手动选字，或在「框选 / 移动」模式框选和移动已有批注。要用鼠标或单指画、擦，或在拖选后自动加审阅标记，请打开开关。工具栏、收藏栏和选区旁的「样式」按钮可以直接点击。
 
 点「选文字」后在同一页拖选，Ctrl+C 复制。0.3.3 在页面上方显示高亮、下划线、
 波浪线及删除线按钮，也显示应用结果。从「正文审阅」打开「选用审阅工具」，也可用「收藏当前审阅工具」加入收藏栏。启用后拖选正文，松开时应用。关闭「持续使用」后，成功标记一次就回到上一个持续工具。取消或未成功时保留当前工具。编辑收藏可保存其持续或单次模式。
@@ -190,8 +191,8 @@ Ctrl+F 搜索已有文字层，Enter 开始，可选大小写、停止，点结�
 删除/拖排、折叠、左右停靠或浮动, 项目上限 128 预设. 编辑收藏不改工具默认或已选 PDF 对象, 点击后才应用
 后续操作. 多收藏栏及其他工具预设另列后续.
 
-0.3.0: 笔直接使用所选工具. 鼠标左键与单指默认浏览, 开启「鼠标与手跟随工具」
-后才跟随所选工具; 两指始终浏览. 「持续使用」取消后, 成功使用一次回前一常驻工具.
+笔直接使用所选工具。打开「鼠标与手跟随工具」后，可用鼠标左键或单指画、擦或新建文字框。
+两指可浏览。取消「持续使用」后，成功使用一次就回上一个持续工具。
 整笔/局部橡皮可选, 笔尾为临时擦除. 框选后拖移; 文字框拖出后输入, Enter换行,
 Ctrl+Enter或点框外确认, Esc取消. Ctrl+Z/Y为内容历史, 与视角返回/前进分开.
 「展开页面」进全屏缩略图, 滑杆或Ctrl+滚轮调预览大小; 点页跳转, Esc回原视角.

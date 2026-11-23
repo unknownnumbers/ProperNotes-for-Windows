@@ -63,6 +63,7 @@ public:
     void setEraserMode(InkCanvas::EraseMode mode);
     void setEraserRadius(qreal radius);
     void setInputFollowsTool(bool enabled);
+    void setTextReviewActive(bool active);
     void setTextStyle(const QString& family, qreal size, const QColor& color);
     void setDarkTheme(bool dark);
     void setEditingEnabled(bool enabled);
@@ -172,6 +173,7 @@ private:
     qreal m_textSize = 12;
     QColor m_textColor = QColor("#202833");
     bool m_inputFollowsTool = false;
+    bool m_textReviewActive = false;
     bool m_dark = false;
     bool m_editing = false;
     bool m_rebuilding = false;

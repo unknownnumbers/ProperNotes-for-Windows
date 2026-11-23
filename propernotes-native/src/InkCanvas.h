@@ -49,6 +49,7 @@ public:
     void setEraserMode(EraseMode mode) { m_eraseMode = mode; }
     void setEraserRadius(qreal radiusPt);
     void setTouchAndMouseAnnotate(bool enabled);
+    void setTextReviewActive(bool active);
     void setTextStyle(const QString& family, qreal sizePt, const QColor& color);
     void setEditingEnabled(bool enabled);
     void setDarkTheme(bool dark) { m_darkTheme = dark; update(); }
@@ -167,6 +168,7 @@ private:
     bool m_editingEnabled = false;
     bool m_darkTheme = false;
     bool m_touchAndMouseAnnotate = false;
+    bool m_textReviewActive = false;
     bool m_tabletActive = false;
     bool m_touchActive = false;
     bool m_tailEraser = false;

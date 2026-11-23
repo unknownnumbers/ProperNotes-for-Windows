@@ -67,7 +67,7 @@ void MainWindow::buildTextReviewUi(QToolBar* toolbar, QWidget* central)
     auto& review = *m_review;
     review.select = toolbar->addAction(QStringLiteral("选文字"));
     review.select->setCheckable(true);
-    review.select->setToolTip(QStringLiteral("拖选本页 PDF 正文，可复制或标记。使用鼠标或单指拖选前，先开启“鼠标与手跟随工具”。"));
+    review.select->setToolTip(QStringLiteral("手动拖选本页 PDF 正文，可复制或点击按钮添加标记。"));
     connect(review.select, &QAction::triggered, this, [this](bool enabled) {
         chooseTool(enabled ? InkCanvas::Tool::TextSelect : InkCanvas::Tool::Pan);
     });
@@ -257,8 +257,8 @@ void MainWindow::updateTextReviewUi()
     // Visibility follows the tool, not individual input updates. In particular,
     // clearing an old selection must not resize the viewport midway through a drag.
     review.selectionBar->setVisible(m_pageCount > 0 && m_tool == InkCanvas::Tool::TextSelect);
-    const QString dragText = m_preferences.tools.inputFollowsTool
-        ? QStringLiteral("拖选本页正文") : QStringLiteral("用笔拖选本页正文");
+    const QString dragText = tool && !m_preferences.tools.inputFollowsTool
+        ? QStringLiteral("用笔拖选本页正文") : QStringLiteral("拖选本页正文");
     QString hint;
     if (!readable) hint = QStringLiteral("正在处理文档…");
     else if (!review.reviewFeedback.isEmpty()) hint = review.reviewFeedback;

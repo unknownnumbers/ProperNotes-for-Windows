@@ -376,6 +376,13 @@ void InkCanvas::setHighlighterStyle(const QColor& color, qreal widthPt)
 void InkCanvas::setPressureSensitivity(qreal sensitivity) { if (std::isfinite(sensitivity)) m_pressureSensitivity = std::clamp(sensitivity, 0.0, 100.0); }
 void InkCanvas::setEraserRadius(qreal radius) { if (std::isfinite(radius)) m_eraserRadiusPt = std::clamp(radius, 1.0, 100.0); }
 void InkCanvas::setTouchAndMouseAnnotate(bool enabled) { if (m_touchAndMouseAnnotate != enabled) finishActiveOperation(); m_touchAndMouseAnnotate = enabled; }
+void InkCanvas::setTextReviewActive(bool active)
+{
+    if (m_textReviewActive == active) return;
+    m_textReviewActive = active;
+    if (m_gesture == Gesture::TextSelection) finishActiveOperation();
+}
+
 void InkCanvas::setTextStyle(const QString& family, qreal size, const QColor& color)
 {
     if (!family.isEmpty()) m_textFamily = family;
@@ -785,13 +792,13 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
     m_source = source;
     m_tailEraser = tailEraser;
     m_previousPanGlobal = global;
-    const bool navigate = forcePan || (source != Source::Pen && !m_touchAndMouseAnnotate);
-    if (!navigate && !tailEraser && m_tool == Tool::TextSelect) {
+    const bool followsTool = source == Source::Pen || m_touchAndMouseAnnotate;
+    if (m_tool == Tool::TextSelect && !forcePan && !tailEraser && (followsTool || !m_textReviewActive)) {
         setFocus(Qt::MouseFocusReason);
         beginTextSelection(position);
         return;
     }
-    if (navigate || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
+    if (forcePan || (!followsTool && m_tool != Tool::Select) || (!tailEraser && m_tool == Tool::Pan) || !m_editingEnabled) {
         m_gesture = Gesture::Pan;
         updateCursor();
         updateStrokeStyleButton();
@@ -827,7 +834,7 @@ void InkCanvas::pointerPress(const QPointF& position, const QPointF& global, qre
         m_focusId = m_pendingStroke.id;
         addPoint(position, pressure);
     } else if (m_tool == Tool::Select) {
-        m_resizeCorner = textResizeCornerAt(position);
+        m_resizeCorner = followsTool ? textResizeCornerAt(position) : -1;
         if (m_resizeCorner >= 0) {
             m_gesture = Gesture::TextResize;
             m_focusId = *m_selection.cbegin();

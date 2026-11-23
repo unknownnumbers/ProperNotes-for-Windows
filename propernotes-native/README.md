@@ -8,8 +8,9 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
-0.3.7 fixes canvas input routing. With Mouse & Touch Follow Tool off, mouse and
-single-finger gestures only navigate the page, including when a text review tool is active.
+0.3.7 fixes canvas input routing. With Mouse & Touch Follow Tool off, a mouse or
+single finger can pan, manually select text, or select and move existing annotations.
+Drawing, erasing and automatic review marks still follow the pen.
 
 0.3.6 adds an in-place style editor for a selected pen or freehand highlighter stroke.
 Change color, width and opacity in one undoable edit, and reopen the saved PDF to
@@ -66,9 +67,10 @@ opacity. Creation/erasure tools have remembered persistent/single-use modes; suc
 single use returns to the previous persistent tool. Flipping a supported pen to its
 eraser end temporarily uses the chosen eraser mode and preserves the selected tool.
 
-The mouse-and-touch annotation switch starts off: pen input uses its selected tool,
-while mouse-left/single-finger input pans. Turning it on lets mouse-left/single-finger
-input use that tool. Two fingers always browse, and pen contact suppresses canvas touch.
+The mouse-and-touch annotation switch starts off. Pen input uses its selected tool.
+Mouse-left and single-finger input support panning, manual text selection and moving
+selected annotations. Turning the switch on lets those inputs follow the selected tool.
+Two fingers browse, and pen contact suppresses canvas touch.
 Ctrl+wheel zooms the document, or changes thumbnail size inside the full-screen preview.
 These are this project's confirmed interaction rules, not a claim that every Drawboard
 setting has been independently verified.
@@ -96,7 +98,7 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
-0.3.7 修正畫布輸入。關閉「鼠标与手跟随工具」時，滑鼠和單指手勢只瀏覽頁面，正文審閱工具啟用時也一樣。
+0.3.7 修正畫布輸入。關閉「鼠标与手跟随工具」時，滑鼠和單指可平移、手動選字、框選或移動既有批注。繪製、擦除和自動審閱仍由筆操作。
 
 0.3.6 可就地編輯選取的普通筆跡或自由螢光筆跡。顏色、粗細和不透明度可一次套用並復原，儲存後可重新開啟 PDF 繼續編輯。四種正文審閱工具可從收藏啟用，支援持續或單次使用。
 
@@ -130,8 +132,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 0.3.0 原生源碼增加單/雙頁及連續/分頁閱讀、適寬/適頁/適高、獨立視角歷史、
 真正全螢幕且可調尺寸的縮圖、整文件會話撤銷/重做、整筆/局部擦除、框選移動及
 純文字框. 筆有壓感開關/靈敏度、顏色/粗細/透明度, 工具持續/單次設定可記憶.
-滑鼠與觸摸跟隨工具開關預設關閉: 筆保持所選工具, 滑鼠左鍵/單指瀏覽; 開啟後
-兩者也使用所選工具. 兩指始終瀏覽, 筆接觸時抑制畫布觸摸. Ctrl+滾輪分別調整
+滑鼠與觸摸跟隨工具開關預設關閉。筆使用所選工具，滑鼠左鍵與單指可平移、手動選字及框選移動。開啟後
+兩者也使用所選工具。兩指可瀏覽，筆接觸時抑制畫布觸摸。Ctrl+滾輪分別調整
 正文倍率或全螢幕縮圖尺寸. 這是本專案確認規則, 不宣稱全部 Drawboard 邏輯已核實.
 原生資料 v2 保存墨跡及文字框, 舊原生 v1 墨跡可編輯. 文字外觀含 alpha 點陣圖,
 Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能回退. 歷史不寫入 PDF.
@@ -149,7 +151,7 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 
 ## Simplified Chinese (zh-SC)
 
-0.3.7 修复画布输入。关闭「鼠标与手跟随工具」时，鼠标和单指手势只浏览页面，正文审阅工具启用时也一样。
+0.3.7 修复画布输入。关闭「鼠标与手跟随工具」时，鼠标和单指可平移、手动选字、框选或移动已有批注。绘写、擦除和自动审阅仍由笔操作。
 
 0.3.6 可就地编辑选中的普通笔迹或自由荧光笔迹。颜色、粗细和不透明度可一次应用并撤销，保存后可重新打开 PDF 继续编辑。四种正文审阅工具可从收藏启用，支持持续或单次使用。
 
@@ -183,8 +185,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 0.3.0 原生源码增加单/双页及连续/分页阅读、适宽/适页/适高、独立视角历史、
 真正全屏且可调尺寸的缩略图、整文档会话撤销/重做、整笔/局部擦除、框选移动及
 纯文字框. 笔有压感开关/灵敏度、颜色/粗细/透明度, 工具持续/单次设置可记忆.
-鼠标与触摸跟随工具开关默认关闭: 笔保持所选工具, 鼠标左键/单指浏览; 开启后
-两者也使用所选工具. 两指始终浏览, 笔接触时抑制画布触摸. Ctrl+滚轮分别调整
+鼠标与触摸跟随工具开关默认关闭。笔使用所选工具，鼠标左键与单指可平移、手动选字及框选移动。开启后
+两者也使用所选工具。两指可浏览，笔接触时抑制画布触摸。Ctrl+滚轮分别调整
 正文倍率或全屏缩略图尺寸. 这是本项目确认规则, 不宣称全部 Drawboard 逻辑已核实.
 原生数据 v2 保存墨迹及文字框, 旧原生 v1 墨迹可编辑. 文字外观含 alpha 位图,
 Unicode 原文仍可编辑; 不打包字体, 缺字体时编辑覆盖层可能回退. 历史不写入 PDF.
