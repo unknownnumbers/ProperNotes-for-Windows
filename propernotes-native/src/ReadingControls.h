@@ -23,6 +23,11 @@ public:
     void revealHistory();
     void revealZoom();
     void refreshAppearance();
+    // Reserve both full panels and their reveal buttons even while hidden.
+    // Showing a transient HUD must not move another overlay out of its way.
+    QList<QWidget*> reservedOverlays() const;
+signals:
+    void reservedGeometryChanged();
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 private:
@@ -37,7 +42,9 @@ private:
     QToolButton* m_zoom = nullptr;
     QMenu* m_viewMenu = nullptr;
     QTimer m_timers[2];
+    QTimer m_placeTimer;
     QSet<int> m_touchHeld;
     int m_delaySeconds = 3;
+    bool m_placing = false;
 };
 }

@@ -22,6 +22,7 @@
 #include <QSpinBox>
 #include <QSplitter>
 #include <QTabWidget>
+#include <QTimer>
 #include <QToolBar>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -175,6 +176,10 @@ void MainWindow::buildReaderChrome()
     connect(m_chromePageNumber,&QLineEdit::editingFinished,this,&MainWindow::commitChromePageNumber);
     // A lightweight filter on the page picker tracks viewport resizing.
     pages->setProperty("readerPagePicker",true); m_view->viewport()->installEventFilter(this);
+    connect(m_readingControls,&ReadingControls::reservedGeometryChanged,this,[this,pages]{
+        auto overlays=m_readingControls->reservedOverlays();overlays.append(pages);
+        m_favoritesBar->setReservedOverlays(overlays);
+    });
     refreshReaderChrome();
 }
 void MainWindow::commitChromePageNumber()
@@ -225,11 +230,17 @@ void MainWindow::refreshReaderChrome()
         m_chromePageTotal->setText(m_pageCount>0?QStringLiteral("/ %1").arg(m_pageCount):QStringLiteral("/ --"));
         auto* pages = m_chromePageNumber->parentWidget(); pages->adjustSize();
         pages->move(std::max(4,m_view->viewport()->width()-pages->width()-12),12);pages->raise();
+        // Reserve the complete page capsule and both complete bottom HUDs,
+        // including their hidden state, after their actual layout is known.
+        auto overlays=m_readingControls->reservedOverlays();overlays.append(pages);
+        m_favoritesBar->setReservedOverlays(overlays);
     }
 }
 bool MainWindow::eventFilter(QObject* watched,QEvent* event)
 {
     if(m_chromePageNumber&&watched==m_chromePageNumber){
+        if(event->type()==QEvent::FontChange)
+            QTimer::singleShot(0,this,&MainWindow::refreshReaderChrome);
         if((event->type()==QEvent::ShortcutOverride||event->type()==QEvent::KeyPress)
             &&static_cast<QKeyEvent*>(event)->key()==Qt::Key_Escape){
             event->accept();

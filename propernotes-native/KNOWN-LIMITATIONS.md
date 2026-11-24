@@ -6,6 +6,32 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.16 corner-control avoidance
+
+English (en): The floating palette avoids the actual bounds of the upper-right
+page capsule and both lower control groups with a small gap. Automatically
+hidden lower groups still reserve their bounds. Viewport, font and page-count
+changes refresh placement; passive avoidance preserves the saved anchor, ratio
+and desired height. Cloud compilation and packaging are pending at source
+preparation time. No installation, application launch or test is performed on the
+user's PC. Visual spacing, display scaling, very small viewports and interaction
+still require acceptance. This project rule is not a claim about Drawboard's
+unverified internal layout behavior.
+
+The palette retains its fixed controls and at least 44 logical pixels of favorite
+viewport. With no safe usable slot 80 logical pixels wide in an extremely small reading
+area, it temporarily hides and restores when room returns, preserving the user's
+visibility choice, anchor, ratio and desired height. Sidebar pin and settings
+remain available.
+
+Traditional Chinese (zh-TC): 懸浮工具框按實際控件邊界及小間距，避開右上頁碼框與兩組底角控件，底角自動隱藏時也保留邊界。閱讀區、字體及頁數變化會更新排放；被動避讓保留已保存的錨點、比例及要求高度。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。實際間距、顯示縮放、極小閱讀區和操作仍待驗收。這是本專案規則，不代表已核實的 Drawboard 內部排版邏輯。
+
+工具框保留固定控件及至少 44 邏輯像素收藏區。極小閱讀區若沒有寬 80 邏輯像素的安全可用位置則暫時隱藏，空間恢復後自動顯示；使用者的顯示選擇、錨點、比例及要求高度保留，側欄固定與設定入口仍可用。
+
+Simplified Chinese (zh-SC): 悬浮工具框按实际控件边界和小间距，避开右上页码框和两组底角控件，底角自动隐藏时也保留边界。阅读区、字体和页数变化会更新摆放；被动避让保留已保存的锚点、比例和要求高度。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试。实际间距、显示缩放、极小阅读区和操作仍待验收。这是本项目规则，不代表已核实的 Drawboard 内部布局逻辑。
+
+工具框保留固定控件和至少 44 逻辑像素收藏区。极小阅读区若没有宽 80 逻辑像素的安全可用位置则暂时隐藏，空间恢复后自动显示；用户的显示选择、锚点、比例和要求高度保留，侧栏固定和设置入口仍可用。
+
 ## 0.3.15 relative floating-palette placement
 
 English (en): The vertical floating palette remembers a left/right reading-edge

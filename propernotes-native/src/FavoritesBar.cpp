@@ -34,6 +34,7 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 
 namespace propernotes {
@@ -179,7 +180,7 @@ FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent),m_viewport(parent)
 {
     setObjectName(QStringLiteral("propernotesFavoritesBar"));setAttribute(Qt::WA_StyledBackground);setAutoFillBackground(true);
     setStyleSheet(QStringLiteral("QWidget#propernotesFavoritesBar{border:1px solid palette(mid);border-radius:12px;background:palette(window);} QToolButton{border:0;border-radius:7px;padding:0;} QToolButton:hover{background:palette(alternate-base);} QToolButton:checked{background:palette(highlight);}"));
-    setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setContentsMargins(8,ResizeEdgeHeight,8,ResizeEdgeHeight);layout->setSpacing(2);
+    setFixedWidth(80);auto* layout=new QVBoxLayout(this);layout->setSizeConstraint(QLayout::SetNoConstraint);layout->setContentsMargins(8,ResizeEdgeHeight,8,ResizeEdgeHeight);layout->setSpacing(2);
     auto handle=[this,layout](int kind,const QString& label,const QString& icon){auto* b=new GeometryHandle([this,kind](int phase,const QPointF& point){handleGesture(kind,phase,point);},[this,kind](int key,bool fast){keyboardGeometry(kind,key,fast);},this);b->setToolTip(label);b->setAccessibleName(label);b->setIcon(uiIcon(icon,palette()));configureReaderIconButton(b);b->setCursor(kind==MoveHandle?Qt::SizeAllCursor:Qt::SizeVerCursor);layout->addWidget(b,0,Qt::AlignHCenter);return b;};
     // Resize zones belong to the border, not to the list of toolbar buttons.
     auto edge=[this](int kind,const QString& label){
@@ -203,6 +204,12 @@ FavoritesBar::FavoritesBar(QWidget* parent):QWidget(parent),m_viewport(parent)
     connect(m_pan,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Pan);});connect(m_select,&QToolButton::clicked,this,[this]{if(m_activationEnabled)Q_EMIT fixedToolRequested(InkCanvas::Tool::Select);});connect(m_selectMore,&QToolButton::clicked,this,&FavoritesBar::selectionOptionsRequested);connect(m_add,&QToolButton::clicked,this,&FavoritesBar::openLibrary);
     m_visibilityAction=new QAction(QStringLiteral("显示收藏工具栏"),this);m_visibilityAction->setCheckable(true);connect(m_visibilityAction,&QAction::triggered,this,&FavoritesBar::setUserVisible);
     m_layoutTimer.setSingleShot(true);m_layoutTimer.setInterval(300);connect(&m_layoutTimer,&QTimer::timeout,this,&FavoritesBar::recordLayout);
+    m_avoidanceTimer.setSingleShot(true);m_avoidanceTimer.setInterval(0);
+    connect(&m_avoidanceTimer,&QTimer::timeout,this,[this]{
+        if(m_hostClosing)return;
+        if(m_gesture)handleGesture(m_gesture->kind,3,m_gesture->origin);
+        constrainGeometry();
+    });
     parent->installEventFilter(this);qApp->installEventFilter(this);setContextMenuPolicy(Qt::CustomContextMenu);connect(this,&QWidget::customContextMenuRequested,this,[this](const QPoint& point){showMenu(mapToGlobal(point));});resize(80,420);syncPlacementControls();rebuild();syncVisibility();
 }
 void FavoritesBar::setDockHosts(QWidget* viewport,QWidget* leftHost,QWidget* rightHost)
@@ -218,6 +225,30 @@ void FavoritesBar::setDockHosts(QWidget* viewport,QWidget* leftHost,QWidget* rig
         m_dockPreview->hide();
     }
     applyPlacement(m_preferences.floating,m_preferences.side);
+}
+void FavoritesBar::setReservedOverlays(const QList<QWidget*>& overlays)
+{
+    QList<QPointer<QWidget>> next;
+    for(auto* overlay:overlays){
+        if(!overlay||overlay==this||overlay==m_viewport)continue;
+        bool found=false;for(const auto& known:next)found|=known==overlay;
+        if(found)continue;
+        next.append(overlay);
+    }
+    if(next!=m_reservedOverlays){
+        for(const auto& overlay:m_reservedOverlays)if(overlay)overlay->removeEventFilter(this);
+        m_reservedOverlays=next;
+        for(const auto& overlay:m_reservedOverlays)if(overlay)overlay->installEventFilter(this);
+    }
+    // Calling again with the same widgets also invalidates hidden HUD geometry,
+    // whose move/resize events may otherwise be delayed until their next show.
+    scheduleAvoidanceReflow();
+}
+void FavoritesBar::scheduleAvoidanceReflow()
+{
+    const auto rectangles=reservedOverlayRects();
+    if(rectangles==m_reservedGeometry)return;
+    m_reservedGeometry=rectangles;m_avoidanceTimer.start();
 }
 void FavoritesBar::setFavorites(const QVector<FavoriteTool>& favorites)
 {
@@ -347,6 +378,7 @@ void FavoritesBar::applyPlacement(bool floating,const QString& side)
         if(!floating&&target->layout())target->layout()->addWidget(this);
     }
     m_floating=floating;m_side=side==QStringLiteral("left")?QStringLiteral("left"):QStringLiteral("right");
+    if(!floating)m_noFloatingSpace=false;
     setSizePolicy(QSizePolicy::Fixed,floating?QSizePolicy::Preferred:QSizePolicy::Expanding);
     syncPlacementControls();syncDockHosts();
     if(floating)constrainGeometry();
@@ -380,10 +412,10 @@ void FavoritesBar::constrainGeometry()
     if(!m_viewport||m_hostClosing||!m_floating||m_gesture)return;
     const QScopedValueRollback<bool> applying(m_applying,true);
     const bool initialized=initializeFloatingPosition();
-    setGeometry(relativeFloatingGeometry());raise();
+    applyFittedFloatingGeometry(relativeFloatingGeometry());
     if(initialized&&m_writable)m_layoutTimer.start();
 }
-QRect FavoritesBar::boundedFloatingGeometry(const QRect& geometry)const
+QRect FavoritesBar::viewportBoundedGeometry(const QRect& geometry)const
 {
     if(!m_viewport)return geometry;
     const int reserve=m_viewport->width()<420?140:84;
@@ -393,6 +425,77 @@ QRect FavoritesBar::boundedFloatingGeometry(const QRect& geometry)const
     return QRect(std::clamp(geometry.x(),8,std::max(8,m_viewport->width()-88)),
         std::clamp(geometry.y(),8,std::max(8,m_viewport->height()-height-reserve)),80,height);
 }
+QList<QRect> FavoritesBar::reservedOverlayRects()const
+{
+    QList<QRect> result;
+    if(!m_viewport)return result;
+    for(const auto& overlay:m_reservedOverlays){
+        if(!overlay||overlay->window()!=m_viewport->window())continue;
+        // Deliberately ignore visibility: auto-hidden HUDs still need their
+        // space when they reappear. Their owner keeps hidden geometry current.
+        const QPoint origin=m_viewport->mapFromGlobal(overlay->mapToGlobal(QPoint(0,0)));
+        const QRect rectangle=QRect(origin,overlay->size()).adjusted(-8,-8,8,8).intersected(m_viewport->rect());
+        if(!rectangle.isEmpty())result.append(rectangle);
+    }
+    return result;
+}
+QRect FavoritesBar::boundedFloatingGeometry(const QRect& geometry,bool allowHorizontalShift)const
+{
+    if(!m_viewport)return geometry;
+    const QRect wanted=viewportBoundedGeometry(geometry);
+    const int reserve=m_viewport->width()<420?140:84;
+    const int bottom=m_viewport->height()-reserve; // exclusive
+    // Preserve every fixed control and one touch-sized part of the scroll
+    // viewport. If that cannot fit, hiding is safer than clipping Add/Move.
+    const int usableHeight=std::max(80,minimumPaletteHeight()-80+ReaderButtonSize);
+    if(m_viewport->width()<96||bottom-8<usableHeight)return {};
+    const auto reserved=reservedOverlayRects();
+    QList<int> xs{wanted.x()};
+    const int maxX=m_viewport->width()-88;
+    auto addX=[&](int x){x=std::clamp(x,8,maxX);if(!xs.contains(x))xs.append(x);};
+    if(allowHorizontalShift){
+        addX(8);addX(maxX);
+        for(const auto& rectangle:reserved){addX(rectangle.left()-80);addX(rectangle.right()+1);}
+    }
+    QRect best;
+    int bestXDistance=0,bestYDistance=0;
+    for(const int x:xs){
+        QList<QPair<int,int>> blocks;
+        for(const auto& rectangle:reserved){
+            if(x>rectangle.right()||x+79<rectangle.left())continue;
+            const int first=std::max(8,rectangle.top()),last=std::min(bottom,rectangle.bottom()+1);
+            if(first<last)blocks.append(qMakePair(first,last));
+        }
+        std::sort(blocks.begin(),blocks.end(),[](const auto& left,const auto& right){
+            return left.first==right.first?left.second<right.second:left.first<right.first;
+        });
+        auto consider=[&](int first,int last){
+            const int height=std::min(wanted.height(),last-first);
+            if(height<usableHeight)return;
+            const int y=std::clamp(wanted.y(),first,last-height);
+            const int xDistance=std::abs(x-wanted.x()),yDistance=std::abs(y-wanted.y());
+            const bool better=best.isEmpty()||height>best.height()
+                ||(height==best.height()&&(xDistance<bestXDistance
+                    ||(xDistance==bestXDistance&&(yDistance<bestYDistance
+                        ||(yDistance==bestYDistance&&x<best.x())))));
+            if(better){best=QRect(x,y,80,height);bestXDistance=xDistance;bestYDistance=yDistance;}
+        };
+        int cursor=8;
+        for(const auto& block:blocks){
+            if(block.first>cursor)consider(cursor,block.first);
+            cursor=std::max(cursor,block.second);
+        }
+        if(cursor<bottom)consider(cursor,bottom);
+    }
+    return best;
+}
+void FavoritesBar::applyFittedFloatingGeometry(const QRect& fitted)
+{
+    m_noFloatingSpace=fitted.isEmpty();
+    if(m_noFloatingSpace){hide();return;}
+    setGeometry(fitted);
+    setVisible(requestedVisible()&&!m_hostClosing);raise();
+}
 bool FavoritesBar::initializeFloatingPosition()
 {
     if(m_floatingPositionInitialized||!m_viewport||!m_floating||!m_viewport->isVisible())return false;
@@ -401,7 +504,7 @@ bool FavoritesBar::initializeFloatingPosition()
     // room for the minimum visible rectangle, not for the desired full height:
     // a formerly tall toolbar must also migrate in an ordinary small window.
     if(m_viewport->width()<96||m_viewport->height()<reserve+88)return false;
-    const QRect legacy=boundedFloatingGeometry(m_floatingGeometry);
+    const QRect legacy=viewportBoundedGeometry(m_floatingGeometry);
     const int left=legacy.x(),right=m_viewport->width()-legacy.x()-legacy.width();
     m_floatingAnchor=left<right?QStringLiteral("left"):QStringLiteral("right");
     m_floatingEdgeOffset=std::clamp(std::min(left,right),8,100000);
@@ -413,13 +516,13 @@ bool FavoritesBar::initializeFloatingPosition()
 QRect FavoritesBar::relativeFloatingGeometry()const
 {
     if(!m_floatingPositionInitialized||!m_viewport)return boundedFloatingGeometry(m_floatingGeometry);
-    const QRect fitted=boundedFloatingGeometry(QRect(8,8,80,m_floatingGeometry.height()));
+    const QRect fitted=viewportBoundedGeometry(QRect(8,8,80,m_floatingGeometry.height()));
     const int reserve=m_viewport->width()<420?140:84;
     const int travel=std::max(0,m_viewport->height()-reserve-fitted.height()-8);
     const int x=m_floatingAnchor==QStringLiteral("left")?m_floatingEdgeOffset
         :m_viewport->width()-fitted.width()-m_floatingEdgeOffset;
-    return QRect(std::clamp(x,8,std::max(8,m_viewport->width()-88)),
-        8+qRound(m_floatingVerticalRatio*travel),80,fitted.height());
+    return boundedFloatingGeometry(QRect(std::clamp(x,8,std::max(8,m_viewport->width()-88)),
+        8+qRound(m_floatingVerticalRatio*travel),80,fitted.height()));
 }
 void FavoritesBar::rememberFloatingGeometry(bool resizeHeight)
 {
@@ -449,8 +552,12 @@ void FavoritesBar::showDockPreview(const QPointF& global,const QRect& proposed)
     }
     if(!m_dockCandidate.isEmpty()){
         m_dockPreview->setText(m_dockCandidate==QStringLiteral("left")?QStringLiteral("停靠\n左侧"):QStringLiteral("停靠\n右侧"));
-        m_dockPreview->setGeometry(m_dockCandidate==QStringLiteral("left")?0:std::max(0,m_viewport->width()-80),8,80,std::max(80,m_viewport->height()-16));
-    }else if(m_gesture&&!m_gesture->startedFloating){m_dockPreview->setText(QStringLiteral("悬浮"));m_dockPreview->setGeometry(boundedFloatingGeometry(proposed));}
+        const QRect fitted=boundedFloatingGeometry(QRect(m_dockCandidate==QStringLiteral("left")?8:std::max(8,m_viewport->width()-88),8,80,std::max(80,m_viewport->height()-16)),false);
+        if(fitted.isEmpty()){m_dockPreview->hide();return;}m_dockPreview->setGeometry(fitted);
+    }else if(m_gesture&&!m_gesture->startedFloating){
+        m_dockPreview->setText(QStringLiteral("悬浮"));const QRect fitted=boundedFloatingGeometry(proposed);
+        if(fitted.isEmpty()){m_dockPreview->hide();return;}m_dockPreview->setGeometry(fitted);
+    }
     else{m_dockPreview->hide();return;}
     m_dockPreview->show();m_dockPreview->raise();
 }
@@ -483,7 +590,8 @@ void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
                 applyPlacement(true,m_side);
                 const QRect proposed(m_viewport->mapFromGlobal(global.toPoint())-gesture.grabOffset,m_floatingGeometry.size());
                 const QScopedValueRollback<bool> applying(m_applying,true);
-                setGeometry(boundedFloatingGeometry(proposed));rememberFloatingGeometry(false);
+                applyFittedFloatingGeometry(boundedFloatingGeometry(proposed));
+                if(!m_noFloatingSpace)rememberFloatingGeometry(false);
             }else if(geometry()!=gesture.geometry)rememberFloatingGeometry(false);
         }
         else if(kind!=MoveHandle&&gesture.moved&&geometry()!=gesture.geometry)rememberFloatingGeometry(true);
@@ -493,6 +601,9 @@ void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
     if(phase==0){
         if(kind!=MoveHandle&&!m_floating)return;
         constrainGeometry();
+        // This start snapshot already incorporates the current overlays. A
+        // previously queued reflow must not cancel a contact that began later.
+        m_reservedGeometry=reservedOverlayRects();m_avoidanceTimer.stop();
         m_layoutTimer.stop();hideDockPreview();
         const int floatingMoveInset=ResizeEdgeHeight+ReaderButtonSize/2+1;
         const QPoint offset=m_floating?m_viewport->mapFromGlobal(global.toPoint())-geometry().topLeft():QPoint(40,std::max(44,boundedFloatingGeometry(m_floatingGeometry).height()-floatingMoveInset));
@@ -505,14 +616,14 @@ void FavoritesBar::handleGesture(int kind,int phase,const QPointF& global)
     if(kind==MoveHandle){
         const QRect proposed=m_gesture->startedFloating?start.translated(delta)
             :QRect(m_viewport->mapFromGlobal(global.toPoint())-m_gesture->grabOffset,m_floatingGeometry.size());
-        if(m_gesture->startedFloating){const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));}
+        if(m_gesture->startedFloating){const QScopedValueRollback<bool> applying(m_applying,true);applyFittedFloatingGeometry(boundedFloatingGeometry(proposed));}
         showDockPreview(global,proposed);return;
     }
     const int reserve=m_viewport->width()<420?140:84;const int bottom=m_viewport->height()-reserve;
     const int minimum=std::min(minimumPaletteHeight(),std::max(80,bottom-8));QRect proposed=start;
     if(kind==BottomHandle)proposed.setHeight(std::clamp(start.height()+delta.y(),minimum,std::max(minimum,bottom-start.top())));
     else{const int end=std::min(start.bottom()+1,bottom);const int top=std::clamp(start.top()+delta.y(),8,std::max(8,end-minimum));proposed.setTop(top);proposed.setBottom(end-1);}
-    const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));
+    const QScopedValueRollback<bool> applying(m_applying,true);applyFittedFloatingGeometry(boundedFloatingGeometry(proposed));
 }
 void FavoritesBar::keyboardGeometry(int kind,int key,bool accelerated)
 {
@@ -526,8 +637,8 @@ void FavoritesBar::keyboardGeometry(int kind,int key,bool accelerated)
     if(kind==MoveHandle)proposed.translate(delta);
     else if(kind==TopHandle)proposed.setTop(std::min(proposed.bottom()-minimumPaletteHeight()+1,proposed.top()+delta.y()));
     else proposed.setHeight(std::max(minimumPaletteHeight(),proposed.height()+delta.y()));
-    {const QScopedValueRollback<bool> applying(m_applying,true);setGeometry(boundedFloatingGeometry(proposed));}
-    if(geometry()!=before)rememberFloatingGeometry(kind!=MoveHandle);
+    {const QScopedValueRollback<bool> applying(m_applying,true);applyFittedFloatingGeometry(boundedFloatingGeometry(proposed));}
+    if(!m_noFloatingSpace&&geometry()!=before)rememberFloatingGeometry(kind!=MoveHandle);
     if(previousFocus&&(previousFocus==this||isAncestorOf(previousFocus)))previousFocus->setFocus(Qt::OtherFocusReason);
     m_layoutTimer.start();
 }
@@ -541,14 +652,19 @@ FavoritesBarPreferences FavoritesBar::currentLayout()const
 }
 void FavoritesBar::recordLayout()
 {
-    if(m_applying||!m_writable||m_hostClosing||!isVisible())return;const auto p=currentLayout();if(favoritesBarJson(p)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(p);
+    if(m_applying||!m_writable||m_hostClosing||(!isVisible()&&!m_noFloatingSpace))return;const auto p=currentLayout();if(favoritesBarJson(p)!=favoritesBarJson(m_preferences))Q_EMIT barPreferencesEdited(p);
 }
 bool FavoritesBar::requestedVisible()const{return m_visibilityOverride.value_or(m_preferences.visible);}
-void FavoritesBar::syncVisibility(){m_visibilityAction->setChecked(requestedVisible());syncDockHosts();setVisible(requestedVisible()&&!m_hostClosing);if(isVisible()){constrainGeometry();raise();}}
+void FavoritesBar::syncVisibility(){m_visibilityAction->setChecked(requestedVisible());syncDockHosts();if(m_floating&&requestedVisible()&&!m_hostClosing)constrainGeometry();else setVisible(requestedVisible()&&!m_hostClosing);if(isVisible())raise();}
 void FavoritesBar::setUserVisible(bool visible){if(m_hostClosing)return;m_visibilityOverride=visible;auto candidate=currentLayout();m_layoutTimer.stop();syncVisibility();Q_EMIT barPreferencesEdited(candidate);}
-void FavoritesBar::prepareForHostClose(){m_hostClosing=true;m_gesture.reset();hideDockPreview();m_layoutTimer.stop();syncDockHosts();hide();}
+void FavoritesBar::prepareForHostClose(){m_hostClosing=true;m_gesture.reset();hideDockPreview();m_layoutTimer.stop();m_avoidanceTimer.stop();syncDockHosts();hide();}
 bool FavoritesBar::eventFilter(QObject* watched,QEvent* e)
 {
+    const auto type=e->type();
+    if(type==QEvent::Move||type==QEvent::Resize||type==QEvent::Show||type==QEvent::Hide
+        ||type==QEvent::LayoutRequest||type==QEvent::ParentChange||type==QEvent::StyleChange||type==QEvent::FontChange){
+        for(const auto& overlay:m_reservedOverlays)if(overlay==watched){scheduleAvoidanceReflow();break;}
+    }
     if(m_gesture&&(e->type()==QEvent::ShortcutOverride||e->type()==QEvent::KeyPress)&&static_cast<QKeyEvent*>(e)->key()==Qt::Key_Escape){
         e->accept();
         if(e->type()==QEvent::KeyPress)handleGesture(m_gesture->kind,3,m_gesture->origin);

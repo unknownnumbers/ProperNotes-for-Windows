@@ -51,6 +51,8 @@ The 0.3.14 revision fixes the blank current-page field in the upper-right picker
 
 The 0.3.15 source adds relative placement for the vertical floating palette: the nearer reading edge and logical-pixel gap anchor it horizontally, and a ratio of available travel space positions it vertically. Window resizing follows those saved values; temporary size constraints do not replace its requested placement or height. Settings v12 preserves docking separately and migrates older pixel coordinates when a reading viewport is available. Cloud compilation and packaging are pending at source preparation time. No installation, application launch or test is performed on the user's PC. 原生 0.3.15 記住懸浮工具框左右錨點及邊距、上下可移動空間比例，隨視窗大小調整。原生 0.3.15 记住悬浮工具框左右锚点和边距、上下可移动空间比例，随窗口大小调整。實際輸入、停靠及縮放仍待驗收。实际输入、停靠和缩放仍待验收。
 
+The 0.3.16 source keeps the floating palette clear of the upper-right page capsule and the lower history/undo and zoom/view groups, using their actual widget bounds plus a small gap. Automatically hidden lower controls retain their reserved bounds. Viewport, font and page-count changes refresh placement without replacing the saved edge anchor, vertical ratio or desired height. Cloud compilation and packaging are pending at source preparation time; no installation, application launch or test is performed on the user's PC. 原生 0.3.16 按實際控件範圍避開頁碼及兩組底角控件，隱藏時仍預留空間。原生 0.3.16 按实际控件范围避开页码和两组底角控件，隐藏时仍预留空间。實際間距、小視窗及操作仍待驗收。实际间距、小窗口和操作仍待验收。
+
 ## Retained previous preview (0.1.x)
 
 The following sections describe the earlier WebView2/PDF.js preview and its feature scope. They do not describe the Qt prototype. 以下章節介紹保留的前版. 以下章节介绍保留的前版.

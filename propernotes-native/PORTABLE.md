@@ -4,6 +4,25 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.16 keep corner controls clear
+
+The floating palette leaves a small gap around the actual bounds of the
+upper-right page capsule, lower-left view-history and undo/redo group, and
+lower-right zoom/view group. The lower groups reserve their space even while
+automatically hidden, so revealing them does not occupy the palette's space.
+Window, font and page-count changes refresh the available placement. Passive
+avoidance does not replace the saved edge anchor, vertical ratio or desired
+palette height. Pinning still prevents user movement; automatic layout can
+adjust the displayed position. Cloud compilation and packaging are pending at
+source preparation time. No installation, application launch or test is performed
+on the recipient's PC. Actual spacing and small-window input require acceptance.
+
+The palette keeps its fixed controls and at least 44 logical pixels for favorite
+tools. If an extremely small reading area has no safe usable slot 80 logical pixels wide,
+the floating palette temporarily hides and returns when space is available.
+Its visibility choice, anchor, ratio and desired height stay saved; the sidebar
+pin and settings remain accessible.
+
 ### 0.3.15 relative floating-palette placement
 
 Unlock the floating palette and move it with its bottom handle. On release, the
@@ -227,6 +246,12 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.16 避開底角與頁碼控件
+
+懸浮工具框按實際控件邊界加小間距，避開右上頁碼框、左下視角歷史／復原及右下縮放／視圖控件。底角控件自動隱藏時也保留空間，喚出時不佔用工具框的位置。視窗、字體及頁數變化時重新排放；被動避讓不覆寫保存的邊緣錨點、垂直比例和要求高度。固定仍禁止手動移動，自動排放可調整顯示位置。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際間距及小視窗操作待驗收。
+
+工具框保留固定控件及至少 44 邏輯像素的收藏區。極小閱讀區若沒有寬 80 邏輯像素的安全可用位置，懸浮工具框會暫時隱藏，空間足夠後自動恢復；顯示選擇、錨點、比例及要求高度不變，側欄固定和設定入口仍可操作。
+
 ### 0.3.15 懸浮工具框相對定位
 
 解除固定後從底部把手移動懸浮工具框，放開時記住較近的左／右閱讀邊及邏輯像素間距。上下位置按頂部留白與底角控件保留區之間的可移動空間比例保存。視窗變化時依錨點與比例排放，固定時同樣跟隨視窗；暫時變小只限制顯示尺寸和位置，重新放大會恢復保存的定位。停靠資訊與懸浮定位分開保留，設定 v12 在閱讀區可用後遷移舊像素座標。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試。拖動、停靠及視窗縮放仍待實際驗收。
@@ -314,6 +339,12 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 可選遷移, 管理器支援目前/勾選/全部清理和校驗後另存恢復副本. 不代替普通儲存.
 
 ## Simplified Chinese (zh-SC)
+
+### 0.3.16 避开底角和页码控件
+
+悬浮工具框按实际控件边界加小间距，避开右上页码框、左下视角历史／撤销和右下缩放／视图控件。底角控件自动隐藏时也保留空间，唤出时不占用工具框的位置。窗口、字体和页数变化时重新摆放；被动避让不覆盖保存的边缘锚点、垂直比例和要求高度。固定仍禁止手动移动，自动排放可调整显示位置。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际间距和小窗口操作待验收。
+
+工具框保留固定控件和至少 44 逻辑像素的收藏区。极小阅读区若没有宽 80 逻辑像素的安全可用位置，悬浮工具框会暂时隐藏，空间足够后自动恢复；显示选择、锚点、比例和要求高度不变，侧栏固定和设置入口仍可操作。
 
 ### 0.3.15 悬浮工具框相对定位
 

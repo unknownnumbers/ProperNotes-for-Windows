@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QScopedValueRollback>
 #include <QToolButton>
 #include <algorithm>
 
@@ -56,9 +57,12 @@ ReadingControls::ReadingControls(QWidget* viewport, const QList<QAction*>& histo
     m_panels[1]->layout()->addWidget(m_zoom); add(m_panels[1], zoomIn);
     connect(viewMenu, &QMenu::aboutToShow, this, [this] { reveal(1); });
     connect(viewMenu, &QMenu::aboutToHide, this, [this] { schedule(1); });
+    m_placeTimer.setSingleShot(true);
+    m_placeTimer.setInterval(0);
+    connect(&m_placeTimer, &QTimer::timeout, this, &ReadingControls::place);
     qApp->installEventFilter(this);
     connect(viewport, &QObject::destroyed, this, [this] {
-        qApp->removeEventFilter(this);m_timers[0].stop();m_timers[1].stop();m_viewport=nullptr;
+        qApp->removeEventFilter(this);m_timers[0].stop();m_timers[1].stop();m_placeTimer.stop();m_viewport=nullptr;
     });
     refreshAppearance(); place();
 }
@@ -69,26 +73,50 @@ void ReadingControls::setHideDelaySeconds(int seconds)
     m_delaySeconds = delay;
     for (int side = 0; side < 2; ++side) if (m_panels[side]->isVisible()) schedule(side);
 }
-void ReadingControls::setZoom(qreal zoom) { m_zoom->setText(QString::number(zoom * 100, 'f', zoom < .1 ? 2 : 0) + QLatin1Char('%')); }
+void ReadingControls::setZoom(qreal zoom)
+{
+    if(!m_viewport)return;
+    const QString text=QString::number(zoom * 100, 'f', zoom < .1 ? 2 : 0) + QLatin1Char('%');
+    if(m_zoom->text()==text)return;
+    m_zoom->setText(text);
+    // Hidden panels also need their final geometry before another overlay
+    // decides where it may fit. Hidden QWidget move events can be deferred.
+    place();
+}
 void ReadingControls::revealHistory() { reveal(0); }
 void ReadingControls::revealZoom() { reveal(1); }
 void ReadingControls::refreshAppearance()
 {
+    if(!m_viewport)return;
     for (auto* button : m_reveal) button->setIcon(uiIcon(QStringLiteral("chevron-up"), m_viewport->palette()));
     // QPalette follows the native theme, including high contrast.
     for (auto* panel : m_panels) panel->setStyleSheet(QStringLiteral("QFrame#readingHud {border:1px solid palette(mid);border-radius:12px;background:palette(window);}"));
+    place();
+}
+QList<QWidget*> ReadingControls::reservedOverlays() const
+{
+    if(!m_viewport)return {};
+    return {m_panels[0],m_panels[1],m_reveal[0],m_reveal[1]};
 }
 void ReadingControls::place()
 {
+    if(!m_viewport||m_placing)return;
+    const QScopedValueRollback<bool> placing(m_placing,true);
+    const QList<QRect> before{m_panels[0]->geometry(),m_panels[1]->geometry(),
+        m_reveal[0]->geometry(),m_reveal[1]->geometry()};
     const bool narrow = m_viewport->width() < 420;
     for (int side = 0; side < 2; ++side) {
-        auto* panel = m_panels[side]; panel->adjustSize();
+        auto* panel = m_panels[side]; panel->ensurePolished();
+        panel->layout()->activate();panel->adjustSize();
         const int y = std::max(0, m_viewport->height() - panel->height() - (side == 0 && narrow ? 78 : 16));
         const int x = side == 0 ? 12 : std::max(0, m_viewport->width() - panel->width() - 12);
         panel->move(x, y); panel->raise();
         m_reveal[side]->move(side == 0 ? 12 : std::max(0, m_viewport->width() - 56), y + (panel->height() - 44) / 2);
         m_reveal[side]->raise();
     }
+    const QList<QRect> after{m_panels[0]->geometry(),m_panels[1]->geometry(),
+        m_reveal[0]->geometry(),m_reveal[1]->geometry()};
+    if(before!=after)Q_EMIT reservedGeometryChanged();
 }
 void ReadingControls::reveal(int side)
 {
@@ -122,6 +150,10 @@ bool ReadingControls::eventFilter(QObject* watched, QEvent* event)
     if (watched == m_viewport && (event->type() == QEvent::Resize || event->type() == QEvent::Show)) place();
     auto* widget = qobject_cast<QWidget*>(watched);
     const int side = sideOf(widget);
+    if(!m_placing&&(side>=0||watched==m_viewport)&&
+        (event->type()==QEvent::FontChange||event->type()==QEvent::StyleChange||
+         event->type()==QEvent::PaletteChange||event->type()==QEvent::LayoutRequest))
+        m_placeTimer.start();
     if (side >= 0) {
         switch (event->type()) {
         case QEvent::Enter: case QEvent::Wheel:

@@ -2,6 +2,7 @@
 #pragma once
 #include "FavoriteTools.h"
 #include <QHash>
+#include <QList>
 #include <QPointer>
 #include <QTimer>
 #include <QWidget>
@@ -21,6 +22,8 @@ class FavoritesBar final : public QWidget {
 public:
     explicit FavoritesBar(QWidget* parent);
     void setDockHosts(QWidget* viewport, QWidget* leftHost, QWidget* rightHost);
+    // Actual viewport overlays remain reserved while their HUDs auto-hide.
+    void setReservedOverlays(const QList<QWidget*>& overlays);
     void setFavorites(const QVector<FavoriteTool>& favorites);
     void setBarPreferences(const FavoritesBarPreferences& preferences, bool forcePlacement = false);
     void setCurrentTool(const FavoriteTool& liveSnapshot);
@@ -57,7 +60,11 @@ private:
     void syncPlacementControls();
     void placeResizeEdges();
     void constrainGeometry();
-    QRect boundedFloatingGeometry(const QRect& geometry) const;
+    QRect viewportBoundedGeometry(const QRect& geometry) const;
+    QRect boundedFloatingGeometry(const QRect& geometry, bool allowHorizontalShift = true) const;
+    QList<QRect> reservedOverlayRects() const;
+    void scheduleAvoidanceReflow();
+    void applyFittedFloatingGeometry(const QRect& geometry);
     bool initializeFloatingPosition();
     QRect relativeFloatingGeometry() const;
     void rememberFloatingGeometry(bool resizeHeight);
@@ -77,6 +84,8 @@ private:
     QPointer<QWidget> m_leftHost;
     QPointer<QWidget> m_rightHost;
     QPointer<QLabel> m_dockPreview;
+    QList<QPointer<QWidget>> m_reservedOverlays;
+    QList<QRect> m_reservedGeometry;
     QWidget* m_entries = nullptr;
     QVBoxLayout* m_entriesLayout = nullptr;
     QToolButton* m_pan = nullptr;
@@ -107,6 +116,7 @@ private:
     int m_floatingEdgeOffset = 8;
     qreal m_floatingVerticalRatio = 0;
     bool m_floatingPositionInitialized = false;
+    bool m_noFloatingSpace = false;
     std::optional<bool> m_visibilityOverride;
     struct Gesture {
         int kind;
@@ -118,5 +128,6 @@ private:
     };
     std::optional<Gesture> m_gesture;
     QTimer m_layoutTimer;
+    QTimer m_avoidanceTimer;
 };
 } // namespace propernotes

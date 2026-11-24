@@ -8,6 +8,16 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The 0.3.16 source keeps the floating palette clear of the upper-right page
+capsule, lower-left history/undo controls and lower-right zoom/view controls.
+Placement uses their actual widget bounds plus a small gap. The lower groups
+keep their reserved space while automatically hidden. Viewport, font and page
+count changes refresh this constraint without replacing the saved edge anchor,
+vertical ratio or requested height. This is the project's own interaction rule.
+Cloud compilation and packaging are pending at source preparation time. No
+installation, application launch or test is performed on the recipient's PC;
+actual spacing, cramped-window behavior and input remain to be accepted.
+
 The 0.3.15 source positions the floating vertical palette relative to the reading
 viewport. A deliberate move remembers the nearer left or right edge and its gap
 in logical pixels; the vertical position is a ratio of the available travel space.
@@ -174,6 +184,8 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.16 源碼讓懸浮工具框避開右上頁碼框、左下視角歷史／復原及右下縮放／視圖控件，按實際控件邊界加小間距計算；底角控件自動隱藏時仍保留其空間。閱讀區、字體和頁數變化會重新計算避讓，不覆寫已保存的邊緣錨點、垂直比例及要求高度。這是本專案的操作規則。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際間距、狹小視窗及輸入仍待驗收。
+
 0.3.15 源碼改為相對閱讀區定位垂直懸浮工具框。主動移動後記住較近的左／右邊及邏輯像素間距，上下位置按可移動空間的比例保存；視窗縮放時依此重新排放。閱讀區暫時變小只限制顯示位置和高度，不覆寫已保存的定位。設定 v12 獨立保留停靠資訊，舊像素座標待閱讀區可用後遷移。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際輸入和視窗縮放仍待驗收。
 
 0.3.14 源碼修正右上頁碼空白框，改用整數校驗的獨立文字輸入框，避開目前 Qt 自訂樣式與 NoButtons 數字框導致內部編輯區過窄的問題。頁數字寬、文字居中及不透明主題背景明確設定，刷新時保留正在輸入的草稿，提交與顯示更新分開處理。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際顯示和輸入仍待驗收。
@@ -242,6 +254,8 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.16 源码让悬浮工具框避开右上页码框、左下视角历史／撤销和右下缩放／视图控件，按实际控件边界加小间距计算；底角控件自动隐藏时仍保留其空间。阅读区、字体和页数变化会重新计算避让，不覆盖已保存的边缘锚点、垂直比例和要求高度。这是本项目的操作规则。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际间距、狭小窗口和输入仍待验收。
 
 0.3.15 源码改为相对阅读区定位垂直悬浮工具框。主动移动后记住较近的左／右边和逻辑像素间距，上下位置按可移动空间的比例保存；窗口缩放时依此重新摆放。阅读区暂时变小只限制显示位置和高度，不覆盖已保存的定位。设置 v12 独立保留停靠信息，旧像素坐标待阅读区可用后迁移。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际输入和窗口缩放仍待验收。
 
