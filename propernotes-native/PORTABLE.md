@@ -4,7 +4,36 @@ Original explanatory text: CC BY-SA 4.0. See COPYRIGHT.md.
 
 ## English (en)
 
+### 0.3.17 fit vertically at the chosen horizontal position
+
+For a vertical palette, corner avoidance keeps its horizontal position and edge anchor. It
+shortens the height and adjusts the top only as needed to fit around the actual
+corner controls at that position. The favorite area scrolls; icons and touch
+targets are not scaled down. Unlock the palette to move it horizontally with the
+handle or keyboard. Window reflow retains the saved anchor, vertical ratio and
+desired height; automatically hidden corner groups still reserve their space.
+If the same horizontal position cannot fit the fixed controls and at least 44
+logical pixels of favorites, the floating palette temporarily hides and returns
+when room is available. Its visibility choice stays saved, and the sidebar pin
+and settings remain accessible. Cloud compilation and packaging are pending at
+source preparation time. No installation, application launch or test is performed
+on the recipient's PC; actual fit and input still require acceptance.
+
+In Settings, choose vertical (default) or horizontal orientation. Each keeps its
+own placement and length. The horizontal palette has a fixed height of 80 logical
+pixels and a variable width, anchored by the nearer top/bottom gap and a ratio of
+horizontal travel. Its corner avoidance keeps that vertical position and only
+adjusts its horizontal range and length. Favorites scroll horizontally. Unlock
+and drag the transparent left or right edge to resize, or use the movement handle
+to dock at the top or bottom reading edge. Vertical palettes dock left/right.
+Settings v13 migrates old configurations to vertical; switching orientation does
+not scale icons or touch targets. These source changes are awaiting cloud
+compilation and user acceptance.
+
 ### 0.3.16 keep corner controls clear
+
+Historical behavior: automatic horizontal avoidance in this revision is
+superseded by 0.3.17's vertical fitting at the chosen horizontal position.
 
 The floating palette leaves a small gap around the actual bounds of the
 upper-right page capsule, lower-left view-history and undo/redo group, and
@@ -246,7 +275,15 @@ launched or device-tested by the build workflow. See KNOWN-LIMITATIONS.md.
 
 ## Traditional Chinese (zh-TC)
 
+### 0.3.17 在選定水平位置只調整高度
+
+角落避讓保留工具框的水平位置和左右錨點，只縮短高度並按需要最小幅度調整上下位置，以適應同一水平位置的實際角落控件。中間收藏區捲動，圖示和觸控區不縮小。解鎖後仍可從把手或鍵盤自行左右移動。視窗排放保留保存的錨點、垂直比例和要求高度，底角控件自動隱藏時仍保留空間。同一水平位置放不下固定控件及至少 44 邏輯像素收藏區時暫時隱藏，空間恢復後自動顯示，不改顯示選擇，側欄固定與設定入口可用。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際排放及操作仍待驗收。
+
+在設定選擇垂直（預設）或水平，兩種方向各自記住位置和長度。水平工具框固定高 80 邏輯像素、寬度可調，按較近上／下邊的間距與左右可移動空間比例定位；避讓保持上下位置，只調整水平範圍及長度。收藏左右捲動，解鎖後直接拖透明左／右邊緣調長短，移動把手可在閱讀區上／下停靠；垂直方向仍在左／右停靠。設定 v13 將舊配置遷移為垂直，方向切換不縮放圖示或觸控區。這些源碼變更仍待雲端編譯及實際驗收。
+
 ### 0.3.16 避開底角與頁碼控件
+
+歷史行為：此版自動水平移位由 0.3.17「保留水平位置，只調整高度及必要上下位置」規則取代。
 
 懸浮工具框按實際控件邊界加小間距，避開右上頁碼框、左下視角歷史／復原及右下縮放／視圖控件。底角控件自動隱藏時也保留空間，喚出時不佔用工具框的位置。視窗、字體及頁數變化時重新排放；被動避讓不覆寫保存的邊緣錨點、垂直比例和要求高度。固定仍禁止手動移動，自動排放可調整顯示位置。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際間距及小視窗操作待驗收。
 
@@ -340,7 +377,15 @@ Ctrl+Enter或點框外確認, Esc取消. Ctrl+Z/Y為內容歷史, 與視角返�
 
 ## Simplified Chinese (zh-SC)
 
+### 0.3.17 在选定水平位置只调整高度
+
+角落避让保留工具框的水平位置和左右锚点，只缩短高度并按需要最小幅度调整上下位置，以适应同一水平位置的实际角落控件。中间收藏区滚动，图标和触控区不缩小。解锁后仍可从把手或键盘自行左右移动。窗口排放保留保存的锚点、垂直比例和要求高度，底角控件自动隐藏时仍保留空间。同一水平位置放不下固定控件和至少 44 逻辑像素收藏区时暂时隐藏，空间恢复后自动显示，不改显示选择，侧栏固定和设置入口可用。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际排放和操作仍待验收。
+
+在设置选择垂直（默认）或水平，两种方向各自记住位置和长度。水平工具框固定高 80 逻辑像素、宽度可调，按较近上／下边的间距和左右可移动空间比例定位；避让保持上下位置，只调整水平范围和长度。收藏左右滚动，解锁后直接拖透明左／右边缘调长短，移动把手可在阅读区上／下停靠；垂直方向仍在左／右停靠。设置 v13 将旧配置迁移为垂直，方向切换不缩放图标或触控区。这些源码变更仍待云端编译和实际验收。
+
 ### 0.3.16 避开底角和页码控件
+
+历史行为：此版自动水平移位由 0.3.17「保留水平位置，只调整高度和必要上下位置」规则取代。
 
 悬浮工具框按实际控件边界加小间距，避开右上页码框、左下视角历史／撤销和右下缩放／视图控件。底角控件自动隐藏时也保留空间，唤出时不占用工具框的位置。窗口、字体和页数变化时重新摆放；被动避让不覆盖保存的边缘锚点、垂直比例和要求高度。固定仍禁止手动移动，自动排放可调整显示位置。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际间距和小窗口操作待验收。
 

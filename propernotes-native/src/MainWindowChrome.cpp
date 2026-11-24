@@ -40,17 +40,25 @@ void MainWindow::buildReaderChrome()
         toolbar->hide(); removeToolBar(toolbar);
     }
     auto* readingHost=new QWidget;
-    auto* readingRow=new QHBoxLayout(readingHost);readingRow->setContentsMargins(0,0,0,0);readingRow->setSpacing(0);
-    const auto dockHost=[readingHost](const QString& name){
-        auto* host=new QFrame(readingHost);host->setObjectName(name);host->setFixedWidth(80);host->setAutoFillBackground(true);
-        auto* column=new QVBoxLayout(host);column->setContentsMargins(0,0,0,0);column->setSpacing(0);host->hide();return host;
+    auto* readingColumn=new QVBoxLayout(readingHost);readingColumn->setContentsMargins(0,0,0,0);readingColumn->setSpacing(0);
+    auto* readingMiddle=new QWidget(readingHost);
+    auto* readingRow=new QHBoxLayout(readingMiddle);readingRow->setContentsMargins(0,0,0,0);readingRow->setSpacing(0);
+    const auto dockHost=[](QWidget* parent,const QString& name,bool horizontal){
+        auto* host=new QFrame(parent);host->setObjectName(name);host->setAutoFillBackground(true);
+        QBoxLayout* strip=nullptr;
+        if(horizontal){host->setFixedHeight(80);host->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);strip=new QHBoxLayout(host);}
+        else{host->setFixedWidth(80);host->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);strip=new QVBoxLayout(host);}
+        strip->setContentsMargins(0,0,0,0);strip->setSpacing(0);host->hide();return host;
     };
-    auto* leftDock=dockHost(QStringLiteral("readerDockLeft"));
-    auto* rightDock=dockHost(QStringLiteral("readerDockRight"));
+    auto* leftDock=dockHost(readingMiddle,QStringLiteral("readerDockLeft"),false);
+    auto* rightDock=dockHost(readingMiddle,QStringLiteral("readerDockRight"),false);
+    auto* topDock=dockHost(readingHost,QStringLiteral("readerDockTop"),true);
+    auto* bottomDock=dockHost(readingHost,QStringLiteral("readerDockBottom"),true);
     m_splitter->replaceWidget(1,readingHost);
     readingRow->addWidget(leftDock);readingRow->addWidget(m_view,1);readingRow->addWidget(rightDock);
+    readingColumn->addWidget(topDock);readingColumn->addWidget(readingMiddle,1);readingColumn->addWidget(bottomDock);
     m_splitter->setStretchFactor(1,1);
-    m_favoritesBar->setDockHosts(m_view->viewport(),leftDock,rightDock);
+    m_favoritesBar->setDockHosts(m_view->viewport(),leftDock,rightDock,topDock,bottomDock);
     auto* edit = menuBar()->addMenu(QStringLiteral("编辑"));
     edit->addAction(m_undoAction); edit->addAction(m_redoAction); edit->addSeparator();
     edit->addAction(m_cutObjectsAction); edit->addAction(m_copyObjectsAction); edit->addAction(m_pasteObjectsAction);
@@ -128,7 +136,7 @@ void MainWindow::buildReaderChrome()
     railButton(m_review->find);
     railLayout->addStretch(1);
     railButton(m_followAction);
-    m_palettePinAction = new QAction(QStringLiteral("固定收藏工具栏位置与高度"),this);
+    m_palettePinAction = new QAction(QStringLiteral("固定收藏工具栏位置与长度"),this);
     m_palettePinAction->setCheckable(true); railButton(m_palettePinAction);
     connect(m_palettePinAction,&QAction::triggered,this,[this](bool on){m_favoritesBar->setPinned(on);});
     m_fullScreenAction = new QAction(QStringLiteral("全屏／恢复"),this); m_fullScreenAction->setCheckable(true);
@@ -204,7 +212,7 @@ void MainWindow::refreshReaderChrome()
     m_palettePinAction->setChecked(m_preferences.favoritesBar.pinned);
     m_palettePinAction->setEnabled(m_preferencesWritable && !m_preferencesBusy && !m_backupBusy && !m_fileBusy && !m_settingsDialog && !m_closingAll);
     m_palettePinAction->setIcon(uiIcon(m_preferences.favoritesBar.pinned?QStringLiteral("pin-toolbar"):QStringLiteral("unpin-toolbar"),palette()));
-    m_palettePinAction->setToolTip(m_preferences.favoritesBar.pinned?QStringLiteral("解除工具栏位置与高度固定"):QStringLiteral("固定工具栏位置与高度"));
+    m_palettePinAction->setToolTip(m_preferences.favoritesBar.pinned?QStringLiteral("解除工具栏位置与长度固定"):QStringLiteral("固定工具栏位置与长度"));
     m_fullScreenAction->setChecked(isFullScreen());
     m_fullScreenAction->setIcon(uiIcon(isFullScreen()?QStringLiteral("restore"):QStringLiteral("fullscreen"),palette()));
     m_pagesRail->defaultAction()->setChecked(m_preferences.sidebarVisible && m_navigationTabs->currentIndex()==0);

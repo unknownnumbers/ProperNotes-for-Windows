@@ -6,7 +6,44 @@ Traditional Chinese (zh-TC): 此版是聚焦 Qt/PDF4QT 手寫閉環的原型, �
 
 Simplified Chinese (zh-SC): 此版是聚焦 Qt/PDF4QT 手写闭环的原型, 使用新的单 PDF 编辑格式, 尚未移植前版全部功能. 设备手感、防误触、文件兼容及异常恢复仍须验收, 编译成功不代表已经完成验收.
 
+## 0.3.17 orientation and fitting along the palette
+
+English (en): For vertical palettes, corner avoidance preserves the user's horizontal placement and edge
+anchor, shortening the palette and changing its top only as needed at that same
+horizontal position. Fixed icon widths and touch targets are retained; the middle
+favorite list scrolls. User-directed horizontal movement remains available from
+the unlocked handle and keyboard. Passive fitting does not replace the saved
+anchor, vertical ratio or desired height. When no usable vertical space remains
+for the fixed controls and at least 44 logical pixels of favorite viewport, the
+palette temporarily hides at that same horizontal position and restores when
+room returns, preserving the visibility choice. Hidden corner groups continue
+to reserve their bounds. Cloud compilation and packaging are pending at source
+preparation time. No installation, application launch or test is performed on the
+user's PC; actual sizing and input still require acceptance.
+
+Settings offers vertical (default) and horizontal orientations with independent
+position and length memory. Horizontal palettes are 80 logical pixels high with
+variable width, using a top/bottom edge gap and horizontal travel ratio. Their
+avoidance keeps the vertical position and only adjusts horizontal range and
+length. Favorites scroll horizontally and transparent left/right edges resize
+the unlocked palette. Top/bottom docking mirrors vertical left/right docking.
+Settings v13 migrates older settings to vertical. Fixed icon and touch sizes,
+passive preservation of saved placement, and temporary hiding when no usable
+space remains apply in either orientation. This is the project's rule; source
+compilation and user acceptance remain pending.
+
+Traditional Chinese (zh-TC): 角落避讓保留使用者的水平位置與左右錨點，只縮短工具框並在同一水平位置按需要最小幅度調整上下位置。圖示寬度與觸控區固定，中間收藏區捲動；解鎖後仍可從把手或鍵盤自行左右移動。被動調整不覆寫保存的錨點、垂直比例及要求高度。同一水平位置若放不下固定控件及至少 44 邏輯像素收藏區，則暫時隱藏，空間恢復後自動顯示，保留顯示選擇；底角控件隱藏時仍保留邊界。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際尺寸及操作仍待驗收。
+
+上述為垂直工具框規則。設定可選垂直（預設）／水平，位置及長度各自記憶。水平工具框固定高 80 邏輯像素、寬度可調，按上／下邊間距與左右可移動空間比例定位；避讓保留上下位置，只調整水平範圍及長度。收藏左右捲動，解鎖後直接拖透明左／右邊緣調長短，停靠對應閱讀區上／下邊。設定 v13 將舊配置遷移為垂直。兩方向均固定圖示與觸控尺寸，被動排放不覆寫位置記憶，放不下時暫隱再恢復。這是本專案規則，編譯及使用者驗收仍待完成。
+
+Simplified Chinese (zh-SC): 角落避让保留用户的水平位置和左右锚点，只缩短工具框并在同一水平位置按需要最小幅度调整上下位置。图标宽度和触控区固定，中间收藏区滚动；解锁后仍可从把手或键盘自行左右移动。被动调整不覆盖保存的锚点、垂直比例和要求高度。同一水平位置若放不下固定控件和至少 44 逻辑像素收藏区，则暂时隐藏，空间恢复后自动显示，保留显示选择；底角控件隐藏时仍保留边界。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际尺寸和操作仍待验收。
+
+上述是垂直工具框规则。设置可选垂直（默认）／水平，位置和长度各自记忆。水平工具框固定高 80 逻辑像素、宽度可调，按上／下边间距和左右可移动空间比例定位；避让保留上下位置，只调整水平范围和长度。收藏左右滚动，解锁后直接拖透明左／右边缘调长短，停靠对应阅读区上／下边。设置 v13 将旧配置迁移为垂直。两方向均固定图标和触控尺寸，被动排放不覆盖位置记忆，放不下时暂隐再恢复。这是本项目规则，编译和用户验收仍待完成。
+
 ## 0.3.16 corner-control avoidance
+
+Historical note: automatic horizontal avoidance is superseded by the 0.3.17 rule
+above. 歷史說明：自動水平避讓已由上述 0.3.17 規則取代。历史说明：自动水平避让已由上述 0.3.17 规则取代。
 
 English (en): The floating palette avoids the actual bounds of the upper-right
 page capsule and both lower control groups with a small gap. Automatically

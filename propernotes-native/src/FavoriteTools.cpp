@@ -372,26 +372,39 @@ bool readFavoriteTools(const QJsonArray& array, QVector<FavoriteTool>& favorites
 
 bool validFavoritesBarPreferences(const FavoritesBarPreferences& p)
 {
-    return (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
+    return (p.orientation==QStringLiteral("vertical")||p.orientation==QStringLiteral("horizontal")) &&
+        (p.side==QStringLiteral("left")||p.side==QStringLiteral("right")||p.side==QStringLiteral("top")||p.side==QStringLiteral("bottom")) && p.geometry.width()>=80 && p.geometry.width()<=1200 &&
         p.geometry.height()>=80 && p.geometry.height()<=1600 && p.geometry.x()>=-100000 && p.geometry.x()<=100000 && p.geometry.y()>=-100000 && p.geometry.y()<=100000 &&
         (p.floatingAnchor==QStringLiteral("left")||p.floatingAnchor==QStringLiteral("right")) &&
         p.floatingEdgeOffset>=8 && p.floatingEdgeOffset<=100000 &&
-        std::isfinite(p.floatingVerticalRatio) && p.floatingVerticalRatio>=0.0 && p.floatingVerticalRatio<=1.0;
+        std::isfinite(p.floatingVerticalRatio) && p.floatingVerticalRatio>=0.0 && p.floatingVerticalRatio<=1.0 &&
+        p.horizontalGeometry.width()>=80 && p.horizontalGeometry.width()<=1600 && p.horizontalGeometry.height()==80 &&
+        p.horizontalGeometry.x()>=-100000 && p.horizontalGeometry.x()<=100000 && p.horizontalGeometry.y()>=-100000 && p.horizontalGeometry.y()<=100000 &&
+        (p.horizontalAnchor==QStringLiteral("top")||p.horizontalAnchor==QStringLiteral("bottom")) &&
+        p.horizontalEdgeOffset>=8 && p.horizontalEdgeOffset<=100000 &&
+        std::isfinite(p.horizontalRatio) && p.horizontalRatio>=0.0 && p.horizontalRatio<=1.0;
 }
 QJsonObject favoritesBarJson(const FavoritesBarPreferences& p)
 {
-    return {{"visible",p.visible},{"collapsed",p.collapsed},{"side",p.side},{"floating",p.floating},{"pinned",p.pinned},
+    return {{"visible",p.visible},{"collapsed",p.collapsed},{"orientation",p.orientation},{"side",p.side},{"floating",p.floating},{"pinned",p.pinned},
         {"geometry",QJsonObject{{"x",p.geometry.x()},{"y",p.geometry.y()},{"width",p.geometry.width()},{"height",p.geometry.height()}}},
         {"floatingPosition",QJsonObject{{"anchor",p.floatingAnchor},{"edgeOffset",p.floatingEdgeOffset},
-            {"verticalRatio",p.floatingVerticalRatio},{"initialized",p.floatingPositionInitialized}}}};
+            {"verticalRatio",p.floatingVerticalRatio},{"initialized",p.floatingPositionInitialized}}},
+        {"horizontalPosition",QJsonObject{
+            {"geometry",QJsonObject{{"x",p.horizontalGeometry.x()},{"y",p.horizontalGeometry.y()},
+                {"width",p.horizontalGeometry.width()},{"height",p.horizontalGeometry.height()}}},
+            {"anchor",p.horizontalAnchor},{"edgeOffset",p.horizontalEdgeOffset},
+            {"ratio",p.horizontalRatio},{"initialized",p.horizontalPositionInitialized}}}};
 }
 bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result, int settingsVersion)
 {
     const bool hasPin = settingsVersion >= 7;
     const bool hasRelativePosition = settingsVersion >= 12;
+    const bool hasOrientation = settingsVersion >= 13;
     QStringList keys{"visible", "collapsed", "side", "floating", "geometry"};
     if (hasPin) keys.append(QStringLiteral("pinned"));
     if (hasRelativePosition) keys.append(QStringLiteral("floatingPosition"));
+    if (hasOrientation) { keys.append(QStringLiteral("orientation")); keys.append(QStringLiteral("horizontalPosition")); }
     if(!exactKeys(object,keys)||!object.value("visible").isBool()||
         !object.value("collapsed").isBool()||!object.value("floating").isBool()||!object.value("side").isString()||
         !object.value("geometry").isObject() || (hasPin && !object.value("pinned").isBool()))return false;
@@ -401,6 +414,7 @@ bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result
     FavoritesBarPreferences p;p.visible=object.value("visible").toBool();p.collapsed=object.value("collapsed").toBool();
     p.side=object.value("side").toString();p.floating=object.value("floating").toBool();p.geometry={geometry.value("x").toInt(),geometry.value("y").toInt(),geometry.value("width").toInt(),geometry.value("height").toInt()};
     p.pinned = hasPin && object.value("pinned").toBool();
+    if (!hasOrientation && p.side!=QStringLiteral("left") && p.side!=QStringLiteral("right")) return false;
     if (hasRelativePosition) {
         if (!object.value("floatingPosition").isObject()) return false;
         const auto position = object.value("floatingPosition").toObject();
@@ -411,6 +425,25 @@ bool readFavoritesBar(const QJsonObject& object, FavoritesBarPreferences& result
         p.floatingEdgeOffset = position.value("edgeOffset").toInt();
         p.floatingVerticalRatio = position.value("verticalRatio").toDouble();
         p.floatingPositionInitialized = position.value("initialized").toBool();
+    }
+    if (hasOrientation) {
+        if (!object.value("orientation").isString() || !object.value("horizontalPosition").isObject()) return false;
+        const auto position = object.value("horizontalPosition").toObject();
+        if (!exactKeys(position,{"geometry","anchor","edgeOffset","ratio","initialized"}) ||
+            !position.value("geometry").isObject() || !position.value("anchor").isString() ||
+            !position.value("initialized").isBool() || !number(position,"edgeOffset",8,100000,true) ||
+            !number(position,"ratio",0,1)) return false;
+        const auto horizontalGeometry = position.value("geometry").toObject();
+        if (!exactKeys(horizontalGeometry,{"x","y","width","height"}) ||
+            !number(horizontalGeometry,"x",-100000,100000,true) || !number(horizontalGeometry,"y",-100000,100000,true) ||
+            !number(horizontalGeometry,"width",80,1600,true) || !number(horizontalGeometry,"height",80,80,true)) return false;
+        p.orientation = object.value("orientation").toString();
+        p.horizontalGeometry = {horizontalGeometry.value("x").toInt(),horizontalGeometry.value("y").toInt(),
+            horizontalGeometry.value("width").toInt(),horizontalGeometry.value("height").toInt()};
+        p.horizontalAnchor = position.value("anchor").toString();
+        p.horizontalEdgeOffset = position.value("edgeOffset").toInt();
+        p.horizontalRatio = position.value("ratio").toDouble();
+        p.horizontalPositionInitialized = position.value("initialized").toBool();
     }
     if(!validFavoritesBarPreferences(p))return false;
     if (settingsVersion < 10) {

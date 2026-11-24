@@ -8,6 +8,32 @@ Developed through human and AI collaboration. Some AI-assisted material has not 
 
 ## English (en)
 
+The 0.3.17 source corrects corner avoidance for vertical palettes: it retains the user's horizontal
+placement and edge anchor, shortening the palette vertically and adjusting its
+top only as needed to fit between the corner controls at that same horizontal
+position. The favorite list scrolls; icon widths and touch targets stay fixed.
+Users can still move horizontally using the unlocked handle or keyboard. Passive
+fitting preserves the saved anchor, vertical ratio and desired height. If no
+usable vertical space remains for the fixed controls and minimum favorite area,
+the floating palette temporarily hides and restores when room returns. This
+replaces the automatic horizontal repositioning used in 0.3.16. Cloud compilation
+and packaging are pending at source preparation time. No installation,
+application launch or test is performed on the recipient's PC; actual behavior
+still requires acceptance.
+
+Settings also offers vertical (default) and horizontal palette orientation, with
+independent placement and length memory. A horizontal palette keeps a fixed
+80-logical-pixel height, anchors to the nearer top or bottom edge, and remembers
+its horizontal travel ratio. Corner avoidance retains that vertical position
+and adjusts only its horizontal span and length. Favorites scroll horizontally;
+drag its transparent left or right edge to resize. Horizontal docking uses the
+top/bottom reading edges, mirroring vertical left/right docking. Settings v13
+migrates older configurations to vertical. Icon and touch sizes remain fixed.
+These are project rules; compilation and actual input acceptance remain pending.
+
+The following 0.3.16 note is historical; its horizontal avoidance is superseded
+by the 0.3.17 rule above.
+
 The 0.3.16 source keeps the floating palette clear of the upper-right page
 capsule, lower-left history/undo controls and lower-right zoom/view controls.
 Placement uses their actual widget bounds plus a small gap. The lower groups
@@ -184,6 +210,12 @@ Original code is GPL-3.0-only; original explanatory documentation is CC BY-SA 4.
 
 ## Traditional Chinese (zh-TC)
 
+0.3.17 源碼修正垂直工具框的角落避讓：保留使用者選定的水平位置及左右錨點，只在同一水平位置縮短工具框高度，並按需要最小幅度調整上下位置。中間收藏區捲動，圖示寬度和觸控尺寸維持固定；使用者仍可從解鎖把手或鍵盤自行左右移動。被動調整保留保存的錨點、垂直比例和要求高度；同一水平位置放不下固定控件及最小收藏區時暫時隱藏，空間恢復後自動顯示。此規則取代 0.3.16 的自動水平移位。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際操作仍待驗收。
+
+設定另提供垂直（預設）／水平工具框，兩種方向獨立記住位置及長度。水平工具框高度固定為 80 邏輯像素，按較近的上／下邊間距及左右可移動空間比例定位；避讓保留上下位置，只調整水平範圍和長度。收藏區左右捲動，直接拖動透明左／右邊緣調整長度，可在閱讀區上／下邊停靠，對應垂直工具框的左／右停靠。設定 v13 將舊配置遷移為垂直，圖示及觸控尺寸固定。這些是本專案規則，編譯與實際輸入仍待驗收。
+
+下方 0.3.16 說明為歷史紀錄，其水平避讓由上述 0.3.17 規則取代。
+
 0.3.16 源碼讓懸浮工具框避開右上頁碼框、左下視角歷史／復原及右下縮放／視圖控件，按實際控件邊界加小間距計算；底角控件自動隱藏時仍保留其空間。閱讀區、字體和頁數變化會重新計算避讓，不覆寫已保存的邊緣錨點、垂直比例及要求高度。這是本專案的操作規則。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際間距、狹小視窗及輸入仍待驗收。
 
 0.3.15 源碼改為相對閱讀區定位垂直懸浮工具框。主動移動後記住較近的左／右邊及邏輯像素間距，上下位置按可移動空間的比例保存；視窗縮放時依此重新排放。閱讀區暫時變小只限制顯示位置和高度，不覆寫已保存的定位。設定 v12 獨立保留停靠資訊，舊像素座標待閱讀區可用後遷移。源碼準備時仍待雲端編譯及打包，沒有在使用者 PC 安裝、啟動應用或執行測試，實際輸入和視窗縮放仍待驗收。
@@ -254,6 +286,12 @@ Unicode 原文仍可編輯; 不打包字型, 缺字型時編輯覆蓋層可能�
 完整便攜包以 `Start-ProperNotes.cmd` 啟動, 不需要 WebView2、Node.js 或本機 Qt SDK. 依賴下載及構建只在 GitHub 託管流程執行, 普通啟動不構建或安裝. 實際編譯及驗收範圍見包內紀錄; 構建流程不啟動應用或測試. 原創程式 GPL-3.0-only, 原創說明 CC BY-SA 4.0, 第三方保留原條款.
 
 ## Simplified Chinese (zh-SC)
+
+0.3.17 源码修正垂直工具框的角落避让：保留用户选定的水平位置和左右锚点，只在同一水平位置缩短工具框高度，并按需要最小幅度调整上下位置。中间收藏区滚动，图标宽度和触控尺寸保持固定；用户仍可从解锁把手或键盘自行左右移动。被动调整保留保存的锚点、垂直比例和要求高度；同一水平位置放不下固定控件和最小收藏区时暂时隐藏，空间恢复后自动显示。这条规则取代 0.3.16 的自动水平移位。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际操作仍待验收。
+
+设置另提供垂直（默认）／水平工具框，两种方向独立记住位置和长度。水平工具框高度固定为 80 逻辑像素，按较近的上／下边间距和左右可移动空间比例定位；避让保留上下位置，只调整水平范围和长度。收藏区左右滚动，直接拖动透明左／右边缘调整长度，可在阅读区上／下边停靠，对应垂直工具框的左／右停靠。设置 v13 将旧配置迁移为垂直，图标和触控尺寸固定。这些是本项目规则，编译和实际输入仍待验收。
+
+下方 0.3.16 说明是历史记录，其水平避让由上述 0.3.17 规则取代。
 
 0.3.16 源码让悬浮工具框避开右上页码框、左下视角历史／撤销和右下缩放／视图控件，按实际控件边界加小间距计算；底角控件自动隐藏时仍保留其空间。阅读区、字体和页数变化会重新计算避让，不覆盖已保存的边缘锚点、垂直比例和要求高度。这是本项目的操作规则。源码准备时仍待云端编译和打包，没有在用户 PC 安装、启动应用或运行测试，实际间距、狭小窗口和输入仍待验收。
 

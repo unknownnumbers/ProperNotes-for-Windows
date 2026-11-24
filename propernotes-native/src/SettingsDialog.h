@@ -65,6 +65,7 @@ private:
     QSpinBox* m_hideDelay = nullptr;
     QCheckBox* m_favoritesVisible = nullptr;
     QCheckBox* m_favoritesPinned = nullptr;
+    QComboBox* m_favoritesOrientation = nullptr;
     QComboBox* m_layoutMode = nullptr;
     QSpinBox* m_thumbnailSize = nullptr;
     QCheckBox* m_restoreSession = nullptr;

@@ -29,6 +29,7 @@ struct FavoriteTool {
 struct FavoritesBarPreferences {
     bool visible = true;
     bool collapsed = false;
+    QString orientation = QStringLiteral("vertical");
     QString side = QStringLiteral("right");
     bool floating = true;
     // Legacy position fallback and desired floating size. Docking and a small
@@ -40,6 +41,13 @@ struct FavoritesBarPreferences {
     int floatingEdgeOffset = 8;
     qreal floatingVerticalRatio = 0.0;
     bool floatingPositionInitialized = false;
+    // Horizontal placement has its own desired width and top/bottom anchor.
+    // Switching orientation must not overwrite the other orientation's memory.
+    QRect horizontalGeometry = QRect(72, 84, 420, 80);
+    QString horizontalAnchor = QStringLiteral("top");
+    int horizontalEdgeOffset = 84;
+    qreal horizontalRatio = 0.5;
+    bool horizontalPositionInitialized = true;
     bool pinned = true;
 };
 

@@ -102,7 +102,16 @@ SettingsDialog::SettingsDialog(const AppPreferenceValues& value, const QString& 
     m_favoritesVisible = new QCheckBox(QStringLiteral("显示收藏工具栏"));
     m_favoritesVisible->setChecked(value.favoritesBar.visible);
     form->addRow(m_favoritesVisible);
-    m_favoritesPinned = new QCheckBox(QStringLiteral("固定收藏工具栏位置与高度"));
+    m_favoritesOrientation = new QComboBox;
+    m_favoritesOrientation->addItem(QStringLiteral("垂直"),QStringLiteral("vertical"));
+    m_favoritesOrientation->addItem(QStringLiteral("水平"),QStringLiteral("horizontal"));
+    m_favoritesOrientation->setCurrentIndex(m_favoritesOrientation->findData(value.favoritesBar.orientation));
+    m_favoritesOrientation->setAccessibleName(QStringLiteral("收藏工具栏方向"));
+    form->addRow(QStringLiteral("收藏工具栏方向"),m_favoritesOrientation);
+    auto* orientationHelp = new QLabel(QStringLiteral("垂直与水平分别记住位置和长度。解除固定后，拖动垂直栏的上下边缘或水平栏的左右边缘调整长度。"));
+    orientationHelp->setWordWrap(true);
+    form->addRow(orientationHelp);
+    m_favoritesPinned = new QCheckBox(QStringLiteral("固定收藏工具栏位置与长度"));
     m_favoritesPinned->setChecked(value.favoritesBar.pinned);
     form->addRow(m_favoritesPinned);
     m_hideDelay = new QSpinBox;
@@ -431,6 +440,7 @@ AppPreferenceValues SettingsDialog::values() const
     result.controlsHideDelaySeconds = m_hideDelay->value();
     result.favoritesBar.visible = m_favoritesVisible->isChecked();
     result.favoritesBar.pinned = m_favoritesPinned->isChecked();
+    result.favoritesBar.orientation = m_favoritesOrientation->currentData().toString();
     result.tools.layout = m_layoutMode->currentData().toString();
     result.tools.thumbnailSize = m_thumbnailSize->value();
     result.tools.inputFollowsTool = m_inputFollowsTool->isChecked();

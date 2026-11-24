@@ -51,7 +51,21 @@ The 0.3.14 revision fixes the blank current-page field in the upper-right picker
 
 The 0.3.15 source adds relative placement for the vertical floating palette: the nearer reading edge and logical-pixel gap anchor it horizontally, and a ratio of available travel space positions it vertically. Window resizing follows those saved values; temporary size constraints do not replace its requested placement or height. Settings v12 preserves docking separately and migrates older pixel coordinates when a reading viewport is available. Cloud compilation and packaging are pending at source preparation time. No installation, application launch or test is performed on the user's PC. 原生 0.3.15 記住懸浮工具框左右錨點及邊距、上下可移動空間比例，隨視窗大小調整。原生 0.3.15 记住悬浮工具框左右锚点和边距、上下可移动空间比例，随窗口大小调整。實際輸入、停靠及縮放仍待驗收。实际输入、停靠和缩放仍待验收。
 
+Historical note: the following 0.3.16 horizontal avoidance behavior is superseded by 0.3.17. 歷史說明：下述 0.3.16 水平避讓由 0.3.17 取代。历史说明：下述 0.3.16 水平避让由 0.3.17 取代。
+
 The 0.3.16 source keeps the floating palette clear of the upper-right page capsule and the lower history/undo and zoom/view groups, using their actual widget bounds plus a small gap. Automatically hidden lower controls retain their reserved bounds. Viewport, font and page-count changes refresh placement without replacing the saved edge anchor, vertical ratio or desired height. Cloud compilation and packaging are pending at source preparation time; no installation, application launch or test is performed on the user's PC. 原生 0.3.16 按實際控件範圍避開頁碼及兩組底角控件，隱藏時仍預留空間。原生 0.3.16 按实际控件范围避开页码和两组底角控件，隐藏时仍预留空间。實際間距、小視窗及操作仍待驗收。实际间距、小窗口和操作仍待验收。
+
+The 0.3.17 source preserves the user's horizontal palette position and edge anchor during corner avoidance. It shortens the palette and adjusts its top only as necessary at that same horizontal position; favorites scroll while icon widths and touch targets stay fixed. User-directed horizontal movement remains available. Passive fitting preserves the saved anchor, ratio and desired height; insufficient vertical space temporarily hides the palette until room returns. Cloud compilation and packaging are pending at source preparation time, with no installation, application launch or test on the user's PC. 原生 0.3.17 保留使用者的水平位置，僅縮短高度及調整必要上下位置，收藏區捲動。原生 0.3.17 保留用户的水平位置，仅缩短高度和调整必要上下位置，收藏区滚动。實際排放及輸入仍待驗收。实际排放和输入仍待验收。
+
+The 0.3.17 source also offers vertical (default) or horizontal palettes in Settings,
+with independent position and length memory. Horizontal palettes keep a fixed
+80-logical-pixel height, anchor to a top/bottom edge gap and horizontal travel
+ratio, and avoid corner controls by adjusting only horizontal range and length.
+Favorites scroll horizontally; transparent left/right edges resize an unlocked
+palette. Top/bottom docking mirrors vertical left/right docking. Settings v13
+migrates older configurations to vertical. Icons and touch targets keep their
+sizes. These are project rules, with cloud compilation and actual acceptance
+pending. 原生 0.3.17 另可設定垂直／水平工具框，獨立記住位置及長度。原生 0.3.17 另可设置垂直／水平工具框，独立记住位置和长度。
 
 ## Retained previous preview (0.1.x)
 

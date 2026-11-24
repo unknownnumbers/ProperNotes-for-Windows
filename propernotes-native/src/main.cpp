@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
     QApplication app(argc, argv);
     QCoreApplication::setOrganizationName(QStringLiteral("ProperNotes"));
     QCoreApplication::setApplicationName(QStringLiteral("ProperNotes for Windows"));
-    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.16-native-preview.1"));
+    QCoreApplication::setApplicationVersion(QStringLiteral("0.3.17-native-preview.1"));
     try {
         propernotes::MainWindow window;
         window.show();

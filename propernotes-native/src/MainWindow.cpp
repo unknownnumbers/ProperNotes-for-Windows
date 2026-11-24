@@ -447,6 +447,11 @@ void MainWindow::openSettings(bool backupManager)
             values.favoritesBar.floatingEdgeOffset = placement.floatingEdgeOffset;
             values.favoritesBar.floatingVerticalRatio = placement.floatingVerticalRatio;
             values.favoritesBar.floatingPositionInitialized = placement.floatingPositionInitialized;
+            values.favoritesBar.horizontalGeometry = placement.horizontalGeometry;
+            values.favoritesBar.horizontalAnchor = placement.horizontalAnchor;
+            values.favoritesBar.horizontalEdgeOffset = placement.horizontalEdgeOffset;
+            values.favoritesBar.horizontalRatio = placement.horizontalRatio;
+            values.favoritesBar.horizontalPositionInitialized = placement.horizontalPositionInitialized;
             m_liveFavorite->queuedBar.reset();
         }
         persistPreferences(values, dialog.migrateRequested());
